@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { DailyPlanTable } from '@/components/DailyPlanTable'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
-import { RefreshCcw, Download, Calendar } from 'lucide-react'
+import { RefreshCcw, Calendar } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { getDefaultDateFilter } from '@/lib/dateFilterUtils'
 
@@ -16,7 +16,6 @@ export default function DailyPlanPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [exporting, setExporting] = useState(false)
   const [filteredData, setFilteredData] = useState<any[]>([])
   const [activeStatusFilter, setActiveStatusFilter] = useState<string | null>(null)
   const [activeActivityFilter, setActiveActivityFilter] = useState<string | null>(null)
@@ -58,10 +57,24 @@ export default function DailyPlanPage() {
     fetchData() // No date parameters - load all data
   }, []) // Only run on mount
 
-  // Refetch data when date filter changes
+  // Check if date range is within loaded data range
+  const isWithinLoadedRange = (startDate: string, endDate: string) => {
+    // If we have data loaded, check if new range needs server fetch
+    // For now, we load all data on mount, so any preset is within range
+    // Only fetch from server if explicitly needed (large custom range)
+    return true // All presets use client-side filtering
+  }
+
+  // Handle date filter changes - use client-side filtering when possible
   const handleDateFilterChange = async (newDateFilter: { startDate: string; endDate: string }) => {
     setDateFilter(newDateFilter)
-    await fetchData(newDateFilter.startDate, newDateFilter.endDate)
+    
+    // Only fetch from server if range is outside loaded data
+    // For typical presets (today, this week, etc.), client-side filtering is sufficient
+    if (!isWithinLoadedRange(newDateFilter.startDate, newDateFilter.endDate)) {
+      await fetchData(newDateFilter.startDate, newDateFilter.endDate)
+    }
+    // Otherwise, DailyPlanTable will handle client-side filtering automatically
   }
 
   const handleRefresh = async () => {
@@ -138,12 +151,11 @@ export default function DailyPlanPage() {
 
   const handleExport = async () => {
     try {
-      setExporting(true)
       console.log('📥 Starting Excel export...')
-      
+
       // Use filtered data for export
       const dataToExport = filteredData.length > 0 ? filteredData : data
-      
+
       if (dataToExport.length === 0) {
         alert('No data to export')
         return
@@ -152,31 +164,31 @@ export default function DailyPlanPage() {
       // Fetch column configuration to know which columns are visible
       const configResponse = await fetch('/api/sheets/settings')
       if (!configResponse.ok) throw new Error('Failed to fetch column settings')
-      
+
       const settingsResponse = await configResponse.json()
       console.log('📋 Settings response:', settingsResponse)
-      
+
       // Extract columns from the response structure
       const configs = settingsResponse?.data?.columns || []
-      
+
       if (!Array.isArray(configs) || configs.length === 0) {
         throw new Error('Invalid column configuration received')
       }
-      
+
       // Filter only visible columns
       const visibleColumns = configs.filter((col: any) => col.show === true)
-      
+
       if (visibleColumns.length === 0) {
         throw new Error('No visible columns found')
       }
-      
+
       console.log('📊 Export details:', {
         totalRows: dataToExport.length,
         totalColumns: configs.length,
         visibleColumns: visibleColumns.length,
         columns: visibleColumns.map((c: any) => c.displayName)
       })
-      
+
       // Prepare data for Excel
       const excelData = dataToExport.map(row => {
         const excelRow: any = {}
@@ -187,10 +199,10 @@ export default function DailyPlanPage() {
         })
         return excelRow
       })
-      
+
       // Create worksheet from data
       const worksheet = XLSX.utils.json_to_sheet(excelData)
-      
+
       // Auto-size columns
       const columnWidths = visibleColumns.map((col: any) => {
         const headerLength = col.displayName.length
@@ -203,23 +215,21 @@ export default function DailyPlanPage() {
         return { wch: Math.min(Math.max(headerLength, maxDataLength) + 2, 50) }
       })
       worksheet['!cols'] = columnWidths
-      
+
       // Create workbook and add worksheet
       const workbook = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Daily Plan')
-      
+
       // Generate filename with timestamp
       const filename = `daily-plan-export-${new Date().toISOString().split('T')[0]}.xlsx`
-      
+
       // Write and download file
       XLSX.writeFile(workbook, filename)
-      
+
       console.log(`✅ Exported ${dataToExport.length} rows with ${visibleColumns.length} visible columns to ${filename}`)
     } catch (error) {
       console.error('❌ Export failed:', error)
       alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    } finally {
-      setExporting(false)
     }
   }
 
@@ -277,84 +287,84 @@ export default function DailyPlanPage() {
                     const normalizedStatus = status.toLowerCase().trim()
                     const isActive = activeStatusFilter === status
                     
-                    // Exact matches for specific statuses
+                    // Exact matches for specific statuses with soft colors
                     switch (normalizedStatus) {
                       case 'on plan':
                         return isActive 
-                          ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-300' 
-                          : 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200' // Blue - Planning phase
+                          ? 'bg-blue-500 text-white border-blue-600 ring-2 ring-blue-200 shadow-md' 
+                          : 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100 hover:border-blue-200' // Soft blue - Planning phase
                       case 'on going':
                         return isActive 
-                          ? 'bg-orange-600 text-white border-orange-700 ring-2 ring-orange-300' 
-                          : 'bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-200' // Orange - In progress
+                          ? 'bg-orange-500 text-white border-orange-600 ring-2 ring-orange-200 shadow-md' 
+                          : 'bg-orange-50 text-orange-700 border-orange-100 hover:bg-orange-100 hover:border-orange-200' // Soft orange - In progress
                       case 'carry over':
                         return isActive 
-                          ? 'bg-yellow-600 text-white border-yellow-700 ring-2 ring-yellow-300' 
-                          : 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200' // Yellow - Pending/delayed
+                          ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-200 shadow-md' 
+                          : 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100 hover:border-amber-200' // Soft amber - Pending/delayed
                       case 'done':
                         return isActive 
-                          ? 'bg-green-600 text-white border-green-700 ring-2 ring-green-300' 
-                          : 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' // Green - Completed
+                          ? 'bg-emerald-500 text-white border-emerald-600 ring-2 ring-emerald-200 shadow-md' 
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 hover:border-emerald-200' // Soft emerald - Completed
                       case 'failed':
                         return isActive 
-                          ? 'bg-red-600 text-white border-red-700 ring-2 ring-red-300' 
-                          : 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200' // Red - Failed
+                          ? 'bg-rose-500 text-white border-rose-600 ring-2 ring-rose-200 shadow-md' 
+                          : 'bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100 hover:border-rose-200' // Soft rose - Failed
                       case 'idle':
                         return isActive 
-                          ? 'bg-gray-600 text-white border-gray-700 ring-2 ring-gray-300' 
-                          : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200' // Gray - Inactive
+                          ? 'bg-slate-500 text-white border-slate-600 ring-2 ring-slate-200 shadow-md' 
+                          : 'bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100 hover:border-slate-200' // Soft slate - Inactive
                       case 'off':
                         return isActive 
-                          ? 'bg-slate-600 text-white border-slate-700 ring-2 ring-slate-300' 
-                          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200' // Slate - Off/disabled
+                          ? 'bg-gray-500 text-white border-gray-600 ring-2 ring-gray-200 shadow-md' 
+                          : 'bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100 hover:border-gray-200' // Soft gray - Off/disabled
                     }
                     
                     // Fallback for partial matches
                     if (normalizedStatus.includes('plan')) {
                       return isActive 
-                        ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-300' 
-                        : 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200'
+                        ? 'bg-blue-500 text-white border-blue-600 ring-2 ring-blue-200 shadow-md' 
+                        : 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100 hover:border-blue-200'
                     }
                     if (normalizedStatus.includes('going') || normalizedStatus.includes('progress') || normalizedStatus.includes('ongoing')) {
                       return isActive 
-                        ? 'bg-orange-600 text-white border-orange-700 ring-2 ring-orange-300' 
-                        : 'bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-200'
+                        ? 'bg-orange-500 text-white border-orange-600 ring-2 ring-orange-200 shadow-md' 
+                        : 'bg-orange-50 text-orange-700 border-orange-100 hover:bg-orange-100 hover:border-orange-200'
                     }
                     if (normalizedStatus.includes('carry') || normalizedStatus.includes('pending') || normalizedStatus.includes('waiting')) {
                       return isActive 
-                        ? 'bg-yellow-600 text-white border-yellow-700 ring-2 ring-yellow-300' 
-                        : 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200'
+                        ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-200 shadow-md' 
+                        : 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100 hover:border-amber-200'
                     }
                     if (normalizedStatus.includes('done') || normalizedStatus.includes('complete') || normalizedStatus.includes('finish')) {
                       return isActive 
-                        ? 'bg-green-600 text-white border-green-700 ring-2 ring-green-300' 
-                        : 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200'
+                        ? 'bg-emerald-500 text-white border-emerald-600 ring-2 ring-emerald-200 shadow-md' 
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 hover:border-emerald-200'
                     }
                     if (normalizedStatus.includes('fail') || normalizedStatus.includes('error') || normalizedStatus.includes('reject')) {
                       return isActive 
-                        ? 'bg-red-600 text-white border-red-700 ring-2 ring-red-300' 
-                        : 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200'
+                        ? 'bg-rose-500 text-white border-rose-600 ring-2 ring-rose-200 shadow-md' 
+                        : 'bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100 hover:border-rose-200'
                     }
                     if (normalizedStatus.includes('idle') || normalizedStatus.includes('inactive')) {
                       return isActive 
-                        ? 'bg-gray-600 text-white border-gray-700 ring-2 ring-gray-300' 
-                        : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
+                        ? 'bg-slate-500 text-white border-slate-600 ring-2 ring-slate-200 shadow-md' 
+                        : 'bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100 hover:border-slate-200'
                     }
                     if (normalizedStatus.includes('off') || normalizedStatus.includes('disabled')) {
                       return isActive 
-                        ? 'bg-slate-600 text-white border-slate-700 ring-2 ring-slate-300' 
-                        : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                        ? 'bg-gray-500 text-white border-gray-600 ring-2 ring-gray-200 shadow-md' 
+                        : 'bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100 hover:border-gray-200'
                     }
                     if (normalizedStatus.includes('no status') || normalizedStatus === '') {
                       return isActive 
-                        ? 'bg-gray-600 text-white border-gray-700 ring-2 ring-gray-300' 
-                        : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                        ? 'bg-gray-500 text-white border-gray-600 ring-2 ring-gray-200 shadow-md' 
+                        : 'bg-gray-50 text-gray-500 border-gray-100 hover:bg-gray-100 hover:border-gray-200'
                     }
                     
-                    // Default fallback
+                    // Default fallback with soft purple
                     return isActive 
-                      ? 'bg-purple-600 text-white border-purple-700 ring-2 ring-purple-300' 
-                      : 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200'
+                      ? 'bg-purple-500 text-white border-purple-600 ring-2 ring-purple-200 shadow-md' 
+                      : 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100 hover:border-purple-200'
                   }
                   
                   return (
@@ -389,66 +399,66 @@ export default function DailyPlanPage() {
                     switch (normalized) {
                       case 'survey':
                         return isActive 
-                          ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-300' 
-                          : 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
+                          ? 'bg-sky-500 text-white border-sky-600 ring-2 ring-sky-200 shadow-md' 
+                          : 'bg-sky-50 text-sky-700 border-sky-100 hover:bg-sky-100 hover:border-sky-200'
                       case 'mos':
                         return isActive 
-                          ? 'bg-purple-600 text-white border-purple-700 ring-2 ring-purple-300' 
-                          : 'bg-purple-100 text-purple-700 border-purple-300 hover:bg-purple-200'
+                          ? 'bg-purple-500 text-white border-purple-600 ring-2 ring-purple-200 shadow-md' 
+                          : 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100 hover:border-purple-200'
                       case 'installation':
                         return isActive 
-                          ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-300' 
-                          : 'bg-emerald-100 text-emerald-700 border-emerald-300 hover:bg-emerald-200'
+                          ? 'bg-emerald-500 text-white border-emerald-600 ring-2 ring-emerald-200 shadow-md' 
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100 hover:border-emerald-200'
                       case 'integration':
                         return isActive 
-                          ? 'bg-teal-600 text-white border-teal-700 ring-2 ring-teal-300' 
-                          : 'bg-teal-100 text-teal-700 border-teal-300 hover:bg-teal-200'
+                          ? 'bg-teal-500 text-white border-teal-600 ring-2 ring-teal-200 shadow-md' 
+                          : 'bg-teal-50 text-teal-700 border-teal-100 hover:bg-teal-100 hover:border-teal-200'
                       case 'atp / sir':
                       case 'atp/sir':
                       case 'atp':
                         return isActive 
-                          ? 'bg-indigo-600 text-white border-indigo-700 ring-2 ring-indigo-300' 
-                          : 'bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-200'
+                          ? 'bg-indigo-500 text-white border-indigo-600 ring-2 ring-indigo-200 shadow-md' 
+                          : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100 hover:border-indigo-200'
                       case 'rectification':
                         return isActive 
-                          ? 'bg-orange-600 text-white border-orange-700 ring-2 ring-orange-300' 
-                          : 'bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200'
+                          ? 'bg-orange-500 text-white border-orange-600 ring-2 ring-orange-200 shadow-md' 
+                          : 'bg-orange-50 text-orange-700 border-orange-100 hover:bg-orange-100 hover:border-orange-200'
                       case 'tagging':
                         return isActive 
-                          ? 'bg-pink-600 text-white border-pink-700 ring-2 ring-pink-300' 
-                          : 'bg-pink-100 text-pink-700 border-pink-300 hover:bg-pink-200'
+                          ? 'bg-pink-500 text-white border-pink-600 ring-2 ring-pink-200 shadow-md' 
+                          : 'bg-pink-50 text-pink-700 border-pink-100 hover:bg-pink-100 hover:border-pink-200'
                       case 'dismantle':
                         return isActive 
-                          ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-300' 
-                          : 'bg-rose-100 text-rose-700 border-rose-300 hover:bg-rose-200'
+                          ? 'bg-rose-500 text-white border-rose-600 ring-2 ring-rose-200 shadow-md' 
+                          : 'bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100 hover:border-rose-200'
                       case 'inbound':
                         return isActive 
-                          ? 'bg-cyan-600 text-white border-cyan-700 ring-2 ring-cyan-300' 
-                          : 'bg-cyan-100 text-cyan-700 border-cyan-300 hover:bg-cyan-200'
+                          ? 'bg-cyan-500 text-white border-cyan-600 ring-2 ring-cyan-200 shadow-md' 
+                          : 'bg-cyan-50 text-cyan-700 border-cyan-100 hover:bg-cyan-100 hover:border-cyan-200'
                       case 'outbound':
                         return isActive 
-                          ? 'bg-sky-600 text-white border-sky-700 ring-2 ring-sky-300' 
-                          : 'bg-sky-100 text-sky-700 border-sky-300 hover:bg-sky-200'
+                          ? 'bg-blue-500 text-white border-blue-600 ring-2 ring-blue-200 shadow-md' 
+                          : 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100 hover:border-blue-200'
                       case 'troubleshoot':
                         return isActive 
-                          ? 'bg-amber-600 text-white border-amber-700 ring-2 ring-amber-300' 
-                          : 'bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200'
+                          ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-200 shadow-md' 
+                          : 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100 hover:border-amber-200'
                       case 'rf audit':
                         return isActive 
-                          ? 'bg-violet-600 text-white border-violet-700 ring-2 ring-violet-300' 
-                          : 'bg-violet-100 text-violet-700 border-violet-300 hover:bg-violet-200'
+                          ? 'bg-violet-500 text-white border-violet-600 ring-2 ring-violet-200 shadow-md' 
+                          : 'bg-violet-50 text-violet-700 border-violet-100 hover:bg-violet-100 hover:border-violet-200'
                       case 'pln upgrade':
                         return isActive 
-                          ? 'bg-lime-600 text-white border-lime-700 ring-2 ring-lime-300' 
-                          : 'bg-lime-100 text-lime-700 border-lime-300 hover:bg-lime-200'
+                          ? 'bg-lime-500 text-white border-lime-600 ring-2 ring-lime-200 shadow-md' 
+                          : 'bg-lime-50 text-lime-700 border-lime-100 hover:bg-lime-100 hover:border-lime-200'
                       case 'others':
                         return isActive 
-                          ? 'bg-fuchsia-600 text-white border-fuchsia-700 ring-2 ring-fuchsia-300' 
-                          : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300 hover:bg-fuchsia-200'
+                          ? 'bg-fuchsia-500 text-white border-fuchsia-600 ring-2 ring-fuchsia-200 shadow-md' 
+                          : 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100 hover:bg-fuchsia-100 hover:border-fuchsia-200'
                       default:
                         return isActive 
-                          ? 'bg-red-600 text-white border-red-700 ring-2 ring-red-300' 
-                          : 'bg-red-100 text-red-700 border-red-300 hover:bg-red-200'
+                          ? 'bg-red-500 text-white border-red-600 ring-2 ring-red-200 shadow-md' 
+                          : 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100 hover:border-red-200'
                     }
                   }
                   
@@ -468,22 +478,13 @@ export default function DailyPlanPage() {
           </div>
           
           <div className="mt-2 sm:mt-0 flex items-center space-x-2">
-            <button 
+            <button
               onClick={handleRefresh}
               disabled={refreshing}
               className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
             >
               <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
-            </button>
-            
-            <button 
-              onClick={handleExport}
-              disabled={exporting}
-              className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50"
-            >
-              <Download className={`h-3.5 w-3.5 mr-1.5 ${exporting ? 'animate-bounce' : ''}`} />
-              {exporting ? 'Exporting...' : 'Export'}
             </button>
           </div>
         </div>
@@ -492,8 +493,8 @@ export default function DailyPlanPage() {
       {/* Data Table - Scrollable */}
       <div className="flex-1 bg-white shadow-sm rounded-lg border border-gray-200 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-hidden">
-          <DailyPlanTable 
-            data={data} 
+          <DailyPlanTable
+            data={data}
             onUpdateData={handleUpdateData}
             rowIdColumn="RowId" // Use the actual column name from Google Sheets
             onFilteredDataChange={setFilteredData} // Pass callback to get filtered data
@@ -501,6 +502,8 @@ export default function DailyPlanPage() {
             statusFilter={activeStatusFilter} // Pass status filter
             activityFilter={activeActivityFilter} // Pass activity filter
             initialDateFilter={dateFilter} // Pass date filter from parent
+            showFilters={true} // Enable the new filters section
+            onExport={handleExport} // Pass export function to table header
           />
         </div>
       </div>

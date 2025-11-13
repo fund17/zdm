@@ -556,10 +556,6 @@ export function HuaweiRolloutTable({
     const endOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999)
 
     switch (preset) {
-      case 'today':
-        start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-        end = new Date(start)
-        break
       case 'thisweek':
         start = startOfWeek(now)
         end = endOfWeek(now)
@@ -1048,12 +1044,6 @@ export function HuaweiRolloutTable({
               {/* Preset Buttons */}
               <div className="p-2 bg-blue-50">
                 <div className="grid grid-cols-2 gap-2 mb-2">
-                  <button
-                    onClick={() => handleDatePresetFilter(activeFilterColumn, 'today')}
-                    className="text-[10px] px-2 py-1 rounded bg-white border hover:bg-blue-100"
-                  >
-                    Today
-                  </button>
                   <button
                     onClick={() => handleDatePresetFilter(activeFilterColumn, 'thisweek')}
                     className="text-[10px] px-2 py-1 rounded bg-white border hover:bg-blue-100"

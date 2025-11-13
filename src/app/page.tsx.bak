@@ -136,16 +136,9 @@ export default function Dashboard() {
           case 'This Month':
             const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
             startDateStr = startOfMonth.toISOString().split('T')[0]
-
+            
             const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
             endDateStr = endOfMonth.toISOString().split('T')[0]
-            break
-          case 'This Year':
-            const startOfYear = new Date(today.getFullYear(), 0, 1)
-            startDateStr = startOfYear.toISOString().split('T')[0]
-
-            const endOfYear = new Date(today.getFullYear(), 11, 31)
-            endDateStr = endOfYear.toISOString().split('T')[0]
             break
         }
         
@@ -344,8 +337,8 @@ export default function Dashboard() {
           }
         })
         
-        // Process selected date range data for team performance
-        todayData.forEach((row: any) => {
+        // Process this month's data for team performance
+        monthData.forEach((row: any) => {
           const status = row.Status || 'No Status'
           const activity = row.Activity || 'No Activity'
           // Try multiple possible field names for team
@@ -431,9 +424,9 @@ export default function Dashboard() {
           .sort((a, b) => b.completionRate - a.completionRate)
           .slice(0, 3)
         
-        // Find idle teams (teams in selected period data but not working in the period)
-        const allTeamsInPeriod = new Set(Object.keys(teamCountsMonth))
-        const idleTeams = Array.from(allTeamsInPeriod).filter(team => !todayTeamsWorking.has(team))
+        // Find idle teams (teams in month data but not working today)
+        const allTeamsThisMonth = new Set(Object.keys(teamCountsMonth))
+        const idleTeams = Array.from(allTeamsThisMonth).filter(team => !todayTeamsWorking.has(team))
         
         
         setStats({
@@ -477,15 +470,15 @@ export default function Dashboard() {
 
   const dashboardCards = [
     {
-      title: "Total Tasks",
+      title: "Today’s Tasks",
       value: stats.todayTasks,
       icon: Calendar,
       color: 'bg-gradient-to-br from-blue-500 to-indigo-600',
       change: loading ? '...' : `${stats.todayTasks} tasks`,
-      description: selectedDateCategory === 'Today' ? 'Scheduled for today' : selectedDateCategory === 'Tomorrow' ? 'Scheduled for tomorrow' : selectedDateCategory === 'This Year' ? 'Scheduled for this year' : `Scheduled for ${selectedDateCategory.toLowerCase()}`,
+      description: selectedDateCategory === 'Today' ? 'Scheduled for today' : selectedDateCategory === 'Tomorrow' ? 'Scheduled for tomorrow' : `Scheduled for ${selectedDateCategory.toLowerCase()}`,
       showDetail: true,
       siteList: stats.todaySites,
-      flipTitle: selectedDateCategory === 'Today' ? '📍 Today\'s Sites' : selectedDateCategory === 'Tomorrow' ? '📍 Tomorrow\'s Sites' : selectedDateCategory === 'This Year' ? '📍 This Year\'s Sites' : `📍 ${selectedDateCategory} Sites`,
+      flipTitle: '📍 Today’s Sites',
       flipColor: 'from-blue-50 to-indigo-50',
       flipBorder: 'border-blue-200'
     },
@@ -495,7 +488,7 @@ export default function Dashboard() {
       icon: Users,
       color: 'bg-gradient-to-br from-purple-500 to-violet-600',
       change: loading ? '...' : `${stats.todayTeamsWorking} teams active`,
-      description: selectedDateCategory === 'Today' ? 'Teams working today' : selectedDateCategory === 'Tomorrow' ? 'Teams working tomorrow' : selectedDateCategory === 'This Year' ? 'Teams working this year' : `Teams working in ${selectedDateCategory.toLowerCase()}`,
+      description: selectedDateCategory === 'Today' ? 'Teams working today' : selectedDateCategory === 'Tomorrow' ? 'Teams working tomorrow' : `Teams working in ${selectedDateCategory.toLowerCase()}`,
       showDetail: true,
       siteList: stats.workingTeams,
       flipTitle: '👥 Working Teams',
@@ -509,7 +502,7 @@ export default function Dashboard() {
       icon: CheckCircle2,
       color: 'bg-gradient-to-br from-emerald-500 to-green-600',
       change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayCompleted / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
-      description: selectedDateCategory === 'Today' ? 'Tasks completed today' : selectedDateCategory === 'Tomorrow' ? 'Tasks completed tomorrow' : selectedDateCategory === 'This Year' ? 'Tasks completed this year' : 'Tasks completed',
+      description: selectedDateCategory === 'Today' ? 'Tasks completed today' : 'Tasks completed',
       showDetail: true,
       siteList: stats.completedSites,
       flipTitle: '✅ Completed Sites',
@@ -522,7 +515,7 @@ export default function Dashboard() {
       icon: Clock,
       color: 'bg-gradient-to-br from-amber-500 to-orange-600',
       change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayInProgress / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
-      description: selectedDateCategory === 'Today' ? 'Tasks in progress today' : selectedDateCategory === 'Tomorrow' ? 'Tasks in progress tomorrow' : selectedDateCategory === 'This Year' ? 'Tasks in progress this year' : 'Tasks in progress',
+      description: 'Currently in progress',
       showDetail: true,
       siteList: stats.inProgressSites,
       flipTitle: '⏳ In Progress Sites',
@@ -535,7 +528,7 @@ export default function Dashboard() {
       icon: AlertCircle,
       color: 'bg-gradient-to-br from-rose-500 to-red-600',
       change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayPending / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
-      description: selectedDateCategory === 'Today' ? 'Tasks pending today' : selectedDateCategory === 'Tomorrow' ? 'Tasks pending tomorrow' : selectedDateCategory === 'This Year' ? 'Tasks pending this year' : 'Tasks pending',
+      description: 'Tasks pending',
       showDetail: true,
       siteList: stats.pendingSites,
       flipTitle: '⚠️ Pending Sites',
@@ -548,7 +541,7 @@ export default function Dashboard() {
       icon: XCircle,
       color: 'bg-gradient-to-br from-red-600 to-red-700',
       change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayFailed / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
-      description: selectedDateCategory === 'Today' ? 'Tasks failed today' : selectedDateCategory === 'Tomorrow' ? 'Tasks failed tomorrow' : selectedDateCategory === 'This Year' ? 'Tasks failed this year' : 'Tasks failed',
+      description: 'Tasks failed',
       showDetail: true,
       siteList: stats.failedSites,
       flipTitle: '❌ Failed Sites',
@@ -721,7 +714,7 @@ export default function Dashboard() {
                     </div>
                     <div className="h-4 w-px bg-slate-200"></div>
                     <div className="flex flex-wrap gap-1.5">
-                      {['Today', 'Tomorrow', 'This Week', 'This Month', 'This Year'].map((category) => (
+                      {['Today', 'Tomorrow', 'This Week', 'This Month'].map((category) => (
                         <button
                           key={category}
                           onClick={() => setSelectedDateCategory(category)}
@@ -841,7 +834,7 @@ export default function Dashboard() {
                 <div className="p-1 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
                   <Activity className="h-3 w-3 text-white" />
                 </div>
-                {selectedDateCategory === 'Today' ? "Today's Activities" : selectedDateCategory === 'Tomorrow' ? "Tomorrow's Activities" : selectedDateCategory === 'This Year' ? "This Year's Activities" : `${selectedDateCategory} Activities`}
+                {selectedDateCategory === 'Today' ? "Today's Activities" : selectedDateCategory === 'Tomorrow' ? "Tomorrow's Activities" : `${selectedDateCategory} Activities`}
               </h3>
               <p className="mt-0.5 text-[10px] text-slate-500">
                 Activity breakdown for {selectedDateCategory.toLowerCase()}
@@ -855,7 +848,7 @@ export default function Dashboard() {
                 </div>
               ) : stats.todayActivityBreakdown.length === 0 ? (
                 <div className="text-center py-8 text-slate-500">
-                  No activities scheduled for {selectedDateCategory === 'This Year' ? 'this year' : selectedDateCategory.toLowerCase()}
+                  No activities scheduled for {selectedDateCategory.toLowerCase()}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
@@ -1022,10 +1015,10 @@ export default function Dashboard() {
                 <div className="p-1 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg">
                   <Users className="h-3 w-3 text-white" />
                 </div>
-                {selectedDateCategory === 'Today' ? "Today's Team Performance" : selectedDateCategory === 'Tomorrow' ? "Tomorrow's Team Performance" : selectedDateCategory === 'This Year' ? "This Year's Team Performance" : `${selectedDateCategory} Team Performance`}
+                Team Performance (This Month)
               </h3>
               <p className="mt-0.5 text-[10px] text-slate-500">
-                Team performance for {selectedDateCategory.toLowerCase()}
+                {new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
               </p>
             </div>
             <div className="p-3 flex-1 overflow-y-auto">
@@ -1036,7 +1029,7 @@ export default function Dashboard() {
                 </div>
               ) : stats.todayTeamBreakdown.length === 0 ? (
                 <div className="text-center py-8 text-slate-500">
-                  No team data for {selectedDateCategory === 'This Year' ? 'this year' : selectedDateCategory.toLowerCase()}
+                  No team data for {selectedDateCategory.toLowerCase()}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2">

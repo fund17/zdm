@@ -13,11 +13,12 @@ import {
   ColumnFiltersState,
 } from '@tanstack/react-table'
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { Check, X, Edit2, Clock, AlertCircle } from 'lucide-react'
+import { Check, X, Edit2, Clock, AlertCircle, Filter, Calendar, Activity as ActivityIcon } from 'lucide-react'
 
 interface DataTableProps {
   data: Record<string, any>[]
   onUpdateData?: (rowIndex: number, columnId: string, value: any, oldValue: any) => Promise<void>
+  showFilters?: boolean
 }
 
 interface EditingState {
@@ -34,7 +35,7 @@ interface CellStatus {
   timestamp: number
 }
 
-export function DataTableWithTracking({ data, onUpdateData }: DataTableProps) {
+export function DataTableWithTracking({ data, onUpdateData, showFilters = false }: DataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [globalFilter, setGlobalFilter] = useState('')
@@ -42,9 +43,36 @@ export function DataTableWithTracking({ data, onUpdateData }: DataTableProps) {
   const [localData, setLocalData] = useState(data)
   const [cellStatuses, setCellStatuses] = useState<CellStatus[]>([])
 
+  // Filter states
+  const [selectedActivity, setSelectedActivity] = useState<string>('All')
+  const [selectedStatus, setSelectedStatus] = useState<string>('All')
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('All')
+  const [activities, setActivities] = useState<string[]>(['All'])
+  const [statuses, setStatuses] = useState<string[]>(['All'])
+
   // Update local data when props change
   useEffect(() => {
     setLocalData(data)
+  }, [data])
+
+  // Extract unique activities and statuses from data
+  useEffect(() => {
+    if (data.length > 0) {
+      const uniqueActivities = Array.from(new Set(
+        data
+          .map((row: any) => row.Activity || row.activity || '')
+          .filter((activity: string) => activity && activity.trim() !== '')
+      )) as string[]
+
+      const uniqueStatuses = Array.from(new Set(
+        data
+          .map((row: any) => row.Status || row.status || '')
+          .filter((status: string) => status && status.trim() !== '')
+      )) as string[]
+
+      setActivities(['All', ...uniqueActivities.sort()])
+      setStatuses(['All', ...uniqueStatuses.sort()])
+    }
   }, [data])
 
   // Get cell status
@@ -115,11 +143,68 @@ export function DataTableWithTracking({ data, onUpdateData }: DataTableProps) {
     }
   }, [handleCellSave, handleCellCancel])
 
+  // Filter data based on selected filters
+  const filteredData = useMemo(() => {
+    let filtered = localData
+
+    // Apply activity filter
+    if (selectedActivity !== 'All') {
+      filtered = filtered.filter((row: any) => {
+        const rowActivity = row.Activity || row.activity || ''
+        return rowActivity === selectedActivity
+      })
+    }
+
+    // Apply status filter
+    if (selectedStatus !== 'All') {
+      filtered = filtered.filter((row: any) => {
+        const rowStatus = row.Status || row.status || ''
+        return rowStatus === selectedStatus
+      })
+    }
+
+    // Apply date filter
+    if (selectedDateFilter !== 'All') {
+      const today = new Date()
+      const todayStr = today.toISOString().split('T')[0]
+
+      if (selectedDateFilter === 'Today') {
+        filtered = filtered.filter((row: any) => {
+          if (!row.Date) return false
+          try {
+            const rowDate = new Date(row.Date)
+            const rowDateStr = rowDate.toISOString().split('T')[0]
+            return rowDateStr === todayStr
+          } catch (e) {
+            return false
+          }
+        })
+      } else if (selectedDateFilter === 'Tomorrow') {
+        const tomorrow = new Date(today)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        const tomorrowStr = tomorrow.toISOString().split('T')[0]
+
+        filtered = filtered.filter((row: any) => {
+          if (!row.Date) return false
+          try {
+            const rowDate = new Date(row.Date)
+            const rowDateStr = rowDate.toISOString().split('T')[0]
+            return rowDateStr === tomorrowStr
+          } catch (e) {
+            return false
+          }
+        })
+      }
+    }
+
+    return filtered
+  }, [localData, selectedActivity, selectedStatus, selectedDateFilter])
+
   // Generate columns from data
   const columns = useMemo<ColumnDef<any>[]>(() => {
-    if (localData.length === 0) return []
-    
-    const keys = Object.keys(localData[0])
+    if (filteredData.length === 0) return []
+
+    const keys = Object.keys(filteredData[0])
     return keys.map((key) => ({
       accessorKey: key,
       header: key.charAt(0).toUpperCase() + key.slice(1),
@@ -161,7 +246,7 @@ export function DataTableWithTracking({ data, onUpdateData }: DataTableProps) {
 
         // Cell with status indicators
         return (
-          <div 
+          <div
             className={`
               group flex items-center justify-between cursor-pointer hover:bg-gray-50 px-2 py-1 rounded transition-colors
               ${cellStatus?.status === 'updating' ? 'bg-yellow-50' : ''}
@@ -195,10 +280,10 @@ export function DataTableWithTracking({ data, onUpdateData }: DataTableProps) {
         )
       },
     }))
-  }, [localData, editingCell, getCellStatus, handleCellSave, handleKeyDown, handleCellCancel, handleCellEdit])
+  }, [filteredData, editingCell, getCellStatus, handleCellSave, handleKeyDown, handleCellCancel, handleCellEdit])
 
   const table = useReactTable({
-    data: localData,
+    data: filteredData,
     columns,
     state: {
       sorting,
@@ -227,8 +312,70 @@ export function DataTableWithTracking({ data, onUpdateData }: DataTableProps) {
     )
   }
 
+  const dateFilterOptions = ['All', 'Today', 'Tomorrow']
+
   return (
     <div className="h-full flex flex-col">
+      {/* Filters Section - Fixed */}
+      {showFilters && (
+        <div className="flex-none bg-white border-b border-gray-200 p-4">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-600" />
+              <span className="text-sm font-medium text-gray-700">Filters:</span>
+            </div>
+
+            {/* Activity Filter */}
+            <div className="flex items-center gap-2">
+              <ActivityIcon className="h-4 w-4 text-gray-600" />
+              <select
+                value={selectedActivity}
+                onChange={(e) => setSelectedActivity(e.target.value)}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {activities.map((activity) => (
+                  <option key={activity} value={activity}>
+                    {activity === 'All' ? 'All Activities' : activity}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex items-center gap-2">
+              <Check className="h-4 w-4 text-gray-600" />
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {statuses.map((status) => (
+                  <option key={status} value={status}>
+                    {status === 'All' ? 'All Statuses' : status}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date Filter */}
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-gray-600" />
+              <select
+                value={selectedDateFilter}
+                onChange={(e) => setSelectedDateFilter(e.target.value)}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {dateFilterOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option === 'All' ? 'All Dates' : option}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Search Filter - Fixed */}
       <div className="flex-none flex items-center justify-between p-4 bg-gray-50 border-b">
         <div className="flex-1 mr-4">
@@ -242,7 +389,7 @@ export function DataTableWithTracking({ data, onUpdateData }: DataTableProps) {
         </div>
         <div className="flex items-center space-x-4 text-sm">
           <div className="text-gray-600">
-            {table.getFilteredRowModel().rows.length} of {localData.length} rows
+            {table.getFilteredRowModel().rows.length} of {filteredData.length} rows
           </div>
           {cellStatuses.length > 0 && (
             <div className="flex items-center space-x-2">

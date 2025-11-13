@@ -15,7 +15,7 @@ import {
   ColumnPinningState,
 } from '@tanstack/react-table'
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { Check, X, Edit2, Shield, AlertTriangle, Settings, Eye, EyeOff, Lock, Calendar, CalendarRange, Filter, XCircle } from 'lucide-react'
+import { Check, X, Edit2, Shield, AlertTriangle, Settings, Eye, EyeOff, Lock, CalendarRange, Filter, XCircle, Activity as ActivityIcon, Download } from 'lucide-react'
 
 interface ColumnConfig {
   name: string
@@ -34,6 +34,8 @@ interface DataTableProps {
   statusFilter?: string | null // Add status filter prop
   activityFilter?: string | null // Add activity filter prop
   initialDateFilter?: DateFilter // Add prop to control date filter from parent
+  showFilters?: boolean // Add prop to control filter visibility
+  onExport?: () => Promise<void> // Add export callback prop
 }
 
 interface EditingState {
@@ -124,7 +126,7 @@ const getActivityBadgeStyle = (activity: string) => {
   }
 }
 
-export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFilteredDataChange, onDateFilterChange, statusFilter, activityFilter, initialDateFilter }: DataTableProps) {
+export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFilteredDataChange, onDateFilterChange, statusFilter, activityFilter, initialDateFilter, showFilters = false, onExport }: DataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'Date', desc: true }]) // Sort by Date descending (newest first)
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [globalFilter, setGlobalFilter] = useState('')
@@ -143,6 +145,18 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
   const [filterDropdownPosition, setFilterDropdownPosition] = useState<{ top: number; left: number } | null>(null)
   const [filterSearchQuery, setFilterSearchQuery] = useState('')
   const filterDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Filter states for the new filters section
+  const [selectedActivity, setSelectedActivity] = useState<string | null>(null)
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null)
+  const [selectedVendor, setSelectedVendor] = useState<string | null>(null)
+  const [selectedTeamCategory, setSelectedTeamCategory] = useState<string | null>(null)
+
+  const [uniqueActivities, setUniqueActivities] = useState<string[]>([])
+  const [uniqueStatuses, setUniqueStatuses] = useState<string[]>([])
+  const [uniqueVendors, setUniqueVendors] = useState<string[]>([])
+  const [uniqueTeamCategories, setUniqueTeamCategories] = useState<string[]>([])
+  const [exporting, setExporting] = useState(false)
   
   // Batch editing states
   const [changedCells, setChangedCells] = useState<Map<string, { rowId: string, columnId: string, oldValue: any, newValue: any }>>(new Map())
@@ -174,19 +188,30 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
     }
   }, [initialDateFilter, dateFilter.startDate, dateFilter.endDate])
 
-  // Close filter dropdown when clicking outside
+  // Close filter dropdown and editing cell when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      // Close filter dropdown
       if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
         setActiveFilterColumn(null)
         setFilterDropdownPosition(null)
         setFilterSearchQuery('')
       }
+
+      // Auto-save editing cell when clicking outside
+      if (editingCell) {
+        const target = event.target as Element
+        const isInsideEditingCell = target.closest('[data-editing-cell]')
+
+        if (!isInsideEditingCell) {
+          handleCellSave()
+        }
+      }
     }
-    
+
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [editingCell])
 
   // Fetch column configuration on mount
   useEffect(() => {
@@ -270,6 +295,40 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
     // Don't notify parent here, let the client-side filtering handle it
   }, [data])
 
+  // Extract unique activities, statuses, vendors, and team categories from data
+  useEffect(() => {
+    if (data.length > 0) {
+      const activities = Array.from(new Set(
+        data
+          .map((row: any) => row.Activity || row.activity || '')
+          .filter((activity: string) => activity && activity.trim() !== '')
+      )) as string[]
+
+      const statuses = Array.from(new Set(
+        data
+          .map((row: any) => row.Status || row.status || '')
+          .filter((status: string) => status && status.trim() !== '')
+      )) as string[]
+
+      const vendors = Array.from(new Set(
+        data
+          .map((row: any) => row.Vendor || row.vendor || '')
+          .filter((vendor: string) => vendor && vendor.trim() !== '')
+      )) as string[]
+
+      const teamCategories = Array.from(new Set(
+        data
+          .map((row: any) => row['Team Category'] || row.teamCategory || row.team_category || '')
+          .filter((category: string) => category && category.trim() !== '')
+      )) as string[]
+
+      setUniqueActivities(activities.sort())
+      setUniqueStatuses(statuses.sort())
+      setUniqueVendors(vendors.sort())
+      setUniqueTeamCategories(teamCategories.sort())
+    }
+  }, [data])
+
   // Parse Google Sheets date format (e.g., "04-Jan-2024")
   const parseSheetDate = (dateStr: string): Date | null => {
     if (!dateStr) return null
@@ -301,37 +360,69 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
   // Client-side date filtering for faster preset responses
   const filteredData = useMemo(() => {
     let result = data
-    
+
     // Apply date filter
     if (dateFilter.startDate && dateFilter.endDate && data.length > 0) {
       const startDate = new Date(dateFilter.startDate)
       const endDate = new Date(dateFilter.endDate)
-      
+
       result = result.filter(row => {
         const rowDate = parseSheetDate(row.Date)
         if (!rowDate) return false
-        
+
         // Set time to start of day for proper comparison
         const rowDateOnly = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate())
         const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
         const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
-        
+
         return rowDateOnly >= startDateOnly && rowDateOnly <= endDateOnly
       })
     }
-    
-    // Apply status filter
+
+    // Apply status filter from parent (existing)
     if (statusFilter) {
       result = result.filter(row => row.Status === statusFilter)
     }
-    
-    // Apply activity filter
+
+    // Apply activity filter from parent (existing)
     if (activityFilter) {
       result = result.filter(row => row.Activity === activityFilter)
     }
-    
+
+    // Apply new activity filter (from showFilters section)
+    if (selectedActivity) {
+      result = result.filter((row: any) => {
+        const rowActivity = row.Activity || row.activity || ''
+        return rowActivity === selectedActivity
+      })
+    }
+
+    // Apply new status filter (from showFilters section)
+    if (selectedStatus) {
+      result = result.filter((row: any) => {
+        const rowStatus = row.Status || row.status || ''
+        return rowStatus === selectedStatus
+      })
+    }
+
+    // Apply new vendor filter (from showFilters section)
+    if (selectedVendor) {
+      result = result.filter((row: any) => {
+        const rowVendor = row.Vendor || row.vendor || ''
+        return rowVendor === selectedVendor
+      })
+    }
+
+    // Apply new team category filter (from showFilters section)
+    if (selectedTeamCategory) {
+      result = result.filter((row: any) => {
+        const rowTeamCategory = row['Team Category'] || row.teamCategory || row.team_category || ''
+        return rowTeamCategory === selectedTeamCategory
+      })
+    }
+
     return result
-  }, [data, dateFilter, statusFilter, activityFilter])
+  }, [data, dateFilter, statusFilter, activityFilter, selectedActivity, selectedStatus, selectedVendor, selectedTeamCategory])
 
   // Update parent with client-side filtered data
   useEffect(() => {
@@ -368,60 +459,25 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
     // If within default range, client-side filtering will handle it automatically
   }
 
-  // Quick date filter presets - use client-side filtering for instant response
-  const setDatePreset = (preset: 'yesterday' | 'today' | 'tomorrow' | 'week') => {
-    const today = new Date()
-    let startDate: Date, endDate: Date
-    
-    switch (preset) {
-      case 'yesterday':
-        startDate = new Date(today)
-        startDate.setDate(today.getDate() - 1)
-        endDate = new Date(startDate)
-        break
-      case 'today':
-        startDate = new Date(today)
-        endDate = new Date(today)
-        break
-      case 'tomorrow':
-        startDate = new Date(today)
-        startDate.setDate(today.getDate() + 1)
-        endDate = new Date(startDate)
-        break
-      case 'week':
-        startDate = new Date(today)
-        startDate.setDate(today.getDate() - 1)
-        endDate = new Date(today)
-        endDate.setDate(today.getDate() + 1)
-        break
-      default:
-        return
-    }
-    
-    const newDateFilter = {
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0]
-    }
-    
-    // For default presets, use client-side filtering (instant, no server call)
-    setDateFilter(newDateFilter)
-    
-    // Don't call server for default presets since data is already loaded
-    // onDateFilterChange callback is only for custom date ranges
-  }
+
 
   // Clear all filters
   const handleClearAllFilters = () => {
     // Clear column filters
     setColumnFilters([])
-    
+
     // Clear global search
     setGlobalFilter('')
-    
+
     // Clear active filter dropdown
     setActiveFilterColumn(null)
     setFilterDropdownPosition(null)
-    
+
+    // Clear advanced filters
+    setSelectedActivity(null)
+    setSelectedStatus(null)
+    setSelectedVendor(null)
+    setSelectedTeamCategory(null)
   }
 
   // Get visible column configs
@@ -921,22 +977,13 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
         // Currently editing
         if (isEditing) {
           return (
-            <div className="flex items-center space-x-1 px-1 py-0.5 text-xs" dir="ltr" style={{ direction: 'ltr', textAlign: 'left' }}>
+            <div
+              className="flex items-center space-x-1 px-1 py-0.5 text-xs"
+              dir="ltr"
+              style={{ direction: 'ltr', textAlign: 'left' }}
+              data-editing-cell
+            >
               {renderEditInput(editingCell, config)}
-              <button
-                onClick={handleCellSave}
-                className="p-0.5 text-green-600 hover:bg-green-100 rounded flex-shrink-0"
-                title="Save (Enter)"
-              >
-                <Check className="h-3 w-3" />
-              </button>
-              <button
-                onClick={handleCellCancel}
-                className="p-0.5 text-red-600 hover:bg-red-100 rounded flex-shrink-0"
-                title="Cancel (Esc)"
-              >
-                <X className="h-3 w-3" />
-              </button>
             </div>
           )
         }
@@ -1066,9 +1113,9 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       size: 150,
       maxSize: 500,
     },
-    state: { 
-      sorting, 
-      columnFilters, 
+    state: {
+      sorting,
+      columnFilters,
       globalFilter,
       columnSizing,
       columnPinning,
@@ -1081,9 +1128,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize: 20 } },
-    enableColumnResizing: true,
-    columnResizeMode: 'onChange' as ColumnResizeMode,
-    onColumnSizingChange: setColumnSizing,
+    enableColumnResizing: false,
     enablePinning: true,
     onColumnPinningChange: setColumnPinning,
   })
@@ -1121,93 +1166,131 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
 
   return (
     <div className="h-full flex flex-col">
-      {/* Compact Filter Bar - Single Row */}
-      <div className="flex-none bg-gray-50 border-b">
-        <div className="flex items-center justify-between p-3 space-x-4">
+
+
+      {/* Enhanced Filter Bar - Professional Design */}
+      <div className="flex-none bg-gradient-to-r from-slate-50 via-gray-50 to-slate-50 border-b border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between px-4 py-3 space-x-4">
           {/* Left Section: Date Filter */}
           <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2">
-              <Calendar className="h-4 w-4 text-gray-500" />
-              <span className="text-xs font-medium text-gray-700">Date:</span>
-            </div>
-            
             {/* Quick Presets */}
             <div className="flex space-x-1">
               <button
-                onClick={() => setDatePreset('yesterday')}
-                className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                Yesterday
-              </button>
-              <button
-                onClick={() => setDatePreset('today')}
-                className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                onClick={() => {
+                  const today = new Date()
+                  const todayStr = today.toISOString().split('T')[0]
+                  setDateFilter({ startDate: todayStr, endDate: todayStr })
+                  if (onDateFilterChange) {
+                    onDateFilterChange({ startDate: todayStr, endDate: todayStr })
+                  }
+                }}
+                className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                title="Filter to today's records"
               >
                 Today
               </button>
-              <button
-                onClick={() => setDatePreset('tomorrow')}
-                className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                Tomorrow
-              </button>
-              <button
-                onClick={() => setDatePreset('week')}
-                className="px-2 py-1 text-xs bg-blue-100 border border-blue-300 rounded hover:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                3 Days
-              </button>
             </div>
-            
+
             {/* Custom Date Range */}
             <div className="flex items-center space-x-2 border-l border-gray-300 pl-3">
               <input
                 type="date"
                 value={dateFilter.startDate}
                 onChange={(e) => handleDateInputChange('startDate', e.target.value)}
-                className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-32"
+                className="px-2 py-1.5 text-xs border border-gray-300 rounded bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors"
               />
-              <span className="text-xs text-gray-500">to</span>
+              <span className="text-xs text-gray-500 font-medium">to</span>
               <input
                 type="date"
                 value={dateFilter.endDate}
                 onChange={(e) => handleDateInputChange('endDate', e.target.value)}
-                className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-32"
+                className="px-2 py-1.5 text-xs border border-gray-300 rounded bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors"
               />
             </div>
+
+            {/* Export Button */}
+            {onExport && (
+              <div className="border-l border-gray-300 pl-3">
+                <button
+                  onClick={async () => {
+                    setExporting(true)
+                    try {
+                      await onExport()
+                    } finally {
+                      setExporting(false)
+                    }
+                  }}
+                  disabled={exporting}
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Export filtered data to Excel"
+                >
+                  <Download className={`h-3.5 w-3.5 mr-1.5 ${exporting ? 'animate-bounce' : ''}`} />
+                  {exporting ? 'Exporting...' : 'Export'}
+                </button>
+              </div>
+            )}
+
+            {/* Save/Cancel Buttons */}
+            {changedCells.size > 0 && (
+              <div className="flex items-center space-x-1 border-l border-gray-300 pl-3">
+                <button
+                  onClick={handleBatchSave}
+                  disabled={isSaving}
+                  className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white border border-green-600 rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Save ({changedCells.size})</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleBatchCancel}
+                  disabled={isSaving}
+                  className="px-3 py-1.5 text-xs font-medium bg-gray-600 text-white border border-gray-600 rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-all duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span>Cancel</span>
+                </button>
+              </div>
+            )}
           </div>
-          
-          {/* Right Section: Search */}
-          <div className="flex items-center space-x-3">
+
+          {/* Right Section: Search & Controls */}
+          <div className="flex items-center space-x-4">
+            {/* Search */}
             <div className="flex items-center space-x-2">
               <input
                 type="text"
                 placeholder="Search all columns..."
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
-                className="px-3 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors w-80"
               />
               {(globalFilter || columnFilters.length > 0) && (
                 <button
                   onClick={handleClearAllFilters}
-                  className="px-2 py-1 text-xs bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-100 focus:outline-none focus:ring-1 focus:ring-red-500 flex items-center space-x-1"
+                  className="px-3 py-2 text-sm font-medium bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 flex items-center space-x-2 shadow-sm"
                   title="Clear all filters"
                 >
-                  <XCircle className="h-3 w-3" />
-                  <span>Clear Filters</span>
+                  <XCircle className="h-4 w-4" />
+                  <span>Clear</span>
                 </button>
               )}
             </div>
-            
-            {/* Row Counter */}
-            <div className="text-xs text-gray-600 whitespace-nowrap">
-              {table.getFilteredRowModel().rows.length} of {filteredData.length} rows
-              {localData.length !== data.length && (
-                <span className="ml-1 text-blue-600">
-                  ({localData.length} total)
-                </span>
-              )}
-            </div>
+
+
           </div>
         </div>
       </div>
@@ -1319,15 +1402,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                         </button>
                       </div>
                       
-                      {/* Resize Handle */}
-                      <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className={`absolute right-0 top-0 h-full w-2 cursor-col-resize select-none touch-none hover:bg-blue-400 ${
-                          header.column.getIsResizing() ? 'bg-blue-500' : 'bg-transparent'
-                        }`}
-                        style={{ userSelect: 'none' }}
-                      />
+
                     </th>
                   )
                 })}
@@ -1440,7 +1515,11 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
             Last
           </button>
         </div>
-        
+
+        <span className="text-sm text-gray-600">
+          {data.length.toLocaleString()} records
+        </span>
+
         <div className="flex items-center space-x-2">
           <span className="text-sm text-gray-600">
             Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
@@ -1459,51 +1538,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
         </div>
       </div>
       
-      {/* Floating Action Buttons for Batch Save/Cancel */}
-      {changedCells.size > 0 && (
-        <div className="fixed bottom-4 right-4 z-50 flex flex-col space-y-1">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-2">
-            <div className="text-xs text-gray-600 mb-2">
-              {isSaving 
-                ? `Saving ${changedCells.size} changes...` 
-                : `${changedCells.size} unsaved change${changedCells.size > 1 ? 's' : ''}`
-              }
-            </div>
-            <div className="flex space-x-2">
-              <button
-                onClick={handleBatchSave}
-                disabled={isSaving}
-                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-              >
-                {isSaving ? (
-                  <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>Save All</span>
-                  </>
-                )}
-              </button>
-              
-              <button
-                onClick={handleBatchCancel}
-                disabled={isSaving}
-                className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded-md text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                <span>Cancel All</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
       
       {/* Filter Dropdown Portal - Outside table to prevent column resize */}
       {activeFilterColumn && filterDropdownPosition && (

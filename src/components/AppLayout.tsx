@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import Navbar from './Navbar'
 import Sidebar from './Sidebar'
 
@@ -9,8 +10,43 @@ interface AppLayoutProps {
 }
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
+  const pathname = usePathname()
+  const router = useRouter()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  // Check authentication status
+  useEffect(() => {
+    const checkAuth = async () => {
+      // Don't check auth on login page
+      if (pathname === '/login') {
+        setLoading(false)
+        return
+      }
+
+      try {
+        const response = await fetch('/api/auth/session')
+        const data = await response.json()
+        
+        if (data.success && data.user) {
+          setIsAuthenticated(true)
+        } else {
+          setIsAuthenticated(false)
+          // Redirect to login if not authenticated and not on login page
+          router.push('/login')
+        }
+      } catch (error) {
+        setIsAuthenticated(false)
+        router.push('/login')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    checkAuth()
+  }, [pathname, router])
 
   // Check if mobile on mount and resize
   useEffect(() => {
@@ -31,6 +67,20 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   const toggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed)
+  }
+
+  // If on login page or not authenticated, show content without layout
+  if (pathname === '/login' || (!isAuthenticated && !loading)) {
+    return <>{children}</>
+  }
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+      </div>
+    )
   }
 
   return (

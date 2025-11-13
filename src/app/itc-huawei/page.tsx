@@ -1,0 +1,264 @@
+'use client'
+
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { HuaweiRolloutTable } from '@/components/HuaweiRolloutTable'
+import { LoadingSpinner } from '@/components/LoadingSpinner'
+import { RefreshCcw, Download, Database } from 'lucide-react'
+import * as XLSX from 'xlsx'
+
+interface SheetData {
+  [key: string]: string | number
+}
+
+interface SheetListItem {
+  sheetName: string
+  title: string
+}
+
+export default function ItcHuaweiPage() {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [filteredData, setFilteredData] = useState<any[]>([])
+  const [sheetList, setSheetList] = useState<SheetListItem[]>([])
+  const [selectedSheet, setSelectedSheet] = useState<string>('')
+  const [loadingSheetList, setLoadingSheetList] = useState(true)
+
+  const fetchData = useCallback(async (sheetName?: string) => {
+    try {
+      setLoading(true)
+      
+      const sheetToFetch = sheetName || selectedSheet
+      const response = await fetch(`/api/sheets/itc-huawei?sheetName=${sheetToFetch}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch data')
+      }
+      
+      const result = await response.json()
+      
+      setData(result.data || [])
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedSheet])
+
+  const fetchSheetList = async () => {
+    try {
+      setLoadingSheetList(true)
+      const response = await fetch('/api/sheets/itc-huawei/sheet-list')
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch sheet list')
+      }
+      
+      const result = await response.json()
+      setSheetList(result.data || [])
+    } catch (err) {
+      console.error('Failed to fetch sheet list:', err)
+      // Use fallback data if API fails
+      setSheetList([
+        { sheetName: 'ITCHIOH', title: 'Huawei IOH Project' },
+        { sheetName: 'ITCHWXL', title: 'Huawei XLS Project' },
+        { sheetName: 'ITCHTSEL', title: 'Huawei TSEL Project' },
+        { sheetName: 'ITCHUSO', title: 'Huawei USO Project' },
+        { sheetName: 'ITCHWXLCME', title: 'Huawei XLS CME Project' },
+      ])
+    } finally {
+      setLoadingSheetList(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchSheetList()
+  }, [])
+
+  useEffect(() => {
+    if (selectedSheet) {
+      fetchData(selectedSheet)
+    }
+  }, [selectedSheet, fetchData])
+
+  const handleRefresh = async () => {
+    if (!selectedSheet) {
+      alert('Please select a project first')
+      return
+    }
+    setRefreshing(true)
+    await fetchData(selectedSheet)
+    setRefreshing(false)
+  }
+
+  const handleUpdateData = async (rowId: string, columnId: string, value: any, oldValue: any) => {
+    try {
+      const response = await fetch('/api/sheets/itc-huawei/update', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          rowId, 
+          columnId, 
+          value, 
+          oldValue,
+          rowIdentifierColumn: 'DUID'
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update data')
+      }
+      
+    } catch (error) {
+      console.error('❌ Update error:', error)
+      throw error
+    }
+  }
+
+  const handleExport = async () => {
+    if (!selectedSheet) {
+      alert('Please select a project first')
+      return
+    }
+    
+    try {
+      setExporting(true)
+      
+      const dataToExport = filteredData.length > 0 ? filteredData : data
+      
+      if (dataToExport.length === 0) {
+        alert('No data to export')
+        return
+      }
+
+      // Fetch column configuration
+      const configResponse = await fetch('/api/sheets/itc-huawei/settings')
+      if (!configResponse.ok) throw new Error('Failed to fetch column settings')
+      
+      const settingsResponse = await configResponse.json()
+      const configs = settingsResponse?.data?.columns || []
+      
+      if (!Array.isArray(configs) || configs.length === 0) {
+        throw new Error('Invalid column configuration received')
+      }
+      
+      // Filter only visible columns
+      const visibleColumns = configs.filter((col: any) => col.show === true)
+      
+      if (visibleColumns.length === 0) {
+        throw new Error('No visible columns found')
+      }
+      
+      // Prepare data for Excel
+      const excelData = dataToExport.map(row => {
+        const excelRow: any = {}
+        visibleColumns.forEach((col: any) => {
+          const value = row[col.name]
+          excelRow[col.displayName] = value !== null && value !== undefined ? value : ''
+        })
+        return excelRow
+      })
+      
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(excelData)
+      
+      // Auto-size columns
+      const columnWidths = visibleColumns.map((col: any) => {
+        const headerLength = col.displayName.length
+        const maxDataLength = Math.max(
+          ...dataToExport.map(row => {
+            const value = row[col.name]
+            return value ? String(value).length : 0
+          })
+        )
+        return { wch: Math.min(Math.max(headerLength, maxDataLength) + 2, 50) }
+      })
+      worksheet['!cols'] = columnWidths
+      
+      // Create workbook
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'ITC HUAWEI')
+      
+      // Generate filename
+      const filename = `itc-huawei-export-${new Date().toISOString().split('T')[0]}.xlsx`
+      
+      // Download
+      XLSX.writeFile(workbook, filename)
+      
+      console.log(`✅ Exported ${dataToExport.length} rows to ${filename}`)
+    } catch (error) {
+      console.error('❌ Export failed:', error)
+      alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Header Section */}
+      <div className="flex-none">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
+          <div>
+            <h1 className="text-lg font-bold text-gray-900 flex items-center">
+              <Database className="h-5 w-5 mr-2 text-blue-600" />
+              ITC HUAWEI
+            </h1>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Manage ITC HUAWEI rollout data from Google Sheets
+            </p>
+          </div>
+          
+          <div className="mt-2 sm:mt-0 flex items-center space-x-2">
+            {/* Sheet Selector */}
+            <select
+              value={selectedSheet}
+              onChange={(e) => setSelectedSheet(e.target.value)}
+              disabled={loadingSheetList}
+              className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              <option value="">Select Project...</option>
+              {sheetList.map((sheet) => (
+                <option key={sheet.sheetName} value={sheet.sheetName}>
+                  {sheet.title}
+                </option>
+              ))}
+            </select>
+            
+            <button 
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+            >
+              <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Data Table */}
+      <div className="flex-1 bg-white shadow-sm rounded-lg border border-gray-200 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-hidden">
+          <HuaweiRolloutTable 
+            data={data} 
+            onUpdateData={handleUpdateData}
+            rowIdColumn="DUID"
+            onFilteredDataChange={setFilteredData}
+            onExport={handleExport}
+            exporting={exporting}
+            loading={loading}
+            error={error}
+            selectedSheet={selectedSheet}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}

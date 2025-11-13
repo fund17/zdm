@@ -1,0 +1,69 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  // New columns for User table
+  zmguserid   String? @unique @db.VarChar(190)
+  pass        String? @db.VarChar(190)
+  usertype    String? @db.VarChar(80)
+  rowId       String? @db.VarChar(80)
+  region      String? @db.VarChar(120)
+  regionhrd   String? @db.VarChar(120)
+  access      String? @db.VarChar(120)
+  status      String? @db.VarChar(80)
+  login       String? @db.VarChar(80)
+  userRegion  String? @db.VarChar(255)
+
+  // Relations
+  sessions Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Absensi {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nama            String  @db.VarChar(230)
+  timestamp       String  @db.VarChar(190)
+  lokasi          String  @db.VarChar(370)
+  lokasiMap       String  @db.VarChar(321)
+  tipe            String  @db.VarChar(80)
+  supervisor      String  @db.VarChar(180)
+  reviewStatus    String  @db.VarChar(80)
+  reviewer        String? @db.VarChar(180)
+  reviewTimestamp String? @db.VarChar(190)
+  selfieUrl       String? @db.VarChar(164)
+  customer        String? @db.VarChar(31)
+  vendor          String? @db.VarChar(61)
+  remark          String? @db.VarChar(134)
+  region          String? @db.VarChar(120)
+
+  @@map("Absensi")
+}
+
+enum Role {
+  USER
+  ADMIN
+}

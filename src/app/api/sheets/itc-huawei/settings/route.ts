@@ -57,8 +57,8 @@ export async function GET(request: NextRequest) {
     const columnConfigs: ColumnConfig[] = settingsData.map((row: any) => {
       const columnName = row.Column || ''
       const type = row.Value || 'String'
-      const editable = (row.Editable || 'yes').toLowerCase() === 'yes'
-      const show = (row.Show || 'yes').toLowerCase() === 'yes'
+      const editable = (row.Editable || 'yes').toString().toLowerCase() === 'yes'
+      const show = (row.Show || 'yes').toString().toLowerCase() === 'yes'
       
       // Normalize type
       let normalizedType: ColumnType = 'string'
@@ -89,9 +89,11 @@ export async function GET(request: NextRequest) {
       totalColumns: columnConfigs.length,
       visibleColumns: visibleColumns.length,
       editableColumns: editableColumns.length,
-      hiddenColumns: hiddenColumns.map(c => c.name),
-      readOnlyColumns: readOnlyColumns.map(c => c.name)
+      hiddenColumns: hiddenColumns.map(c => ({ name: c.name, display: c.displayName })),
+      readOnlyColumns: readOnlyColumns.map(c => ({ name: c.name, display: c.displayName }))
     })
+    
+    console.log('👁️ HIDDEN COLUMNS (Show=No):', hiddenColumns.map(c => c.displayName).join(', '))
 
     return NextResponse.json({
       success: true,

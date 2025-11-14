@@ -15,7 +15,7 @@ import {
   ColumnPinningState,
 } from '@tanstack/react-table'
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { Check, X, Edit2, XCircle, ChevronLeft, ChevronRight, Filter, Calendar, Download, Database } from 'lucide-react'
+import { Check, X, Edit2, XCircle, ChevronLeft, ChevronRight, Filter, Calendar, Download, Database, Search } from 'lucide-react'
 
 interface ColumnConfig {
   name: string
@@ -74,6 +74,8 @@ export function HuaweiRolloutTable({
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>([])
   const [editingCell, setEditingCell] = useState<EditingState | null>(null)
   const [pendingChanges, setPendingChanges] = useState<Map<string, EditingState>>(new Map())
+  const [changedCells, setChangedCells] = useState<Map<string, { oldValue: any; newValue: any }>>(new Map())
+  const [globalFilter, setGlobalFilter] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({})
@@ -103,23 +105,105 @@ export function HuaweiRolloutTable({
   const filterDropdownRef = useRef<HTMLDivElement>(null)
 
   // Callback functions for editing
-  const handleStartEdit = useCallback((rowId: string, columnId: string, value: any) => {
-    setEditingCell({ rowId, columnId, value, oldValue: value })
-  }, [])
+  const handleCellEdit = useCallback((row: any, columnId: string, currentValue: any) => {
+    const rowId = row[rowIdColumn]?.toString()
+    if (!rowId) return
+    
+    // Convert date display format (DD-MMM-YYYY) to input format (YYYY-MM-DD)
+    let inputValue = currentValue
+    const columnConfig = columnConfigs.find(c => c.name === columnId)
+    
+    if (columnConfig?.type === 'date' && currentValue) {
+      // Parse DD/MM/YYYY or DD-MMM-YYYY to YYYY-MM-DD
+      if (typeof currentValue === 'string') {
+        const parts = currentValue.split(/[\/\-]/)
+        if (parts.length === 3) {
+          const day = parseInt(parts[0], 10)
+          const monthStr = parts[1]
+          let month = parseInt(monthStr, 10)
+          
+          // Check if month is text (like 'Nov')
+          if (isNaN(month)) {
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            month = monthNames.findIndex(m => m === monthStr) + 1
+          }
+          
+          const year = parseInt(parts[2], 10)
+          
+          if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+            // Convert to YYYY-MM-DD format for input type="date"
+            inputValue = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
+          }
+        }
+      }
+    }
+    
+    setEditingCell({ rowId, columnId, value: inputValue, oldValue: currentValue })
+  }, [rowIdColumn, columnConfigs])
 
-  const handleCancelEdit = useCallback(() => {
-    setEditingCell(null)
-  }, [])
-
-  const handleSaveEdit = useCallback(() => {
+  const handleCellSave = useCallback(() => {
     if (!editingCell) return
 
-    const changeKey = `${editingCell.rowId}-${editingCell.columnId}`
+    const { rowId, columnId, value, oldValue } = editingCell
+
+    // Skip if no change
+    if (value === oldValue) {
+      setEditingCell(null)
+      return
+    }
+
+    const changeKey = `${rowId}-${columnId}`
+    const columnConfig = columnConfigs.find(c => c.name === columnId)
+    
+    // Convert date value from YYYY-MM-DD to DD/MM/YYYY for storage
+    let savedValue = value
+    if (columnConfig?.type === 'date' && value) {
+      if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // Convert YYYY-MM-DD to DD/MM/YYYY
+        const [year, month, day] = value.split('-')
+        savedValue = `${day}/${month}/${year}`
+      }
+    }
+    
+    // Update changed cells for visual indicator
+    const newChangedCells = new Map(changedCells)
+    newChangedCells.set(changeKey, { oldValue, newValue: savedValue })
+    setChangedCells(newChangedCells)
+
+    // Update pending changes for batch save with converted date format
     const newChanges = new Map(pendingChanges)
-    newChanges.set(changeKey, editingCell)
+    newChanges.set(changeKey, { ...editingCell, value: savedValue })
     setPendingChanges(newChanges)
+    
     setEditingCell(null)
-  }, [editingCell, pendingChanges])
+  }, [editingCell, pendingChanges, changedCells, columnConfigs])
+
+  const handleCellCancel = useCallback(() => {
+    setEditingCell(null)
+  }, [])
+
+  const handleCancelAll = useCallback(() => {
+    setPendingChanges(new Map())
+    setChangedCells(new Map())
+    setEditingCell(null)
+  }, [])
+
+  // Auto-save on click outside editing cell
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (editingCell) {
+        const target = event.target as HTMLElement
+        const isInsideEditingCell = target.closest('[data-editing-cell]')
+        
+        if (!isInsideEditingCell) {
+          handleCellSave()
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [editingCell, handleCellSave])
 
   // Fetch column configuration
   useEffect(() => {
@@ -163,29 +247,115 @@ export function HuaweiRolloutTable({
   // Create table columns
   const columns = useMemo<ColumnDef<any>[]>(() => {
     if (columnConfigs.length === 0) return []
+    if (data.length === 0) return []
 
-    return columnConfigs
-      .filter(config => config.show)
-      .map((config): ColumnDef<any> => ({
+    // Get all column names from data with multiple normalization strategies
+    const dataColumns = new Map<string, string>() // normalized -> original
+    if (data.length > 0) {
+      // Check first row to get all column names
+      Object.keys(data[0]).forEach(key => {
+        // Store original key
+        dataColumns.set(key, key)
+        
+        // Store normalized versions for matching
+        dataColumns.set(key.toLowerCase(), key)
+        dataColumns.set(key.trim(), key)
+        dataColumns.set(key.replace(/\s+/g, ''), key) // Remove all spaces
+        dataColumns.set(key.replace(/\s+/g, '').toLowerCase(), key)
+      })
+    }
+    
+    console.log('📊 Data columns from sheet:', Array.from(new Set(dataColumns.values())).join(', '))
+
+    // Filter columns based on two conditions:
+    // 1. Column must be marked as show=true in settings
+    // 2. Column must exist in the actual data from Google Sheets
+    const hiddenBySettings: string[] = []
+    const notInData: string[] = []
+    const displayedColumns: string[] = []
+    
+    const filtered = columnConfigs.filter(config => {
+        // Condition 1: Must be allowed to show in settings
+        if (!config.show) {
+          hiddenBySettings.push(config.displayName)
+          return false
+        }
+        
+        // Condition 2: Column must exist in data
+        // Try multiple matching strategies
+        const columnExists = dataColumns.has(config.name) ||
+                            dataColumns.has(config.displayName) || // Try display name (with spaces)
+                            dataColumns.has(config.name.toLowerCase()) ||
+                            dataColumns.has(config.displayName.toLowerCase()) ||
+                            dataColumns.has(config.name.trim()) ||
+                            dataColumns.has(config.displayName.trim()) ||
+                            dataColumns.has(config.name.replace(/\s+/g, '')) ||
+                            dataColumns.has(config.displayName.replace(/\s+/g, ''))
+        
+        if (!columnExists) {
+          notInData.push(`${config.displayName} (looking for: ${config.name})`)
+          return false
+        }
+        
+        displayedColumns.push(config.displayName)
+        return true
+      })
+    
+    console.log('🔍 COLUMN VISIBILITY SUMMARY:', {
+      total: columnConfigs.length,
+      displayed: displayedColumns.length,
+      hiddenBySettings: hiddenBySettings.length,
+      notInData: notInData.length
+    })
+    
+    if (hiddenBySettings.length > 0) {
+      console.log('❌ Hidden by settings (Show=No):', hiddenBySettings.join(', '))
+    }
+    
+    if (notInData.length > 0) {
+      console.log('❌ Not in data:', notInData.join(', '))
+    }
+    
+    console.log('✅ Displayed columns:', displayedColumns.join(', '))
+    
+    return filtered.map((config): ColumnDef<any> => ({
         id: config.name,
         accessorFn: (row) => {
-          // Try exact match first
+          // Try multiple matching strategies to find the column value
           let value = row[config.name]
           
-          // If not found, try case-insensitive match
+          // Try display name (with spaces)
+          if (value === undefined || value === null) {
+            value = row[config.displayName]
+          }
+          
+          // Try case-insensitive match
           if (value === undefined || value === null) {
             const matchingKey = Object.keys(row).find(
-              key => key.toLowerCase() === config.name.toLowerCase()
+              key => key.toLowerCase() === config.name.toLowerCase() ||
+                     key.toLowerCase() === config.displayName.toLowerCase()
             )
             if (matchingKey) {
               value = row[matchingKey]
             }
           }
           
-          // If still not found, try trimmed match
+          // Try without spaces
           if (value === undefined || value === null) {
             const matchingKey = Object.keys(row).find(
-              key => key.trim() === config.name.trim()
+              key => key.replace(/\s+/g, '') === config.name.replace(/\s+/g, '') ||
+                     key.replace(/\s+/g, '') === config.displayName.replace(/\s+/g, '')
+            )
+            if (matchingKey) {
+              value = row[matchingKey]
+            }
+          }
+          
+          // Try trimmed match
+          if (value === undefined || value === null) {
+            const matchingKey = Object.keys(row).find(
+              key => key.trim() === config.name.trim() ||
+                     key.trim() === config.displayName.trim()
             )
             if (matchingKey) {
               value = row[matchingKey]
@@ -251,28 +421,51 @@ export function HuaweiRolloutTable({
         cell: ({ row, getValue }) => {
           let cellValue = getValue() as any
           const rowId = row.original[rowIdColumn]
-          const isEditing = editingCell?.rowId === rowId && editingCell?.columnId === config.name
-          const hasPendingChange = pendingChanges.has(`${rowId}-${config.name}`)
+          const columnId = config.name
+          const isEditing = editingCell?.rowId === rowId && editingCell?.columnId === columnId
+          const changeKey = `${rowId}-${columnId}`
+          const hasChanges = changedCells.has(changeKey)
+          
+          // Use new value if changed, otherwise use original
+          const displayValue = hasChanges ? changedCells.get(changeKey)?.newValue : cellValue
 
           // Fallback: try to get value if getValue() returns empty but data exists
-          if (!cellValue) {
+          if (!cellValue && cellValue !== 0) {
             // Try exact match with config.name
             cellValue = row.original[config.name]
             
-            // If still empty, try case-insensitive match
-            if (!cellValue) {
+            // Try display name (with spaces)
+            if (!cellValue && cellValue !== 0) {
+              cellValue = row.original[config.displayName]
+            }
+            
+            // Try case-insensitive match
+            if (!cellValue && cellValue !== 0) {
               const matchingKey = Object.keys(row.original).find(
-                key => key.toLowerCase() === config.name.toLowerCase()
+                key => key.toLowerCase() === config.name.toLowerCase() ||
+                       key.toLowerCase() === config.displayName.toLowerCase()
               )
               if (matchingKey) {
                 cellValue = row.original[matchingKey]
               }
             }
             
-            // If still empty, try trimmed match
-            if (!cellValue) {
+            // Try without spaces
+            if (!cellValue && cellValue !== 0) {
               const matchingKey = Object.keys(row.original).find(
-                key => key.trim() === config.name.trim()
+                key => key.replace(/\s+/g, '') === config.name.replace(/\s+/g, '') ||
+                       key.replace(/\s+/g, '') === config.displayName.replace(/\s+/g, '')
+              )
+              if (matchingKey) {
+                cellValue = row.original[matchingKey]
+              }
+            }
+            
+            // Try trimmed match
+            if (!cellValue && cellValue !== 0) {
+              const matchingKey = Object.keys(row.original).find(
+                key => key.trim() === config.name.trim() ||
+                       key.trim() === config.displayName.trim()
               )
               if (matchingKey) {
                 cellValue = row.original[matchingKey]
@@ -281,12 +474,12 @@ export function HuaweiRolloutTable({
           }
 
           // Date display with format dd-MMM-yyyy
-          if (config.type === 'date' && cellValue) {
+          if (config.type === 'date' && displayValue) {
             let dateValue: Date | null = null
             
-            if (typeof cellValue === 'string') {
+            if (typeof displayValue === 'string') {
               // Handle DD/MM/YYYY or DD-MM-YYYY format
-              const parts = cellValue.split(/[\/\-]/)
+              const parts = displayValue.split(/[\/\-]/)
               if (parts.length === 3) {
                 const day = parseInt(parts[0], 10)
                 const month = parseInt(parts[1], 10) - 1
@@ -294,7 +487,7 @@ export function HuaweiRolloutTable({
                 dateValue = new Date(year, month, day)
               }
             } else {
-              dateValue = new Date(cellValue)
+              dateValue = new Date(displayValue)
             }
             
             if (dateValue && !isNaN(dateValue.getTime())) {
@@ -302,8 +495,11 @@ export function HuaweiRolloutTable({
               const month = dateValue.toLocaleDateString('en-US', { month: 'short' })
               const year = dateValue.getFullYear()
               return (
-                <div className="text-xs">
-                  {`${day}-${month}-${year}`}
+                <div className="flex items-center gap-1 text-xs">
+                  {hasChanges && <div className="w-1 h-1 bg-orange-500 rounded-full" />}
+                  <span className={hasChanges ? 'text-orange-700 font-medium' : ''}>
+                    {`${day}-${month}-${year}`}
+                  </span>
                 </div>
               )
             }
@@ -311,60 +507,75 @@ export function HuaweiRolloutTable({
 
           // Editable cell
           if (config.editable && !isEditing) {
+            const cellClasses = `group flex items-center justify-between cursor-pointer px-1 py-0.5 rounded transition-colors text-xs ${
+              hasChanges 
+                ? 'bg-orange-50 border border-orange-200 hover:bg-orange-100' 
+                : 'hover:bg-gray-50'
+            }`
+            
             return (
-              <div className="group relative">
-                <div className={`text-xs ${hasPendingChange ? 'font-semibold text-blue-600' : ''}`}>
-                  {cellValue?.toString() || ''}
+              <div 
+                className={cellClasses}
+                onDoubleClick={() => handleCellEdit(row.original, columnId, displayValue)}
+                title={hasChanges ? "Modified - not saved yet. Double-click to edit." : "Double-click to edit"}
+              >
+                <div className="flex-1 min-w-0 flex items-center gap-1">
+                  {hasChanges && <div className="w-1.5 h-1.5 bg-orange-500 rounded-full flex-shrink-0" />}
+                  <span className={hasChanges ? 'text-orange-700 font-medium' : ''}>
+                    {displayValue?.toString() || ''}
+                  </span>
                 </div>
-                <button
-                  onClick={() => handleStartEdit(rowId, config.name, cellValue)}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-100 rounded"
-                >
-                  <Edit2 className="h-3 w-3 text-gray-400" />
-                </button>
+                <Edit2 className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
               </div>
             )
           }
 
           // Editing state
           if (isEditing) {
-            if (config.type === 'textarea') {
-              return (
-                <textarea
-                  autoFocus
-                  value={editingCell.value || ''}
-                  onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                  onBlur={() => handleSaveEdit()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') handleCancelEdit()
-                    if (e.key === 'Enter' && e.ctrlKey) handleSaveEdit()
-                  }}
-                  className="w-full min-h-20 p-1 border border-blue-500 rounded text-xs"
-                  rows={3}
-                />
-              )
-            }
-
             return (
-              <input
-                autoFocus
-                type={config.type === 'date' ? 'date' : 'text'}
-                value={editingCell.value || ''}
-                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                onBlur={() => handleSaveEdit()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveEdit()
-                  if (e.key === 'Escape') handleCancelEdit()
-                }}
-                className="w-full p-1 border border-blue-500 rounded text-xs"
-              />
+              <div className="flex items-center gap-1 px-1 py-0.5" data-editing-cell>
+                {config.type === 'textarea' ? (
+                  <textarea
+                    autoFocus
+                    value={editingCell.value || ''}
+                    onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                    onBlur={() => handleCellSave()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') handleCellCancel()
+                      if (e.key === 'Enter' && e.ctrlKey) handleCellSave()
+                    }}
+                    className="w-full min-h-20 p-1 border-2 border-blue-500 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    rows={3}
+                  />
+                ) : (
+                  <input
+                    autoFocus
+                    type={config.type === 'date' ? 'date' : 'text'}
+                    value={editingCell.value || ''}
+                    onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                    onBlur={() => handleCellSave()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleCellSave()
+                      if (e.key === 'Escape') handleCellCancel()
+                    }}
+                    className="w-full p-1 border-2 border-blue-500 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                )}
+              </div>
             )
           }
 
-          return <div className="text-xs">{cellValue?.toString() || ''}</div>
+          return (
+            <div className="flex items-center gap-1 text-xs">
+              {hasChanges && <div className="w-1 h-1 bg-orange-500 rounded-full" />}
+              <span className={hasChanges ? 'text-orange-700 font-medium' : ''}>
+                {displayValue?.toString() || ''}
+              </span>
+            </div>
+          )
         },
       }))
-  }, [columnConfigs, editingCell, pendingChanges, rowIdColumn, handleSaveEdit, handleCancelEdit, handleStartEdit])
+  }, [columnConfigs, editingCell, pendingChanges, changedCells, rowIdColumn, handleCellEdit, handleCellSave, handleCellCancel, data])
 
   // Filter data by date range
   const filteredData = useMemo(() => {
@@ -416,9 +627,11 @@ export function HuaweiRolloutTable({
       columnVisibility,
       columnSizing,
       columnPinning,
+      globalFilter,
     },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: setGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
     onColumnSizingChange: setColumnSizing,
     onColumnPinningChange: setColumnPinning,
@@ -445,8 +658,50 @@ export function HuaweiRolloutTable({
   // Get unique values for a column
   const getUniqueColumnValues = (columnId: string) => {
     const values = new Set<string>()
+    const config = columnConfigs.find(c => c.name === columnId)
+    
     filteredData.forEach(row => {
-      const value = row[columnId]
+      // Use same matching strategy as accessorFn
+      let value = row[columnId]
+      
+      // Try display name (with spaces)
+      if ((value === null || value === undefined) && config) {
+        value = row[config.displayName]
+      }
+      
+      // Try case-insensitive match
+      if ((value === null || value === undefined) && config) {
+        const matchingKey = Object.keys(row).find(
+          key => key.toLowerCase() === columnId.toLowerCase() ||
+                 key.toLowerCase() === config.displayName.toLowerCase()
+        )
+        if (matchingKey) {
+          value = row[matchingKey]
+        }
+      }
+      
+      // Try without spaces
+      if ((value === null || value === undefined) && config) {
+        const matchingKey = Object.keys(row).find(
+          key => key.replace(/\s+/g, '') === columnId.replace(/\s+/g, '') ||
+                 key.replace(/\s+/g, '') === config.displayName.replace(/\s+/g, '')
+        )
+        if (matchingKey) {
+          value = row[matchingKey]
+        }
+      }
+      
+      // Try trimmed match
+      if ((value === null || value === undefined) && config) {
+        const matchingKey = Object.keys(row).find(
+          key => key.trim() === columnId.trim() ||
+                 key.trim() === config.displayName.trim()
+        )
+        if (matchingKey) {
+          value = row[matchingKey]
+        }
+      }
+      
       if (value !== null && value !== undefined && value !== '') {
         values.add(value.toString())
       }
@@ -687,6 +942,7 @@ export function HuaweiRolloutTable({
       console.log(`✅ Batch save completed: ${changes.length} cells in ${(endTime - startTime).toFixed(0)}ms`)
 
       setPendingChanges(new Map())
+      setChangedCells(new Map())
     } catch (error) {
       console.error('Batch save error:', error)
       setSaveError(error instanceof Error ? error.message : 'Failed to save changes')
@@ -757,28 +1013,51 @@ export function HuaweiRolloutTable({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Date Range Filter */}
+      {/* Search and Date Range Filter */}
       <div className="flex-none p-3 bg-white border-b border-gray-200">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Calendar className="h-4 w-4 text-gray-500" />
-            <span className="text-sm font-medium text-gray-700">Date Range:</span>
-            <input
-              type="date"
-              value={dateFilter.startDate}
-              onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
-              className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            <span className="text-gray-500">to</span>
-            <input
-              type="date"
-              value={dateFilter.endDate}
-              onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
-              className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            <span className="text-xs text-gray-500">
-              ({filteredData.length} of {data.length} rows)
-            </span>
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-1">
+            {/* Global Search */}
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={globalFilter}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+                placeholder="Search all columns..."
+                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              {globalFilter && (
+                <button
+                  onClick={() => setGlobalFilter('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Date Range */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Calendar className="h-4 w-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">Date:</span>
+              <input
+                type="date"
+                value={dateFilter.startDate}
+                onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
+                className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <span className="text-gray-500">to</span>
+              <input
+                type="date"
+                value={dateFilter.endDate}
+                onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
+                className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <span className="text-xs text-gray-500">
+                ({filteredData.length} of {data.length} rows)
+              </span>
+            </div>
           </div>
           
           {/* Export Button */}
@@ -813,7 +1092,7 @@ export function HuaweiRolloutTable({
                   {isSaving ? 'Saving...' : 'Save All'}
                 </button>
                 <button
-                  onClick={() => setPendingChanges(new Map())}
+                  onClick={handleCancelAll}
                   disabled={isSaving}
                   className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 flex items-center gap-1"
                 >

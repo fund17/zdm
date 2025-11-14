@@ -204,7 +204,7 @@ export default function ItcHuaweiPage() {
     <div className="h-full flex flex-col">
       {/* Header Section */}
       <div className="flex-none">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-lg font-bold text-gray-900 flex items-center">
               <Database className="h-5 w-5 mr-2 text-blue-600" />
@@ -215,31 +215,35 @@ export default function ItcHuaweiPage() {
             </p>
           </div>
           
-          <div className="mt-2 sm:mt-0 flex items-center space-x-2">
-            {/* Sheet Selector */}
-            <select
-              value={selectedSheet}
-              onChange={(e) => setSelectedSheet(e.target.value)}
-              disabled={loadingSheetList}
-              className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              <option value="">Select Project...</option>
-              {sheetList.map((sheet) => (
-                <option key={sheet.sheetName} value={sheet.sheetName}>
-                  {sheet.title}
-                </option>
-              ))}
-            </select>
-            
-            <button 
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-          </div>
+          <button 
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+
+        {/* Project Tabs */}
+        <div className="flex items-center gap-1 border-b border-gray-200 mb-3 overflow-x-auto">
+          {loadingSheetList ? (
+            <div className="text-xs text-gray-500 py-2 px-3">Loading projects...</div>
+          ) : (
+            sheetList.map((sheet) => (
+              <button
+                key={sheet.sheetName}
+                onClick={() => setSelectedSheet(sheet.sheetName)}
+                className={`px-4 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  selectedSheet === sheet.sheetName
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                }`}
+              >
+                {sheet.title}
+              </button>
+            ))
+          )}
         </div>
       </div>
 

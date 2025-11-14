@@ -14,7 +14,8 @@ import {
   PieChart,
   Calendar,
   Users,
-  Download
+  Download,
+  X
 } from 'lucide-react'
 
 interface SheetListItem {
@@ -25,25 +26,44 @@ interface SheetListItem {
 type PeriodFilter = 'all' | 'year' | 'sixmonths' | 'month' | 'week'
 
 export default function ItcHuaweiDashboard() {
-  const [data, setData] = useState<any[]>([])
+  const [allData, setAllData] = useState<any[]>([]) // Combined data from all sheets
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sheetList, setSheetList] = useState<SheetListItem[]>([])
-  const [selectedSheet, setSelectedSheet] = useState<string>('')
   const [loadingSheetList, setLoadingSheetList] = useState(true)
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all')
+  const [selectedRegion, setSelectedRegion] = useState<string>('all')
+  const [selectedProject, setSelectedProject] = useState<string>('all')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalData, setModalData] = useState<{ title: string; sites: any[]; allSites: any[] }>({ title: '', sites: [], allSites: [] })
 
-  const fetchData = async (sheetName: string) => {
+  const fetchAllData = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/sheets/itc-huawei?sheetName=${sheetName}`)
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch data')
-      }
+      // Fetch all sheets in parallel
+      const promises = sheetList.map(sheet => 
+        fetch(`/api/sheets/itc-huawei?sheetName=${sheet.sheetName}`)
+          .then(res => res.json())
+          .then(result => ({
+            sheetName: sheet.sheetName,
+            title: sheet.title,
+            data: result.data || []
+          }))
+      )
       
-      const result = await response.json()
-      setData(result.data || [])
+      const results = await Promise.all(promises)
+      
+      // Combine all data with project field
+      const combined = results.flatMap(result => 
+        result.data.map((row: any) => ({
+          ...row,
+          _project: result.title, // Add project name from sheet title
+          _sheetName: result.sheetName
+        }))
+      )
+      
+      setAllData(combined)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -82,37 +102,53 @@ export default function ItcHuaweiDashboard() {
   }, [])
 
   useEffect(() => {
-    if (selectedSheet) {
-      fetchData(selectedSheet)
-    } else if (sheetList.length > 0 && !selectedSheet) {
-      // Auto-select first sheet when list is loaded
-      setSelectedSheet(sheetList[0].sheetName)
+    if (sheetList.length > 0) {
+      fetchAllData()
     }
-  }, [selectedSheet, sheetList])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetList])
 
   // Helper function to parse date with multiple formats
   const parseDate = useCallback((dateStr: string): Date | null => {
     if (!dateStr || dateStr === 'N/A' || dateStr === '#REF!' || dateStr === '-') return null
     
     try {
+      // IMPORTANT: Server returns DD/MM/YYYY format
+      // We must parse day and month correctly (NOT month/day)
+      
+      // Try DD/MM/YYYY format (02/11/2025) - PRIMARY FORMAT FROM SERVER
+      const ddmmyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+      if (ddmmyyyyMatch) {
+        const day = parseInt(ddmmyyyyMatch[1], 10)
+        const month = parseInt(ddmmyyyyMatch[2], 10) - 1 // Month is 0-indexed in JS Date
+        const year = parseInt(ddmmyyyyMatch[3], 10)
+        
+        // Validate date components
+        if (day >= 1 && day <= 31 && month >= 0 && month <= 11 && year >= 1900) {
+          const date = new Date(year, month, day)
+          // Double check: ensure the date components match what we set
+          if (date.getDate() === day && date.getMonth() === month && date.getFullYear() === year) {
+            return date
+          }
+        }
+        return null
+      }
+      
       // Try DD/MM/YY format (13/10/25)
       const ddmmyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/)
       if (ddmmyyMatch) {
         const day = parseInt(ddmmyyMatch[1], 10)
         const month = parseInt(ddmmyyMatch[2], 10) - 1 // Month is 0-indexed
         const year = 2000 + parseInt(ddmmyyMatch[3], 10) // Assume 20xx
-        const date = new Date(year, month, day)
-        if (!isNaN(date.getTime())) return date
-      }
-      
-      // Try DD/MM/YYYY format (02/11/2025)
-      const ddmmyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-      if (ddmmyyyyMatch) {
-        const day = parseInt(ddmmyyyyMatch[1], 10)
-        const month = parseInt(ddmmyyyyMatch[2], 10) - 1
-        const year = parseInt(ddmmyyyyMatch[4], 10)
-        const date = new Date(year, month, day)
-        if (!isNaN(date.getTime())) return date
+        
+        // Validate date components
+        if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+          const date = new Date(year, month, day)
+          if (date.getDate() === day && date.getMonth() === month && date.getFullYear() === year) {
+            return date
+          }
+        }
+        return null
       }
       
       // Try DD-MMM-YYYY format (12-Agu-2025)
@@ -139,16 +175,15 @@ export default function ItcHuaweiDashboard() {
         }
         
         const month = monthMap[monthStr]
-        if (month !== undefined) {
+        if (month !== undefined && day >= 1 && day <= 31) {
           const date = new Date(year, month, day)
-          if (!isNaN(date.getTime())) return date
+          if (date.getDate() === day && date.getMonth() === month && date.getFullYear() === year) {
+            return date
+          }
         }
       }
       
-      // Try standard date parsing
-      const date = new Date(dateStr)
-      if (!isNaN(date.getTime())) return date
-      
+      // DO NOT use standard date parsing as it may interpret MM/DD/YYYY incorrectly
       return null
     } catch (e) {
       return null
@@ -192,7 +227,33 @@ export default function ItcHuaweiDashboard() {
     return rowDate >= filterDate && rowDate <= now
   }, [periodFilter, parseDate])
 
-  const filteredData = data
+  // Apply filters to data
+  const filteredData = useMemo(() => {
+    let filtered = allData
+
+    // Filter by region
+    if (selectedRegion !== 'all') {
+      filtered = filtered.filter(row => row['Region'] === selectedRegion)
+    }
+
+    // Filter by project
+    if (selectedProject !== 'all') {
+      filtered = filtered.filter(row => row['_project'] === selectedProject)
+    }
+
+    return filtered
+  }, [allData, selectedRegion, selectedProject])
+
+  // Get unique regions and projects for filter options
+  const regions = useMemo(() => {
+    const uniqueRegions = Array.from(new Set(allData.map(row => row['Region']).filter(Boolean)))
+    return uniqueRegions.sort()
+  }, [allData])
+
+  const projects = useMemo(() => {
+    const uniqueProjects = Array.from(new Set(allData.map(row => row['_project']).filter(Boolean)))
+    return uniqueProjects.sort()
+  }, [allData])
 
   // Calculate metrics from data
   const metrics = useMemo(() => {
@@ -460,217 +521,400 @@ export default function ItcHuaweiDashboard() {
     { value: 'week' as PeriodFilter, label: 'This Week' },
   ]
 
-  // Function to download site list based on field
-  const downloadSiteList = (fieldName: string, label: string) => {
+  // Function to open site list modal
+  const openSiteListModal = (fieldName: string, label: string) => {
     const filteredRows = filteredData.filter(row => {
       const value = row[fieldName]
       return getFilteredValue(value)
     })
 
-    if (filteredRows.length === 0) {
-      alert('No data to download')
-      return
-    }
-
-    // Prepare data for Excel
-    const excelData = filteredRows.map(row => ({
-      'DUID': row['DUID'] || row['DU ID'] || '',
-      'DU Name': row['DU Name'] || row['DUName'] || '',
-      'Site Name': row['Site Name'] || row['SiteName'] || '',
-      'Region': row['Region'] || '',
-      'Site Status': row['Site Status'] || row['SiteStatus'] || '',
-      [fieldName]: row[fieldName] || ''
+    // Map all sites with correct column names (DUID, DU Name)
+    const allSites = filteredRows.map(row => ({
+      duid: row['DUID'] || row['DU ID'] || '-',
+      duName: row['DU Name'] || row['DUName'] || '-',
+      date: row[fieldName] || '-',
+      dateObj: parseDate(row[fieldName])
     }))
 
-    // Create workbook and worksheet
+    // Sort by date (newest first) and take only 15 most recent for display
+    const sortedSites = [...allSites]
+      .sort((a, b) => {
+        // Sort by date descending (newest first)
+        if (!a.dateObj) return 1
+        if (!b.dateObj) return -1
+        return b.dateObj.getTime() - a.dateObj.getTime()
+      })
+
+    const displaySites = sortedSites.slice(0, 15).map(({ dateObj, ...site }) => site)
+    const allSitesForDownload = sortedSites.map(({ dateObj, ...site }) => site)
+
+    setModalData({ title: label, sites: displaySites, allSites: allSitesForDownload })
+    setModalOpen(true)
+  }
+
+  // Function to download from modal
+  const downloadFromModal = () => {
+    if (modalData.allSites.length === 0) return
+
+    const excelData = modalData.allSites.map(site => ({
+      'DUID': site.duid,
+      'DU Name': site.duName,
+      'Date': site.date
+    }))
+
     const ws = XLSX.utils.json_to_sheet(excelData)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Site List')
 
-    // Auto-size columns
     const colWidths = [
-      { wch: 15 }, // DUID
-      { wch: 25 }, // DU Name
-      { wch: 30 }, // Site Name
-      { wch: 15 }, // Region
-      { wch: 15 }, // Site Status
-      { wch: 15 }  // Field value
+      { wch: 20 },
+      { wch: 40 },
+      { wch: 15 }
     ]
     ws['!cols'] = colWidths
 
-    // Download file
-    XLSX.writeFile(wb, `${label}_SiteList_${selectedSheet}_${periodFilter}.xlsx`)
+    const projectName = selectedProject !== 'all' ? selectedProject.replace(/\s+/g, '_') : 'AllProjects'
+    const regionName = selectedRegion !== 'all' ? selectedRegion.replace(/\s+/g, '_') : 'AllRegions'
+    XLSX.writeFile(wb, `${modalData.title}_SiteList_${projectName}_${regionName}_${periodFilter}.xlsx`)
   }
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
-      {/* Header */}
-      <div className="flex-none mb-4">
-        <div className="flex flex-col space-y-4">
-          <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-slate-200/60 p-5">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-md">
+    <div className="h-screen overflow-y-auto bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
+      {/* Header - Sticky */}
+      <div className="sticky top-0 z-10 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-2">
+        <div className="flex flex-col space-y-3">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200/60 p-4 md:p-5">
+            {/* Header Title */}
+            <div className="mb-4">
+              <h1 className="text-lg md:text-xl font-semibold text-slate-900 flex items-center gap-2.5">
+                <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-sm">
                   <BarChart3 className="h-5 w-5 text-white" />
                 </div>
-                ITC HUAWEI Dashboard
+                <span className="hidden sm:inline">ITC HUAWEI Dashboard</span>
+                <span className="sm:hidden">ITC HUAWEI</span>
               </h1>
-              <p className="mt-1.5 text-sm text-slate-500">
+              <p className="mt-1 text-xs md:text-sm text-slate-600">
                 Project rollout overview and analytics
               </p>
             </div>
 
-            {/* Period Filter Buttons */}
-            <div className="flex items-center gap-2">
-              {periodOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setPeriodFilter(option.value)}
-                  className={`
-                    px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200
-                    ${periodFilter === option.value
-                      ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-200/50'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-700'
-                    }
-                  `}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          
-          {/* Smart Analytics Cards - Modern Soft Design */}
-          {analytics && metrics && (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Project Health Score */}
-              <div className="group bg-white rounded-xl border border-slate-200/60 p-4 shadow-sm hover:shadow-md transition-all duration-300">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
-                      <TrendingUp className="h-3 w-3 text-white" />
-                    </div>
-                    Health Score
-                  </h3>
-                </div>
-                <div className="text-center mb-3">
-                  <div className="text-3xl font-black bg-gradient-to-br from-blue-600 to-indigo-700 bg-clip-text text-transparent">
-                    {(() => {
-                      const avgProgress = (
-                        parseFloat(metrics.surveyProgress) +
-                        parseFloat(metrics.mosProgress) +
-                        parseFloat(metrics.dismantleProgress)
-                      ) / 3
-                      return avgProgress.toFixed(0)
-                    })()}
-                  </div>
-                </div>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between items-center bg-slate-50 rounded-lg px-2 py-1">
-                    <span className="text-slate-600">Total Sites</span>
-                    <span className="font-bold text-slate-800">{metrics.totalSites}</span>
-                  </div>
-                  <div className="flex justify-between items-center bg-emerald-50 rounded-lg px-2 py-1">
-                    <span className="text-emerald-600">Completed</span>
-                    <span className="font-bold text-emerald-700">{metrics.atpApproved}</span>
-                  </div>
-                  <div className="flex justify-between items-center bg-rose-50 rounded-lg px-2 py-1">
-                    <span className="text-rose-600 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      Stuck Sites
-                    </span>
-                    <span className="font-bold text-rose-700">{analytics.stuckSites}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Top Performers */}
-              <div className="group bg-white rounded-xl border border-slate-200/60 p-4 shadow-sm hover:shadow-md transition-all duration-300">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg">
-                      <CheckCircle2 className="h-3 w-3 text-white" />
-                    </div>
-                    Top 3 Regions
-                  </h3>
-                </div>
-                <div className="space-y-1.5">
-                  {analytics.topRegions.map((region, idx) => (
-                    <div key={region.region} className="flex justify-between items-center text-xs bg-emerald-50/50 hover:bg-emerald-50 rounded-lg p-2 transition-colors">
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className={`text-xs font-bold text-white rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 ${
-                          idx === 0 ? 'bg-gradient-to-br from-yellow-400 to-amber-500' :
-                          idx === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-400' :
-                          'bg-gradient-to-br from-amber-600 to-orange-700'
-                        }`}>
-                          {idx + 1}
-                        </span>
-                        <span className="text-slate-700 font-semibold truncate">{region.region}</span>
-                      </div>
-                      <span className="text-sm font-black text-emerald-600 ml-2">{region.performanceScore.toFixed(0)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Needs Attention */}
-              <div className="group bg-white rounded-xl border border-slate-200/60 p-4 shadow-sm hover:shadow-md transition-all duration-300">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <div className="p-1.5 bg-gradient-to-br from-rose-500 to-red-600 rounded-lg">
-                      <XCircle className="h-3 w-3 text-white" />
-                    </div>
-                    Needs Attention
-                  </h3>
-                </div>
-                <div className="space-y-1.5">
-                  {analytics.bottomRegions.map((region, idx) => (
-                    <div key={region.region} className="flex justify-between items-center text-xs bg-rose-50/50 hover:bg-rose-50 rounded-lg p-2 transition-colors">
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className="text-xs font-bold text-white bg-gradient-to-br from-rose-500 to-red-600 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
-                          {idx + 1}
-                        </span>
-                        <span className="text-slate-700 font-semibold truncate">{region.region}</span>
-                      </div>
-                      <span className="text-sm font-black text-rose-600 ml-2">{region.performanceScore.toFixed(0)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {/* Tabs */}
-          {!loadingSheetList && sheetList.length > 0 && (
-            <div className="border-b border-slate-200/60 bg-white rounded-t-xl mt-4">
-              <nav className="-mb-px flex space-x-1 overflow-x-auto px-4">
-                {sheetList.map((sheet) => (
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
+              {/* Period Filter Buttons */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 w-full sm:w-auto">
+                {periodOptions.map((option) => (
                   <button
-                    key={sheet.sheetName}
-                    onClick={() => setSelectedSheet(sheet.sheetName)}
+                    key={option.value}
+                    onClick={() => setPeriodFilter(option.value)}
                     className={`
-                      whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm transition-all duration-200
-                      ${selectedSheet === sheet.sheetName
-                        ? 'border-blue-600 text-blue-600'
-                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                      px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200
+                      ${periodFilter === option.value
+                        ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }
                     `}
                   >
-                    {sheet.title}
+                    {option.label}
                   </button>
                 ))}
-              </nav>
+              </div>
+
+              {/* Divider */}
+              <div className="h-8 w-px bg-slate-300"></div>
+
+              {/* Region Filter */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <label className="text-xs font-medium text-slate-700 whitespace-nowrap">Region:</label>
+                <select
+                  value={selectedRegion}
+                  onChange={(e) => setSelectedRegion(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Regions</option>
+                  {regions.map((region) => (
+                    <option key={region} value={region}>
+                      {region}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Project Filter */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <label className="text-xs font-medium text-slate-700 whitespace-nowrap">Project:</label>
+                <select
+                  value={selectedProject}
+                  onChange={(e) => setSelectedProject(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Projects</option>
+                  {projects.map((project) => (
+                    <option key={project} value={project}>
+                      {project}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* Content */}
+      {/* Main Content - Scrollable */}
+      <div className="container mx-auto px-3 sm:px-4 pb-8">
+        {/* Professional Revenue & Performance Analytics */}
+        {analytics && metrics && (
+          <div className="space-y-4 mb-6">
+              {/* Revenue Milestone Cards - Compact */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {/* ATP Approved - Implementation Revenue */}
+                <div className="bg-gradient-to-br from-blue-50 via-white to-blue-50/30 rounded-xl border border-blue-200 p-4 shadow-sm hover:shadow-md transition-all duration-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
+                        <CheckCircle2 className="h-4 w-4 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-900">ATP Approved</h3>
+                        <p className="text-[10px] text-slate-500 font-medium">Implementation Invoice</p>
+                      </div>
+                    </div>
+                    <div className="px-2 py-1 bg-blue-600 text-white rounded text-[10px] font-semibold">BILLABLE</div>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl sm:text-3xl font-bold text-blue-600">{metrics.atpApproved}</span>
+                      <span className="text-base sm:text-lg font-semibold text-slate-400">/ {metrics.atpSubmit}</span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all duration-500"
+                          style={{ width: `${metrics.atpSubmit > 0 ? (metrics.atpApproved / metrics.atpSubmit) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold text-blue-600 min-w-[2.5rem] text-right">
+                        {metrics.atpSubmit > 0 ? ((metrics.atpApproved / metrics.atpSubmit) * 100).toFixed(1) : '0'}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-white rounded-lg p-2 border border-slate-100">
+                      <div className="text-[10px] text-slate-500 font-medium">MOS</div>
+                      <div className="text-base font-bold text-slate-900">{metrics.mosCompleted}</div>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
+                      <div className="text-[10px] text-blue-600 font-medium">Submit</div>
+                      <div className="text-base font-bold text-blue-700">{metrics.atpSubmit}</div>
+                    </div>
+                    <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
+                      <div className="text-[10px] text-emerald-600 font-medium">Rate</div>
+                      <div className="text-base font-bold text-emerald-700">
+                        {metrics.atpSubmit > 0 ? ((metrics.atpApproved / metrics.atpSubmit) * 100).toFixed(0) : '0'}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Inbound - Asset Return Revenue */}
+                <div className="bg-gradient-to-br from-purple-50 via-white to-purple-50/30 rounded-xl border border-purple-200 p-4 shadow-sm hover:shadow-md transition-all duration-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg">
+                        <Database className="h-4 w-4 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-900">Inbound</h3>
+                        <p className="text-[10px] text-slate-500 font-medium">Asset Return Invoice</p>
+                      </div>
+                    </div>
+                    <div className="px-2 py-1 bg-purple-600 text-white rounded text-[10px] font-semibold">BILLABLE</div>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl sm:text-3xl font-bold text-purple-600">{metrics.inbound}</span>
+                      <span className="text-base sm:text-lg font-semibold text-slate-400">/ {metrics.dismantle}</span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500"
+                          style={{ width: `${metrics.dismantle > 0 ? (metrics.inbound / metrics.dismantle) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold text-purple-600 min-w-[2.5rem] text-right">
+                        {metrics.dismantle > 0 ? ((metrics.inbound / metrics.dismantle) * 100).toFixed(1) : '0'}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-white rounded-lg p-2 border border-slate-100">
+                      <div className="text-[10px] text-slate-500 font-medium">Dismantle</div>
+                      <div className="text-base font-bold text-slate-900">{metrics.dismantle}</div>
+                    </div>
+                    <div className="bg-amber-50 rounded-lg p-2 border border-amber-100">
+                      <div className="text-[10px] text-amber-600 font-medium">BA Done</div>
+                      <div className="text-base font-bold text-amber-700">{metrics.baDismantle}</div>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-2 border border-purple-100">
+                      <div className="text-[10px] text-purple-600 font-medium">Rate</div>
+                      <div className="text-base font-bold text-purple-700">
+                        {metrics.baDismantle > 0 ? ((metrics.inbound / metrics.baDismantle) * 100).toFixed(0) : '0'}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* TSSR Closed - Survey Revenue */}
+                <div className="bg-gradient-to-br from-emerald-50 via-white to-emerald-50/30 rounded-xl border border-emerald-200 p-4 shadow-sm hover:shadow-md transition-all duration-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg">
+                        <CheckCircle2 className="h-4 w-4 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-900">TSSR Closed</h3>
+                        <p className="text-[10px] text-slate-500 font-medium">Survey Invoice</p>
+                      </div>
+                    </div>
+                    <div className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-semibold">BILLABLE</div>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl sm:text-3xl font-bold text-emerald-600">{metrics.tssrClosed}</span>
+                      <span className="text-base sm:text-lg font-semibold text-slate-400">/ {metrics.surveyCompleted}</span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full transition-all duration-500"
+                          style={{ width: `${metrics.surveyCompleted > 0 ? (metrics.tssrClosed / metrics.surveyCompleted) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold text-emerald-600 min-w-[2.5rem] text-right">
+                        {metrics.surveyCompleted > 0 ? ((metrics.tssrClosed / metrics.surveyCompleted) * 100).toFixed(1) : '0'}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-white rounded-lg p-2 border border-slate-100">
+                      <div className="text-[10px] text-slate-500 font-medium">Survey</div>
+                      <div className="text-base font-bold text-slate-900">{metrics.surveyCompleted}</div>
+                    </div>
+                    <div className="bg-rose-50 rounded-lg p-2 border border-rose-100">
+                      <div className="text-[10px] text-rose-600 font-medium">Pending</div>
+                      <div className="text-base font-bold text-rose-700">{metrics.surveyCompleted - metrics.tssrClosed}</div>
+                    </div>
+                    <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
+                      <div className="text-[10px] text-emerald-600 font-medium">Rate</div>
+                      <div className="text-base font-bold text-emerald-700">
+                        {metrics.surveyCompleted > 0 ? ((metrics.tssrClosed / metrics.surveyCompleted) * 100).toFixed(0) : '0'}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Predictive Analytics Panel */}
+              <div className="bg-gradient-to-br from-slate-50 via-white to-slate-50 rounded-xl border border-slate-200 p-4 md:p-5 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2.5 bg-gradient-to-br from-slate-700 to-slate-800 rounded-lg shadow-sm">
+                      <BarChart3 className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">Project Performance & Forecast</h3>
+                      <p className="text-xs text-slate-600 mt-0.5 font-medium">Real-time analytics with predictive insights</p>
+                    </div>
+                  </div>
+                  <div className="px-3 py-1.5 bg-slate-800 text-white rounded-lg shadow-sm">
+                    <span className="text-xs font-semibold">LIVE</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                  {/* Current Velocity */}
+                  <div className="bg-white rounded-xl p-4 border border-blue-200 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex items-center gap-2 mb-3">
+                      <TrendingUp className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-semibold text-slate-900">Current Velocity</span>
+                    </div>
+                    <div className="text-2xl sm:text-3xl font-bold text-blue-600 mb-1">{analytics.velocity}</div>
+                    <div className="text-xs text-slate-600 font-medium">sites/day completion rate</div>
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600 font-medium">Remaining</span>
+                        <span className="font-semibold text-slate-900">{metrics.totalSites - metrics.atpApproved} sites</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Completion Forecast */}
+                  <div className="bg-white rounded-xl p-4 border border-emerald-200 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Calendar className="h-4 w-4 text-emerald-600" />
+                      <span className="text-sm font-semibold text-slate-900">Est. Completion</span>
+                    </div>
+                    <div className="text-xl font-bold text-emerald-600 mb-1 leading-tight">{analytics.estimatedCompletion}</div>
+                    <div className="text-xs text-slate-600 font-medium">based on current pace</div>
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600 font-medium">Days to Go</span>
+                        <span className="font-semibold text-slate-900">{analytics.daysToComplete < 999 ? analytics.daysToComplete : 'N/A'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Risk Alert */}
+                  <div className="bg-white rounded-xl p-4 border border-amber-200 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertCircle className="h-4 w-4 text-amber-600" />
+                      <span className="text-sm font-semibold text-slate-900">Stuck Sites</span>
+                    </div>
+                    <div className="text-2xl sm:text-3xl font-bold text-amber-600 mb-1">{analytics.stuckSites}</div>
+                    <div className="text-xs text-slate-600 font-medium">&gt;30 days no activity</div>
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600 font-medium">Risk Level</span>
+                        <span className={`font-semibold ${analytics.stuckSites / metrics.totalSites > 0.15 ? 'text-rose-600' : analytics.stuckSites / metrics.totalSites > 0.05 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {analytics.stuckSites / metrics.totalSites > 0.15 ? 'HIGH' : analytics.stuckSites / metrics.totalSites > 0.05 ? 'MEDIUM' : 'LOW'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottleneck Detection */}
+                  <div className="bg-white rounded-xl p-4 border border-rose-200 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex items-center gap-2 mb-3">
+                      <XCircle className="h-4 w-4 text-rose-600" />
+                      <span className="text-sm font-semibold text-slate-900">Bottleneck</span>
+                    </div>
+                    <div className="text-lg font-bold text-rose-600 mb-1 leading-tight">{analytics.bottleneck.name}</div>
+                    <div className="text-xs text-slate-600 font-medium">slowest phase</div>
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600 font-medium">Completion</span>
+                        <span className="font-semibold text-rose-600">{analytics.bottleneck.progress.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+        {/* Content */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center bg-white rounded-2xl shadow-sm border border-slate-200/60">
           <div className="text-center">
             <LoadingSpinner />
-            <p className="mt-4 text-sm text-slate-600">Loading dashboard data...</p>
+            <p className="mt-4 text-sm text-slate-600 font-medium">Loading dashboard data...</p>
           </div>
         </div>
       ) : error ? (
@@ -679,11 +923,11 @@ export default function ItcHuaweiDashboard() {
             <div className="w-16 h-16 mx-auto mb-4 bg-rose-50 rounded-2xl flex items-center justify-center">
               <XCircle className="h-8 w-8 text-rose-500" />
             </div>
-            <h3 className="text-lg font-medium text-slate-900 mb-2">Error Loading Data</h3>
-            <p className="text-sm text-slate-500 mb-4">{error}</p>
+            <h3 className="text-base font-semibold text-slate-900 mb-2">Error Loading Data</h3>
+            <p className="text-sm text-slate-600 mb-4 font-medium">{error}</p>
             <button
-              onClick={() => selectedSheet && fetchData(selectedSheet)}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+              onClick={() => fetchAllData()}
+              className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
             >
               Try Again
             </button>
@@ -692,29 +936,32 @@ export default function ItcHuaweiDashboard() {
       ) : metrics ? (
         <div className="flex-1 overflow-auto">
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 md:gap-4 mb-6">
             {/* Total Sites */}
-            <div className="group bg-white rounded-xl border border-slate-200/60 p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
+            <div className="group bg-white rounded-xl border border-slate-200/60 p-3 md:p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Total Sites</p>
-                  <p className="text-3xl font-black bg-gradient-to-br from-blue-600 to-indigo-700 bg-clip-text text-transparent mt-1">{metrics.totalSites}</p>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Total Sites</p>
+                  <p className="text-2xl font-bold bg-gradient-to-br from-blue-600 to-indigo-700 bg-clip-text text-transparent mt-1">{metrics.totalSites}</p>
                 </div>
-                <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-                  <Database className="h-5 w-5 text-white" />
+                <div className="w-10 h-10 sm:w-11 sm:h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <Database className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                 </div>
               </div>
             </div>
 
             {/* Survey */}
-            <div className="group bg-white rounded-xl border border-slate-200/60 p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 relative">
+            <div 
+              onClick={() => openSiteListModal('Survey', 'Survey')}
+              className="group bg-white rounded-xl border border-slate-200/60 p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Survey</p>
-                  <p className="text-3xl font-black text-emerald-600 mt-1">{metrics.surveyCompleted}</p>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Survey</p>
+                  <p className="text-2xl font-bold text-emerald-600 mt-1">{metrics.surveyCompleted}</p>
                   <div className="flex items-center gap-1 mt-1">
                     <div className="px-2 py-0.5 bg-emerald-50 rounded-full">
-                      <p className="text-xs font-bold text-emerald-700">{metrics.surveyProgress}%</p>
+                      <p className="text-xs font-semibold text-emerald-700">{metrics.surveyProgress}%</p>
                     </div>
                   </div>
                 </div>
@@ -722,24 +969,20 @@ export default function ItcHuaweiDashboard() {
                   <CheckCircle2 className="h-5 w-5 text-white" />
                 </div>
               </div>
-              <button
-                onClick={() => downloadSiteList('Survey', 'Survey')}
-                className="absolute bottom-2 right-2 p-1.5 bg-emerald-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-emerald-700 hover:scale-110 shadow-sm"
-                title="Download Site List"
-              >
-                <Download className="h-3.5 w-3.5" />
-              </button>
             </div>
 
             {/* MOS */}
-            <div className="group bg-white rounded-xl border border-slate-200/60 p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 relative">
+            <div 
+              onClick={() => openSiteListModal('MOS', 'MOS')}
+              className="group bg-white rounded-xl border border-slate-200/60 p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">MOS</p>
-                  <p className="text-3xl font-black text-blue-600 mt-1">{metrics.mosCompleted}</p>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">MOS</p>
+                  <p className="text-2xl font-bold text-blue-600 mt-1">{metrics.mosCompleted}</p>
                   <div className="flex items-center gap-1 mt-1">
                     <div className="px-2 py-0.5 bg-blue-50 rounded-full">
-                      <p className="text-xs font-bold text-blue-700">{metrics.mosProgress}%</p>
+                      <p className="text-xs font-semibold text-blue-700">{metrics.mosProgress}%</p>
                     </div>
                   </div>
                 </div>
@@ -747,105 +990,82 @@ export default function ItcHuaweiDashboard() {
                   <CheckCircle2 className="h-5 w-5 text-white" />
                 </div>
               </div>
-              <button
-                onClick={() => downloadSiteList('MOS', 'MOS')}
-                className="absolute bottom-2 right-2 p-1.5 bg-blue-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-blue-700 hover:scale-110 shadow-sm"
-                title="Download Site List"
-              >
-                <Download className="h-3.5 w-3.5" />
-              </button>
             </div>
 
             {/* Install Done */}
-            <div className="bg-white rounded-xl border border-slate-200/60 p-4 relative group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
+            <div 
+              onClick={() => openSiteListModal('Install Done', 'Install Done')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Install Done</p>
-                  <p className="text-3xl font-black text-amber-600 mt-1">{metrics.installCompleted}</p>
-                  <p className="text-xs text-slate-500 mt-1">{metrics.installProgress}% of MOS</p>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Install Done</p>
+                  <p className="text-2xl font-bold text-amber-600 mt-1">{metrics.installCompleted}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.installProgress}% of MOS</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <Clock className="h-5 w-5 text-white" />
                 </div>
               </div>
-              <button
-                onClick={() => downloadSiteList('Install Done', 'InstallDone')}
-                className="absolute bottom-2 right-2 p-1.5 bg-amber-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-amber-700 hover:scale-110 shadow-sm"
-                title="Download Site List"
-              >
-                <Download className="h-3.5 w-3.5" />
-              </button>
             </div>
 
             {/* Integrated */}
-            <div className="bg-white rounded-xl border border-slate-200/60 p-4 relative group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
+            <div 
+              onClick={() => openSiteListModal('Integrated', 'Integrated')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Integrated</p>
-                  <p className="text-3xl font-black text-purple-600 mt-1">{metrics.integratedCompleted}</p>
-                  <p className="text-xs text-slate-500 mt-1">{metrics.integratedProgress}% of Install</p>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Integrated</p>
+                  <p className="text-2xl font-bold text-purple-600 mt-1">{metrics.integratedCompleted}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.integratedProgress}% of Install</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-purple-500 to-violet-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <TrendingUp className="h-5 w-5 text-white" />
                 </div>
               </div>
-              <button
-                onClick={() => downloadSiteList('Integrated', 'Integrated')}
-                className="absolute bottom-2 right-2 p-1.5 bg-purple-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-purple-700 hover:scale-110 shadow-sm"
-                title="Download Site List"
-              >
-                <Download className="h-3.5 w-3.5" />
-              </button>
             </div>
 
             {/* ATP Approved */}
-            <div className="bg-white rounded-xl border border-slate-200/60 p-4 relative group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
+            <div 
+              onClick={() => openSiteListModal('ATP Approved', 'ATP Approved')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">ATP Approved</p>
-                  <p className="text-3xl font-black text-indigo-600 mt-1">{metrics.atpApproved}</p>
-                  <p className="text-xs text-slate-500 mt-1">{metrics.atpApprovedProgress}% of Submit</p>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">ATP Approved</p>
+                  <p className="text-2xl font-bold text-indigo-600 mt-1">{metrics.atpApproved}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.atpApprovedProgress}% of Submit</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <CheckCircle2 className="h-5 w-5 text-white" />
                 </div>
               </div>
-              <button
-                onClick={() => downloadSiteList('ATP Approved', 'ATPApproved')}
-                className="absolute bottom-2 right-2 p-1.5 bg-indigo-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-indigo-700 hover:scale-110 shadow-sm"
-                title="Download Site List"
-              >
-                <Download className="h-3.5 w-3.5" />
-              </button>
             </div>
 
             {/* Dismantle */}
-            <div className="bg-white rounded-xl border border-slate-200/60 p-4 relative group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
+            <div 
+              onClick={() => openSiteListModal('Dismantle', 'Dismantle')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Dismantle</p>
-                  <p className="text-3xl font-black text-rose-600 mt-1">{metrics.dismantle}</p>
-                  <p className="text-xs text-slate-500 mt-1">{metrics.dismantleProgress}% of total</p>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Dismantle</p>
+                  <p className="text-2xl font-bold text-rose-600 mt-1">{metrics.dismantle}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.dismantleProgress}% of total</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-rose-500 to-red-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <AlertCircle className="h-5 w-5 text-white" />
                 </div>
               </div>
-              <button
-                onClick={() => downloadSiteList('Dismantle', 'Dismantle')}
-                className="absolute bottom-2 right-2 p-1.5 bg-rose-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-rose-700 hover:scale-110 shadow-sm"
-                title="Download Site List"
-              >
-                <Download className="h-3.5 w-3.5" />
-              </button>
             </div>
           </div>
 
           {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6">
             {/* Survey Progress */}
-            <div className="bg-white rounded-xl border border-slate-200/60 p-5 shadow-sm">
-              <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <div className="bg-white rounded-xl border border-slate-200/60 p-4 md:p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg">
                   <CheckCircle2 className="h-4 w-4 text-white" />
                 </div>
@@ -861,8 +1081,8 @@ export default function ItcHuaweiDashboard() {
                     return (
                       <div key={stage.label} className="rounded-xl p-4 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200/50">
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-700 text-sm">{stage.label}</span>
-                          <span className="font-black text-2xl text-emerald-600">{stage.value}</span>
+                          <span className="font-medium text-slate-700 text-sm">{stage.label}</span>
+                          <span className="font-bold text-2xl text-emerald-600">{stage.value}</span>
                         </div>
                       </div>
                     )
@@ -898,7 +1118,7 @@ export default function ItcHuaweiDashboard() {
 
             {/* Rollout Progress */}
             <div className="bg-white rounded-xl border border-slate-200/60 p-5 shadow-sm">
-              <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
                   <TrendingUp className="h-4 w-4 text-white" />
                 </div>
@@ -917,8 +1137,8 @@ export default function ItcHuaweiDashboard() {
                     return (
                       <div key={stage.label} className="rounded-xl p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/50">
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-700 text-sm">{stage.label}</span>
-                          <span className="font-black text-2xl text-blue-600">{stage.value}</span>
+                          <span className="font-medium text-slate-700 text-sm">{stage.label}</span>
+                          <span className="font-bold text-2xl text-blue-600">{stage.value}</span>
                         </div>
                       </div>
                     )
@@ -954,7 +1174,7 @@ export default function ItcHuaweiDashboard() {
 
             {/* Dismantle Progress */}
             <div className="bg-white rounded-xl border border-slate-200/60 p-5 shadow-sm">
-              <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <div className="p-1.5 bg-gradient-to-br from-rose-500 to-red-600 rounded-lg">
                   <AlertCircle className="h-4 w-4 text-white" />
                 </div>
@@ -971,8 +1191,8 @@ export default function ItcHuaweiDashboard() {
                     return (
                       <div key={stage.label} className="rounded-xl p-4 bg-gradient-to-r from-rose-50 to-red-50 border border-rose-200/50">
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-700 text-sm">{stage.label}</span>
-                          <span className="font-black text-2xl text-rose-600">{stage.value}</span>
+                          <span className="font-medium text-slate-700 text-sm">{stage.label}</span>
+                          <span className="font-bold text-2xl text-rose-600">{stage.value}</span>
                         </div>
                       </div>
                     )
@@ -1065,8 +1285,8 @@ export default function ItcHuaweiDashboard() {
                   return (
                     <div key={stage.label}>
                       <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className="font-semibold text-slate-700">{stage.label}</span>
-                        <span className="text-slate-600">{stage.value} / {stage.total} ({percentage}%)</span>
+                        <span className="font-medium text-slate-900">{stage.label}</span>
+                        <span className="text-slate-700 font-medium">{stage.value} / {stage.total} ({percentage}%)</span>
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-2">
                         <div
@@ -1080,101 +1300,77 @@ export default function ItcHuaweiDashboard() {
               </div>
             </div>
 
-            {/* Region Distribution */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <BarChart3 className="h-5 w-5 mr-2 text-indigo-600" />
-                Region Distribution
-              </h3>
-              <div className="space-y-3 max-h-64 overflow-y-auto">
-                {Object.entries(metrics.regionCounts)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([region, count]) => {
-                    const percentage = ((count / metrics.totalSites) * 100).toFixed(1)
-                    return (
-                      <div key={region}>
-                        <div className="flex items-center justify-between text-sm mb-1">
-                          <span className="font-medium text-gray-700 truncate">{region}</span>
-                          <span className="text-gray-600 ml-2">{count}</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-indigo-600 h-2 rounded-full transition-all"
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-              </div>
-            </div>
-
-            {/* Region Performance Heatmap */}
-            {analytics && (
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <PieChart className="h-5 w-5 mr-2 text-purple-600" />
-                  Region Performance Heatmap
-                </h3>
-                <p className="text-xs text-gray-600 mb-4">
-                  Weighted score: 70% completion rate + 30% site volume
-                </p>
-                <div className="space-y-2">
-                  {analytics.topRegions.concat(analytics.bottomRegions)
-                    .sort((a, b) => b.performanceScore - a.performanceScore)
-                    .map((region) => {
-                      const intensity = Math.min(Math.max(region.performanceScore, 0), 100)
-                      const bgColor = intensity >= 70 
-                        ? `rgba(34, 197, 94, ${intensity / 100})` 
-                        : intensity >= 40 
-                        ? `rgba(234, 179, 8, ${intensity / 100})` 
-                        : `rgba(239, 68, 68, ${0.3 + (intensity / 200)})`
-                      
-                      const textColor = intensity >= 50 ? 'text-white' : 'text-gray-900'
-
-                      return (
-                        <div
-                          key={region.region}
-                          className={`rounded-lg p-3 transition-all hover:scale-102 cursor-pointer border ${textColor}`}
-                          style={{ backgroundColor: bgColor }}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="font-semibold text-sm">{region.region}</div>
-                              <div className="text-xs opacity-90 mt-1">
-                                {region.completed}/{region.count} sites • {region.completionRate.toFixed(1)}% completion
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-2xl font-bold">{region.performanceScore.toFixed(0)}</div>
-                              <div className="text-xs opacity-90">score</div>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                </div>
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="flex items-center justify-between text-xs text-gray-600">
-                    <span className="flex items-center gap-1">
-                      <span className="w-3 h-3 rounded bg-red-500"></span>
-                      Low (&lt;40)
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-3 h-3 rounded bg-yellow-500"></span>
-                      Medium (40-70)
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-3 h-3 rounded bg-green-500"></span>
-                      High (&gt;70)
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       ) : null}
+
+      {/* Site List Modal */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col animate-slideUp">
+            {/* Modal Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 md:p-6 border-b border-slate-200 gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">{modalData.title} - Site List</h2>
+                <p className="text-sm text-slate-600 mt-1 font-medium">Showing {modalData.sites.length} of {modalData.allSites.length} sites (most recent)</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={downloadFromModal}
+                  className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-xs sm:text-sm font-medium shadow-sm"
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Download Excel</span>
+                  <span className="sm:hidden">Download</span>
+                </button>
+                <button
+                  onClick={() => setModalOpen(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5 text-slate-600" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body - Site List Table */}
+            <div className="flex-1 overflow-auto p-4 md:p-6">
+              {modalData.sites.length === 0 ? (
+                <div className="text-center py-12">
+                  <AlertCircle className="h-12 w-12 text-slate-400 mx-auto mb-3" />
+                  <p className="text-slate-600 font-medium">No sites found</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">No</th>
+                        <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DUID</th>
+                        <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DU Name</th>
+                        <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {modalData.sites.map((site, index) => (
+                        <tr 
+                          key={index}
+                          className="hover:bg-slate-50 transition-colors border-b border-slate-100"
+                        >
+                          <td className="px-4 py-3 text-slate-600 font-medium">{index + 1}</td>
+                          <td className="px-4 py-3 font-mono text-slate-900 font-medium">{site.duid}</td>
+                          <td className="px-4 py-3 text-slate-900">{site.duName}</td>
+                          <td className="px-4 py-3 text-slate-600 font-medium">{site.date}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
     </div>
   )
 }

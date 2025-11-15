@@ -16,7 +16,6 @@ import {
 } from '@tanstack/react-table'
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { Check, X, Edit2, XCircle, ChevronLeft, ChevronRight, Filter, Calendar, Download, Database, Search } from 'lucide-react'
-import { SiteDetailModal } from './SiteDetailModal'
 
 interface ColumnConfig {
   name: string
@@ -88,6 +87,14 @@ export function HuaweiRolloutTable({
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   
+  // PO data state - now indexed by DUID for O(1) lookup
+  const [poStatusMap, setPoStatusMap] = useState<Record<string, any>>({})
+  const [poLoading, setPoLoading] = useState(false)
+  const [poColumnVisible, setPoColumnVisible] = useState(false)
+  
+  // Refs for virtualization
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+  
   // Date range filter state
   const [dateFilter, setDateFilter] = useState<DateFilter>(() => {
     const today = new Date()
@@ -105,9 +112,7 @@ export function HuaweiRolloutTable({
   const [filterSearchQuery, setFilterSearchQuery] = useState('')
   const filterDropdownRef = useRef<HTMLDivElement>(null)
   
-  // Site detail modal state
-  const [siteDetailModalOpen, setSiteDetailModalOpen] = useState(false)
-  const [selectedSite, setSelectedSite] = useState<{ duid: string; duName: string } | null>(null)
+  // Site detail modal removed for performance
 
   // Callback functions for editing
   const handleCellEdit = useCallback((row: any, columnId: string, currentValue: any) => {
@@ -210,6 +215,28 @@ export function HuaweiRolloutTable({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [editingCell, handleCellSave])
 
+  // Fetch PO status data only when column becomes visible
+  useEffect(() => {
+    if (!poColumnVisible) return
+
+    const fetchPOStatus = async () => {
+      setPoLoading(true)
+      try {
+        const response = await fetch('/api/sheets/po-status')
+        if (!response.ok) throw new Error('Failed to fetch PO status')
+        
+        const result = await response.json()
+        setPoStatusMap(result.data || {})
+      } catch (error) {
+        console.error('Failed to load PO status:', error)
+      } finally {
+        setPoLoading(false)
+      }
+    }
+
+    fetchPOStatus()
+  }, [poColumnVisible])
+
   // Fetch column configuration
   useEffect(() => {
     const fetchColumnConfig = async () => {
@@ -231,7 +258,12 @@ export function HuaweiRolloutTable({
         configs.forEach(config => {
           initialVisibility[config.name] = config.show
         })
+        // PO_Status column starts as visible (but will lazy load data)
+        initialVisibility['PO_Status'] = true
         setColumnVisibility(initialVisibility)
+        
+        // Trigger PO data fetch since column is visible by default
+        setPoColumnVisible(true)
 
       } catch (error) {
         console.error('Failed to load column configuration:', error)
@@ -240,6 +272,14 @@ export function HuaweiRolloutTable({
 
     fetchColumnConfig()
   }, [])
+
+  // Get PO status from pre-calculated map (O(1) lookup)
+  const getPOStatus = useCallback((duid: string) => {
+    if (!duid || !poStatusMap || Object.keys(poStatusMap).length === 0) {
+      return null
+    }
+    return poStatusMap[duid.toString().trim()] || null
+  }, [poStatusMap])
 
   // Create table columns
   const columns = useMemo<ColumnDef<any>[]>(() => {
@@ -296,13 +336,15 @@ export function HuaweiRolloutTable({
         return true
       })
     
-    return filtered.map((config): ColumnDef<any> => {
-      // Special handling for DUID column - make it clickable
-      const isDUIDColumn = config.name === 'DUID' || config.displayName === 'DUID'
-      
-      return ({
-        id: config.name,
-        accessorFn: (row) => {
+    // Add PO Status column after all configured columns
+    const columnsWithPOStatus = [
+      ...filtered.map((config): ColumnDef<any> => {
+        // Special handling for DUID column - make it clickable
+        const isDUIDColumn = config.name === 'DUID' || config.displayName === 'DUID'
+        
+        return ({
+          id: config.name,
+          accessorFn: (row) => {
           // Try multiple matching strategies to find the column value
           let value = row[config.name]
           
@@ -487,23 +529,15 @@ export function HuaweiRolloutTable({
             }
           }
 
-          // DUID column - clickable to open detail modal
+          // DUID column - just display (modal removed for performance)
           if (isDUIDColumn && !isEditing) {
             return (
-              <button
-                onClick={() => {
-                  const duName = row.original['DU Name'] || row.original['DUName'] || ''
-                  setSelectedSite({ duid: displayValue?.toString() || '', duName })
-                  setSiteDetailModalOpen(true)
-                }}
-                className="group flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-50 transition-colors text-xs font-medium text-blue-600 hover:text-blue-700 cursor-pointer"
-                title="Click to view site details"
-              >
-                <span className="underline decoration-dotted">{displayValue?.toString() || ''}</span>
-                <svg className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-1 text-xs font-medium text-blue-600">
+                {hasChanges && <div className="w-1 h-1 bg-orange-500 rounded-full" />}
+                <span className={hasChanges ? 'text-orange-700 font-medium' : ''}>
+                  {displayValue?.toString() || ''}
+                </span>
+              </div>
             )
           }
           
@@ -567,23 +601,15 @@ export function HuaweiRolloutTable({
             )
           }
 
-          // Default non-editable cell with DUID check
+          // Default non-editable cell
           if (isDUIDColumn) {
             return (
-              <button
-                onClick={() => {
-                  const duName = row.original['DU Name'] || row.original['DUName'] || ''
-                  setSelectedSite({ duid: displayValue?.toString() || '', duName })
-                  setSiteDetailModalOpen(true)
-                }}
-                className="group flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-50 transition-colors text-xs font-medium text-blue-600 hover:text-blue-700 cursor-pointer"
-                title="Click to view site details"
-              >
-                <span className="underline decoration-dotted">{displayValue?.toString() || ''}</span>
-                <svg className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-1 text-xs font-medium text-blue-600">
+                {hasChanges && <div className="w-1 h-1 bg-orange-500 rounded-full" />}
+                <span className={hasChanges ? 'text-orange-700 font-medium' : ''}>
+                  {displayValue?.toString() || ''}
+                </span>
+              </div>
             )
           }
           
@@ -597,8 +623,78 @@ export function HuaweiRolloutTable({
           )
         },
       })
-    })
-  }, [columnConfigs, editingCell, pendingChanges, changedCells, rowIdColumn, handleCellEdit, handleCellSave, handleCellCancel, data])
+    }),
+    // Add PO Status column
+    {
+      id: 'PO_Status',
+      header: 'PO Status',
+      accessorFn: (row: any) => {
+        const duid = row['DUID'] || row['duid']
+        if (!duid) return null
+        const status = getPOStatus(duid)
+        return status?.display || null
+      },
+      enableResizing: true,
+      enableSorting: true,
+      cell: ({ row }: { row: any }) => {
+        const duid = row.original['DUID'] || row.original['duid']
+        if (!duid) return <span className="text-xs text-gray-400">-</span>
+        
+        if (poLoading) {
+          return (
+            <div className="flex items-center gap-1 text-xs text-gray-500">
+              <div className="animate-spin h-3 w-3 border-2 border-gray-300 border-t-blue-500 rounded-full"></div>
+              <span>Loading...</span>
+            </div>
+          )
+        }
+        
+        const status = getPOStatus(duid)
+        
+        if (!status || status.total === 0) {
+          return <span className="text-xs text-gray-400">No PO</span>
+        }
+        
+        // Use pre-calculated percentage from API
+        const percentage = status.percentage || 0
+        const isComplete = percentage === 100
+        const isPartial = percentage > 0 && percentage < 100
+        
+        return (
+          <div className="flex items-center gap-2">
+            <span 
+              className={`text-xs font-semibold ${
+                isComplete ? 'text-green-600' : 
+                isPartial ? 'text-orange-600' : 
+                'text-red-600'
+              }`}
+              title={`Close: ${status.close}, Open: ${status.open}, Cancelled: ${status.cancelled}`}
+            >
+              {status.display}
+            </span>
+            <div className="flex-1 min-w-[60px] max-w-[100px]">
+              <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full ${
+                    isComplete ? 'bg-green-500' : 
+                    isPartial ? 'bg-orange-500' : 
+                    'bg-red-500'
+                  }`}
+                  style={{ width: `${percentage}%` }}
+                ></div>
+              </div>
+            </div>
+            <span className="text-[10px] text-gray-500 font-medium min-w-[30px] text-right">
+              {percentage}%
+            </span>
+          </div>
+        )
+      },
+    }
+  ]
+  
+    return columnsWithPOStatus
+  }, [columnConfigs, editingCell, pendingChanges, changedCells, rowIdColumn, handleCellEdit, handleCellSave, handleCellCancel, data, getPOStatus, poLoading])
 
   // Filter data by date range
   const filteredData = useMemo(() => {
@@ -1501,18 +1597,6 @@ export function HuaweiRolloutTable({
           </div>
         </div>
       )}
-      
-      {/* Site Detail Modal */}
-      <SiteDetailModal
-        isOpen={siteDetailModalOpen}
-        onClose={() => {
-          setSiteDetailModalOpen(false)
-          setSelectedSite(null)
-        }}
-        duid={selectedSite?.duid || ''}
-        duName={selectedSite?.duName}
-        selectedSheet={selectedSheet}
-      />
     </div>
   )
 }

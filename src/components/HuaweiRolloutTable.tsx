@@ -16,6 +16,7 @@ import {
 } from '@tanstack/react-table'
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { Check, X, Edit2, XCircle, ChevronLeft, ChevronRight, Filter, Calendar, Download, Database, Search } from 'lucide-react'
+import { SiteDetailModal } from './SiteDetailModal'
 
 interface ColumnConfig {
   name: string
@@ -103,6 +104,10 @@ export function HuaweiRolloutTable({
   const [filterDropdownPosition, setFilterDropdownPosition] = useState<FilterDropdownPosition | null>(null)
   const [filterSearchQuery, setFilterSearchQuery] = useState('')
   const filterDropdownRef = useRef<HTMLDivElement>(null)
+  
+  // Site detail modal state
+  const [siteDetailModalOpen, setSiteDetailModalOpen] = useState(false)
+  const [selectedSite, setSelectedSite] = useState<{ duid: string; duName: string } | null>(null)
 
   // Callback functions for editing
   const handleCellEdit = useCallback((row: any, columnId: string, currentValue: any) => {
@@ -221,14 +226,6 @@ export function HuaweiRolloutTable({
 
         setColumnConfigs(configs)
 
-        // Debug: Check column names from config vs data
-        console.log('📊 Column Configs:', configs.map(c => ({
-          name: c.name,
-          display: c.displayName,
-          type: c.type,
-          show: c.show
-        })))
-
         // Set initial visibility based on config
         const initialVisibility: Record<string, boolean> = {}
         configs.forEach(config => {
@@ -264,8 +261,6 @@ export function HuaweiRolloutTable({
         dataColumns.set(key.replace(/\s+/g, '').toLowerCase(), key)
       })
     }
-    
-    console.log('📊 Data columns from sheet:', Array.from(new Set(dataColumns.values())).join(', '))
 
     // Filter columns based on two conditions:
     // 1. Column must be marked as show=true in settings
@@ -301,24 +296,11 @@ export function HuaweiRolloutTable({
         return true
       })
     
-    console.log('🔍 COLUMN VISIBILITY SUMMARY:', {
-      total: columnConfigs.length,
-      displayed: displayedColumns.length,
-      hiddenBySettings: hiddenBySettings.length,
-      notInData: notInData.length
-    })
-    
-    if (hiddenBySettings.length > 0) {
-      console.log('❌ Hidden by settings (Show=No):', hiddenBySettings.join(', '))
-    }
-    
-    if (notInData.length > 0) {
-      console.log('❌ Not in data:', notInData.join(', '))
-    }
-    
-    console.log('✅ Displayed columns:', displayedColumns.join(', '))
-    
-    return filtered.map((config): ColumnDef<any> => ({
+    return filtered.map((config): ColumnDef<any> => {
+      // Special handling for DUID column - make it clickable
+      const isDUIDColumn = config.name === 'DUID' || config.displayName === 'DUID'
+      
+      return ({
         id: config.name,
         accessorFn: (row) => {
           // Try multiple matching strategies to find the column value
@@ -505,6 +487,26 @@ export function HuaweiRolloutTable({
             }
           }
 
+          // DUID column - clickable to open detail modal
+          if (isDUIDColumn && !isEditing) {
+            return (
+              <button
+                onClick={() => {
+                  const duName = row.original['DU Name'] || row.original['DUName'] || ''
+                  setSelectedSite({ duid: displayValue?.toString() || '', duName })
+                  setSiteDetailModalOpen(true)
+                }}
+                className="group flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-50 transition-colors text-xs font-medium text-blue-600 hover:text-blue-700 cursor-pointer"
+                title="Click to view site details"
+              >
+                <span className="underline decoration-dotted">{displayValue?.toString() || ''}</span>
+                <svg className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </button>
+            )
+          }
+          
           // Editable cell
           if (config.editable && !isEditing) {
             const cellClasses = `group flex items-center justify-between cursor-pointer px-1 py-0.5 rounded transition-colors text-xs ${
@@ -565,6 +567,26 @@ export function HuaweiRolloutTable({
             )
           }
 
+          // Default non-editable cell with DUID check
+          if (isDUIDColumn) {
+            return (
+              <button
+                onClick={() => {
+                  const duName = row.original['DU Name'] || row.original['DUName'] || ''
+                  setSelectedSite({ duid: displayValue?.toString() || '', duName })
+                  setSiteDetailModalOpen(true)
+                }}
+                className="group flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-50 transition-colors text-xs font-medium text-blue-600 hover:text-blue-700 cursor-pointer"
+                title="Click to view site details"
+              >
+                <span className="underline decoration-dotted">{displayValue?.toString() || ''}</span>
+                <svg className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </button>
+            )
+          }
+          
           return (
             <div className="flex items-center gap-1 text-xs">
               {hasChanges && <div className="w-1 h-1 bg-orange-500 rounded-full" />}
@@ -574,19 +596,13 @@ export function HuaweiRolloutTable({
             </div>
           )
         },
-      }))
+      })
+    })
   }, [columnConfigs, editingCell, pendingChanges, changedCells, rowIdColumn, handleCellEdit, handleCellSave, handleCellCancel, data])
 
   // Filter data by date range
   const filteredData = useMemo(() => {
     if (!dateFilter.startDate || !dateFilter.endDate) return data
-    
-    // Debug: Log actual data keys from first row
-    if (data.length > 0) {
-      console.log('📋 Actual Data Keys:', Object.keys(data[0]))
-      console.log('🔍 DU Name value:', data[0]['DU Name'])
-      console.log('🔍 Site Status value:', data[0]['Site Status'])
-    }
     
     const startDate = new Date(dateFilter.startDate)
     const endDate = new Date(dateFilter.endDate)
@@ -939,12 +955,10 @@ export function HuaweiRolloutTable({
       await Promise.all(updatePromises)
 
       const endTime = performance.now()
-      console.log(`✅ Batch save completed: ${changes.length} cells in ${(endTime - startTime).toFixed(0)}ms`)
 
       setPendingChanges(new Map())
       setChangedCells(new Map())
     } catch (error) {
-      console.error('Batch save error:', error)
       setSaveError(error instanceof Error ? error.message : 'Failed to save changes')
     } finally {
       setIsSaving(false)
@@ -1487,6 +1501,18 @@ export function HuaweiRolloutTable({
           </div>
         </div>
       )}
+      
+      {/* Site Detail Modal */}
+      <SiteDetailModal
+        isOpen={siteDetailModalOpen}
+        onClose={() => {
+          setSiteDetailModalOpen(false)
+          setSelectedSite(null)
+        }}
+        duid={selectedSite?.duid || ''}
+        duName={selectedSite?.duName}
+        selectedSheet={selectedSheet}
+      />
     </div>
   )
 }

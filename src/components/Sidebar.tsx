@@ -12,11 +12,18 @@ import {
   Settings,
   ChevronRight,
   Database,
-  Circle
+  Circle,
+  User
 } from 'lucide-react'
 
 interface SidebarProps {
   collapsed: boolean
+  user?: {
+    name: string
+    email: string
+    region: string
+    usertype: string
+  } | null
 }
 
 interface MenuItem {
@@ -32,9 +39,13 @@ interface SubMenuItem {
   href: string
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
+const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
   const pathname = usePathname()
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
+  const [isHovered, setIsHovered] = useState(false)
+
+  // Determine if sidebar should show text (expanded state)
+  const isExpanded = !collapsed || isHovered
 
   const menuItems: MenuItem[] = [
     {
@@ -68,6 +79,15 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       ]
     },
     {
+      icon: <BarChart3 className="h-4 w-4" />,
+      label: 'Dashboards',
+      submenu: [
+        { label: 'Daily Dashboard', href: '/dashboard/daily' },
+        { label: 'ITC Huawei', href: '/dashboard/itc-huawei' },
+        { label: 'PO Huawei', href: '/dashboard/po-huawei' }
+      ]
+    },
+    {
       icon: <FileText className="h-4 w-4" />,
       label: 'Documents',
       href: '/documents'
@@ -83,22 +103,32 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
     <aside 
       className={`
         bg-white border-r border-slate-200 h-full flex flex-col
-        transition-[width] duration-300 ease-out
-        ${collapsed ? 'w-16' : 'w-64'}
+        transition-all duration-300 ease-out shadow-lg
+        ${collapsed && !isHovered ? 'w-16' : 'w-64'}
+        ${collapsed ? 'fixed left-0 top-14 z-40' : 'relative z-auto shadow-none'}
       `}
+      onMouseEnter={() => collapsed && setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Brand Section */}
-      <div className={`h-14 flex items-center border-b border-slate-200 px-4 ${collapsed ? 'justify-center' : 'justify-start'}`}>
-        {collapsed ? (
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-            <span className="text-white text-sm font-bold">Z</span>
+      {/* User Profile Section */}
+      <div className={`h-16 flex items-center border-b border-slate-200 px-4 ${!isExpanded ? 'justify-center' : 'justify-start'}`}>
+        {!isExpanded ? (
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
+            <User className="h-4 w-4 text-white" />
           </div>
         ) : (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md">
-              <span className="text-white text-sm font-bold">Z</span>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
+              <User className="h-5 w-5 text-white" />
             </div>
-            <span className="text-slate-800 font-semibold text-base">ZMG System</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-slate-900 truncate">
+                {user?.name || 'User'}
+              </div>
+              <div className="text-xs text-slate-500 truncate">
+                {user?.region || 'Region'}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -124,9 +154,9 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
                         ? 'bg-slate-100 text-slate-900' 
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                       }
-                      ${collapsed ? 'justify-center' : ''}
+                      ${!isExpanded ? 'justify-center' : ''}
                     `}
-                    title={collapsed ? item.label : ''}
+                    title={!isExpanded ? item.label : ''}
                   >
                     {/* Active Indicator */}
                     {isSubmenuOpen && (
@@ -137,7 +167,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
                       {item.icon}
                     </div>
                     
-                    {!collapsed && (
+                    {isExpanded && (
                       <>
                         <span className="font-medium text-sm flex-1 text-left">
                           {item.label}
@@ -158,32 +188,32 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
                         ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-200' 
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                       }
-                      ${collapsed ? 'justify-center' : ''}
+                      ${!isExpanded ? 'justify-center' : ''}
                     `}
-                    title={collapsed ? item.label : ''}
+                    title={!isExpanded ? item.label : ''}
                   >
                     {/* Active Indicator */}
-                    {isActive && !collapsed && (
+                    {isActive && isExpanded && (
                       <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-white rounded-r-full" />
                     )}
                     
                     {item.icon}
                     
-                    {!collapsed && (
+                    {isExpanded && (
                       <span className="font-medium text-sm flex-1">
                         {item.label}
                       </span>
                     )}
 
                     {/* Hover Effect */}
-                    {!isActive && !collapsed && (
+                    {!isActive && isExpanded && (
                       <ChevronRight className="h-3.5 w-3.5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200" />
                     )}
                   </Link>
                 )}
 
                 {/* Submenu */}
-                {hasSubmenu && isSubmenuOpen && !collapsed && (
+                {hasSubmenu && isSubmenuOpen && isExpanded && (
                   <div className="mt-0.5 ml-7 space-y-0.5 border-l-2 border-slate-200 pl-3 py-1 animate-slideDown">
                     {item.submenu!.map((subItem, subIndex) => {
                       const isSubActive = pathname === subItem.href
@@ -217,7 +247,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       </nav>
 
       {/* Footer - Optional User Info */}
-      {!collapsed && (
+      {isExpanded && (
         <div className="border-t border-slate-200 p-3">
           <div className="text-[10px] text-slate-400 text-center">
             © 2024 ZMG System

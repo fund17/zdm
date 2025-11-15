@@ -154,16 +154,6 @@ function LoginForm() {
             </button>
           </form>
 
-          {/* Demo Credentials */}
-          <div className="mt-6 pt-6 border-t-2 border-slate-100">
-            <div className="bg-blue-50 border-2 border-blue-100 rounded-xl p-4">
-              <p className="text-xs font-bold text-blue-700 mb-2 text-center">Demo Credentials</p>
-              <div className="space-y-1 text-xs text-blue-600">
-                <p className="font-semibold">Email: <span className="font-mono">admin@zmg.co.id</span></p>
-                <p className="font-semibold">Password: <span className="font-mono">zmg123</span></p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}

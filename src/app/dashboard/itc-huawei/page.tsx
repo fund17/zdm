@@ -321,10 +321,7 @@ export default function ItcHuaweiDashboard() {
       const mos = row['MOS']
       if (getFilteredValue(mos)) {
         mosCompleted++
-        // Debug: log first 5
-        if (mosCompleted <= 5) {
-          console.log(`MOS #${mosCompleted}: "${mos}"`)
-        }
+
       }
       
       const installDone = row['Install Done'] || row['InstallDone']
@@ -579,13 +576,13 @@ export default function ItcHuaweiDashboard() {
   }
 
   return (
-    <div className="h-screen overflow-y-auto bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
-      {/* Header - Sticky */}
-      <div className="sticky top-0 z-10 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-2">
-        <div className="flex flex-col space-y-3">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200/60 p-4 md:p-5">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
+      <div className="container mx-auto px-2 sm:px-3 py-2 flex-1 flex flex-col max-h-[calc(100vh-4rem)]">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200/60 flex flex-col h-full">
+          {/* Sticky Header */}
+          <div className="sticky top-0 z-10 bg-white border-b border-slate-200/60 p-4 md:p-5">
             {/* Header Title */}
-            <div className="mb-4">
+            <div>
               <h1 className="text-lg md:text-xl font-semibold text-slate-900 flex items-center gap-2.5">
                 <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-sm">
                   <BarChart3 className="h-5 w-5 text-white" />
@@ -657,14 +654,12 @@ export default function ItcHuaweiDashboard() {
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Main Content - Scrollable */}
-      <div className="container mx-auto px-3 sm:px-4 pb-8">
-        {/* Professional Revenue & Performance Analytics */}
-        {analytics && metrics && (
-          <div className="space-y-4 mb-6">
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 hover:scrollbar-thumb-slate-400">
+            {/* Professional Revenue & Performance Analytics */}
+            {analytics && metrics && (
+              <div className="space-y-4 mt-6 pt-6 border-t border-slate-200">
               {/* Revenue Milestone Cards - Compact */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {/* ATP Approved - Implementation Revenue */}
@@ -906,37 +901,13 @@ export default function ItcHuaweiDashboard() {
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+              </div>
+            )}
 
-        {/* Content */}
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center bg-white rounded-2xl shadow-sm border border-slate-200/60">
-          <div className="text-center">
-            <LoadingSpinner />
-            <p className="mt-4 text-sm text-slate-600 font-medium">Loading dashboard data...</p>
-          </div>
-        </div>
-      ) : error ? (
-        <div className="flex-1 flex items-center justify-center bg-white rounded-2xl shadow-sm border border-slate-200/60">
-          <div className="text-center p-8">
-            <div className="w-16 h-16 mx-auto mb-4 bg-rose-50 rounded-2xl flex items-center justify-center">
-              <XCircle className="h-8 w-8 text-rose-500" />
-            </div>
-            <h3 className="text-base font-semibold text-slate-900 mb-2">Error Loading Data</h3>
-            <p className="text-sm text-slate-600 mb-4 font-medium">{error}</p>
-            <button
-              onClick={() => fetchAllData()}
-              className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-            >
-              Try Again
-            </button>
-          </div>
-        </div>
-      ) : metrics ? (
-        <div className="flex-1 overflow-auto">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 md:gap-4 mb-6">
+            {/* Summary Cards */}
+            {!loading && !error && metrics && (
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 md:gap-4">
             {/* Total Sites */}
             <div className="group bg-white rounded-xl border border-slate-200/60 p-3 md:p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
               <div className="flex items-center justify-between">
@@ -1299,10 +1270,40 @@ export default function ItcHuaweiDashboard() {
                 })}
               </div>
             </div>
+                </div>
+              </div>
+            )}
 
+            {/* Loading/Error States */}
+            {loading && (
+              <div className="flex items-center justify-center p-12">
+                <div className="text-center">
+                  <LoadingSpinner />
+                  <p className="mt-4 text-sm text-slate-600 font-medium">Loading dashboard data...</p>
+                </div>
+              </div>
+            )}
+            
+            {error && (
+              <div className="flex items-center justify-center p-12">
+                <div className="text-center">
+                  <div className="w-16 h-16 mx-auto mb-4 bg-rose-50 rounded-2xl flex items-center justify-center">
+                    <XCircle className="h-8 w-8 text-rose-500" />
+                  </div>
+                  <h3 className="text-base font-semibold text-slate-900 mb-2">Error Loading Data</h3>
+                  <p className="text-sm text-slate-600 mb-4 font-medium">{error}</p>
+                  <button
+                    onClick={() => fetchAllData()}
+                    className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      ) : null}
+      </div>
 
       {/* Site List Modal */}
       {modalOpen && (
@@ -1370,7 +1371,6 @@ export default function ItcHuaweiDashboard() {
           </div>
         </div>
       )}
-      </div>
     </div>
   )
 }

@@ -36,6 +36,11 @@ interface DataTableProps {
   initialDateFilter?: DateFilter // Add prop to control date filter from parent
   showFilters?: boolean // Add prop to control filter visibility
   onExport?: () => Promise<void> // Add export callback prop
+  onSaveComplete?: () => Promise<void> // Add callback after save completes
+  loading?: boolean // Add loading state for table body
+  onImport?: () => void // Add import trigger prop
+  onRefresh?: () => Promise<void> // Add refresh callback prop
+  refreshing?: boolean // Add refresh state prop
 }
 
 interface EditingState {
@@ -126,10 +131,21 @@ const getActivityBadgeStyle = (activity: string) => {
   }
 }
 
-export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFilteredDataChange, onDateFilterChange, statusFilter, activityFilter, initialDateFilter, showFilters = false, onExport }: DataTableProps) {
+export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFilteredDataChange, onDateFilterChange, statusFilter, activityFilter, initialDateFilter, showFilters = false, onExport, onSaveComplete, loading = false, onImport, onRefresh, refreshing = false }: DataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'Date', desc: true }]) // Sort by Date descending (newest first)
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
-  const [globalFilter, setGlobalFilter] = useState('')
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('dailyplan-columnFilters')
+      return saved ? JSON.parse(saved) : []
+    }
+    return []
+  })
+  const [globalFilter, setGlobalFilter] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dailyplan-globalFilter') || ''
+    }
+    return ''
+  })
   const [editingCell, setEditingCell] = useState<EditingState | null>(null)
   const [localData, setLocalData] = useState(data)
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>([])
@@ -147,10 +163,30 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
   const filterDropdownRef = useRef<HTMLDivElement>(null)
 
   // Filter states for the new filters section
-  const [selectedActivity, setSelectedActivity] = useState<string | null>(null)
-  const [selectedStatus, setSelectedStatus] = useState<string | null>(null)
-  const [selectedVendor, setSelectedVendor] = useState<string | null>(null)
-  const [selectedTeamCategory, setSelectedTeamCategory] = useState<string | null>(null)
+  const [selectedActivity, setSelectedActivity] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dailyplan-selectedActivity') || null
+    }
+    return null
+  })
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dailyplan-selectedStatus') || null
+    }
+    return null
+  })
+  const [selectedVendor, setSelectedVendor] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dailyplan-selectedVendor') || null
+    }
+    return null
+  })
+  const [selectedTeamCategory, setSelectedTeamCategory] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dailyplan-selectedTeamCategory') || null
+    }
+    return null
+  })
 
   const [uniqueActivities, setUniqueActivities] = useState<string[]>([])
   const [uniqueStatuses, setUniqueStatuses] = useState<string[]>([])
@@ -163,9 +199,17 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
   const [isSaving, setIsSaving] = useState(false)
   
   const [dateFilter, setDateFilter] = useState<DateFilter>(() => {
-    // Use parent's initialDateFilter if provided, otherwise use default
+    // Use parent's initialDateFilter if provided
     if (initialDateFilter) {
       return initialDateFilter
+    }
+    
+    // Try to load from localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('dailyplan-dateFilter')
+      if (saved) {
+        return JSON.parse(saved)
+      }
     }
     
     // Default to yesterday, today, tomorrow
@@ -187,6 +231,65 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       setDateFilter(initialDateFilter)
     }
   }, [initialDateFilter, dateFilter.startDate, dateFilter.endDate])
+
+  // Save filters to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dailyplan-columnFilters', JSON.stringify(columnFilters))
+    }
+  }, [columnFilters])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dailyplan-globalFilter', globalFilter)
+    }
+  }, [globalFilter])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dailyplan-dateFilter', JSON.stringify(dateFilter))
+    }
+  }, [dateFilter])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (selectedActivity) {
+        localStorage.setItem('dailyplan-selectedActivity', selectedActivity)
+      } else {
+        localStorage.removeItem('dailyplan-selectedActivity')
+      }
+    }
+  }, [selectedActivity])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (selectedStatus) {
+        localStorage.setItem('dailyplan-selectedStatus', selectedStatus)
+      } else {
+        localStorage.removeItem('dailyplan-selectedStatus')
+      }
+    }
+  }, [selectedStatus])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (selectedVendor) {
+        localStorage.setItem('dailyplan-selectedVendor', selectedVendor)
+      } else {
+        localStorage.removeItem('dailyplan-selectedVendor')
+      }
+    }
+  }, [selectedVendor])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (selectedTeamCategory) {
+        localStorage.setItem('dailyplan-selectedTeamCategory', selectedTeamCategory)
+      } else {
+        localStorage.removeItem('dailyplan-selectedTeamCategory')
+      }
+    }
+  }, [selectedTeamCategory])
 
   // Close filter dropdown and editing cell when clicking outside
   useEffect(() => {
@@ -478,6 +581,16 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
     setSelectedStatus(null)
     setSelectedVendor(null)
     setSelectedTeamCategory(null)
+
+    // Clear from localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('dailyplan-columnFilters')
+      localStorage.removeItem('dailyplan-globalFilter')
+      localStorage.removeItem('dailyplan-selectedActivity')
+      localStorage.removeItem('dailyplan-selectedStatus')
+      localStorage.removeItem('dailyplan-selectedVendor')
+      localStorage.removeItem('dailyplan-selectedTeamCategory')
+    }
   }
 
   // Get visible column configs
@@ -729,10 +842,10 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
         
         setChangedCells(new Map()) // Clear changes after successful save
         
-        // Auto refresh page after successful save
-        setTimeout(() => {
-          window.location.reload()
-        }, 800) // Reduced wait time since saves are faster now
+        // Notify parent to refresh data (without full page reload)
+        if (onSaveComplete) {
+          await onSaveComplete()
+        }
       }
     } catch (error) {
       // Revert all changes on error
@@ -939,10 +1052,6 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
             )}
             {!config.show && (
               <EyeOff className="h-3 w-3 text-gray-400" />
-            )}
-            {/* Filter indicator */}
-            {getColumnFilterValue(config.name) && (
-              <Filter className="h-3 w-3 text-blue-600" />
             )}
           </div>
         </div>
@@ -1208,25 +1317,54 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
               />
             </div>
 
-            {/* Export Button */}
-            {onExport && (
-              <div className="border-l border-gray-300 pl-3">
-                <button
-                  onClick={async () => {
-                    setExporting(true)
-                    try {
-                      await onExport()
-                    } finally {
-                      setExporting(false)
-                    }
-                  }}
-                  disabled={exporting}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Export filtered data to Excel"
-                >
-                  <Download className={`h-3.5 w-3.5 mr-1.5 ${exporting ? 'animate-bounce' : ''}`} />
-                  {exporting ? 'Exporting...' : 'Export'}
-                </button>
+            {/* Action Buttons: Import, Export, Refresh */}
+            {(onImport || onExport || onRefresh) && (
+              <div className="flex items-center space-x-2 border-l border-gray-300 pl-3">
+                {onImport && (
+                  <button
+                    onClick={onImport}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 border border-transparent rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all duration-200"
+                    title="Import Excel file"
+                  >
+                    <svg className="h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Import
+                  </button>
+                )}
+                {onExport && (
+                  <button
+                    onClick={async () => {
+                      setExporting(true)
+                      try {
+                        await onExport()
+                      } finally {
+                        setExporting(false)
+                      }
+                    }}
+                    disabled={exporting}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Export filtered data to Excel"
+                  >
+                    <Download className={`h-3.5 w-3.5 mr-1.5 ${exporting ? 'animate-bounce' : ''}`} />
+                    {exporting ? 'Exporting...' : 'Export'}
+                  </button>
+                )}
+                {onRefresh && (
+                  <button
+                    onClick={async () => {
+                      if (onRefresh) await onRefresh()
+                    }}
+                    disabled={refreshing}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Refresh data from Google Sheets"
+                  >
+                    <svg className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    {refreshing ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                )}
               </div>
             )}
 
@@ -1296,7 +1434,16 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto relative">
+        {/* Loading Overlay for Table Body */}
+        {loading && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-40 flex items-center justify-center">
+            <div className="text-center">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent mb-2"></div>
+              <p className="text-sm text-gray-600 font-medium">Refreshing data...</p>
+            </div>
+          </div>
+        )}
         <table className="table" style={{ width: table.getTotalSize(), position: 'relative', borderSpacing: 0, borderCollapse: 'collapse' }}>
           <thead className="table-header sticky top-0 z-30">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -1573,70 +1720,184 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
           
           {/* Options List */}
           <div className="max-h-[350px] overflow-y-auto py-2">
-            {/* Special Filters */}
-            <div className="px-2 mb-2 space-y-1">
-              <button
-                onClick={() => handleColumnFilter(activeFilterColumn, 'empty')}
-                className="w-full text-left px-3 py-2 text-xs text-gray-600 hover:bg-gray-100 rounded-md flex items-center space-x-2 transition-colors group"
-              >
-                <span className="text-gray-400 group-hover:text-gray-600">⊘</span>
-                <span className="font-medium">(Empty)</span>
-              </button>
-              <button
-                onClick={() => handleColumnFilter(activeFilterColumn, 'notEmpty')}
-                className="w-full text-left px-3 py-2 text-xs text-gray-600 hover:bg-gray-100 rounded-md flex items-center space-x-2 transition-colors group"
-              >
-                <span className="text-gray-400 group-hover:text-gray-600">✓</span>
-                <span className="font-medium">(Not Empty)</span>
-              </button>
-            </div>
-            
-            {/* Divider */}
-            {getUniqueColumnValues(activeFilterColumn).length > 0 && (
-              <div className="border-t border-gray-200 my-2"></div>
+            {/* Date Presets - Only show for Date column */}
+            {activeFilterColumn === 'Date' && (
+              <div className="px-2 mb-2">
+                <div className="text-xs font-semibold text-gray-500 px-2 py-1 mb-1">Quick Filters</div>
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    onClick={() => {
+                      // Find today's date in the actual data format
+                      const today = new Date()
+                      today.setHours(0, 0, 0, 0)
+                      
+                      // Get unique values and find matching date
+                      const allDates = getUniqueColumnValues(activeFilterColumn)
+                      const matchingDate = allDates.find(dateStr => {
+                        const parsedDate = new Date(dateStr)
+                        parsedDate.setHours(0, 0, 0, 0)
+                        return parsedDate.getTime() === today.getTime()
+                      })
+                      
+                      if (matchingDate) {
+                        handleColumnFilter(activeFilterColumn, 'toggleValue', matchingDate)
+                      }
+                    }}
+                    className="px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-blue-50 rounded border border-gray-200 hover:border-blue-300 transition-colors"
+                  >
+                    Today
+                  </button>
+                  <button
+                    onClick={() => {
+                      const yesterday = new Date()
+                      yesterday.setDate(yesterday.getDate() - 1)
+                      yesterday.setHours(0, 0, 0, 0)
+                      
+                      const allDates = getUniqueColumnValues(activeFilterColumn)
+                      const matchingDate = allDates.find(dateStr => {
+                        const parsedDate = new Date(dateStr)
+                        parsedDate.setHours(0, 0, 0, 0)
+                        return parsedDate.getTime() === yesterday.getTime()
+                      })
+                      
+                      if (matchingDate) {
+                        handleColumnFilter(activeFilterColumn, 'toggleValue', matchingDate)
+                      }
+                    }}
+                    className="px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-blue-50 rounded border border-gray-200 hover:border-blue-300 transition-colors"
+                  >
+                    Yesterday
+                  </button>
+                  <button
+                    onClick={() => {
+                      // This week (Monday - Sunday)
+                      const now = new Date()
+                      const dayOfWeek = now.getDay()
+                      const monday = new Date(now)
+                      monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+                      monday.setHours(0, 0, 0, 0)
+                      
+                      const sunday = new Date(monday)
+                      sunday.setDate(monday.getDate() + 6)
+                      
+                      // Find all dates in this week from actual data
+                      const allDates = getUniqueColumnValues(activeFilterColumn)
+                      const weekDates = allDates.filter(dateStr => {
+                        const parsedDate = new Date(dateStr)
+                        parsedDate.setHours(0, 0, 0, 0)
+                        return parsedDate >= monday && parsedDate <= sunday
+                      })
+                      
+                      if (weekDates.length > 0) {
+                        setColumnFilters(prev => prev.filter(f => f.id !== activeFilterColumn))
+                        setColumnFilters(prev => [...prev, { id: activeFilterColumn, value: weekDates }])
+                      }
+                    }}
+                    className="px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-blue-50 rounded border border-gray-200 hover:border-blue-300 transition-colors"
+                  >
+                    This Week
+                  </button>
+                  <button
+                    onClick={() => {
+                      // This month
+                      const now = new Date()
+                      const year = now.getFullYear()
+                      const month = now.getMonth()
+                      const firstDay = new Date(year, month, 1)
+                      firstDay.setHours(0, 0, 0, 0)
+                      const lastDay = new Date(year, month + 1, 0)
+                      lastDay.setHours(23, 59, 59, 999)
+                      
+                      // Find all dates in this month from actual data
+                      const allDates = getUniqueColumnValues(activeFilterColumn)
+                      const monthDates = allDates.filter(dateStr => {
+                        const parsedDate = new Date(dateStr)
+                        parsedDate.setHours(0, 0, 0, 0)
+                        return parsedDate >= firstDay && parsedDate <= lastDay
+                      })
+                      
+                      if (monthDates.length > 0) {
+                        setColumnFilters(prev => prev.filter(f => f.id !== activeFilterColumn))
+                        setColumnFilters(prev => [...prev, { id: activeFilterColumn, value: monthDates }])
+                      }
+                    }}
+                    className="px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-blue-50 rounded border border-gray-200 hover:border-blue-300 transition-colors"
+                  >
+                    This Month
+                  </button>
+                </div>
+                <div className="border-t border-gray-200 my-2"></div>
+              </div>
             )}
             
-            {/* Value Options */}
-            <div className="px-2 space-y-0.5">
-              {getUniqueColumnValues(activeFilterColumn)
-                .filter(value => 
-                  filterSearchQuery === '' || 
-                  value.toLowerCase().includes(filterSearchQuery.toLowerCase())
-                )
-                .map((value, idx) => {
-                  const isSelected = isValueSelected(activeFilterColumn, value)
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => handleColumnFilter(activeFilterColumn, 'toggleValue', value)}
-                      className={`
-                        w-full text-left px-3 py-2 text-xs rounded-md flex items-center space-x-2 transition-all
-                        ${isSelected 
-                          ? 'bg-blue-50 hover:bg-blue-100 border border-blue-200' 
-                          : 'hover:bg-gray-50 border border-transparent'
-                        }
-                      `}
-                    >
-                      <span className={`text-sm ${isSelected ? 'text-blue-600' : 'text-gray-400'}`}>
-                        {isSelected ? '☑' : '☐'}
-                      </span>
-                      <span className={`truncate flex-1 ${isSelected ? 'text-blue-900 font-semibold' : 'text-gray-700'}`}>
-                        {value}
-                      </span>
-                    </button>
-                  )
-                })}
-              
-              {/* No Results Message */}
-              {filterSearchQuery && getUniqueColumnValues(activeFilterColumn)
-                .filter(value => value.toLowerCase().includes(filterSearchQuery.toLowerCase()))
-                .length === 0 && (
-                <div className="text-xs text-gray-500 text-center py-8">
-                  <div className="text-2xl mb-2">🔍</div>
-                  <div>No matching values</div>
+            {/* Special Filters - Hide for Date column */}
+            {activeFilterColumn !== 'Date' && (
+              <>
+                <div className="px-2 mb-2 space-y-1">
+                  <button
+                    onClick={() => handleColumnFilter(activeFilterColumn, 'empty')}
+                    className="w-full text-left px-3 py-2 text-xs text-gray-600 hover:bg-gray-100 rounded-md flex items-center space-x-2 transition-colors group"
+                  >
+                    <span className="text-gray-400 group-hover:text-gray-600">⊘</span>
+                    <span className="font-medium">(Empty)</span>
+                  </button>
+                  <button
+                    onClick={() => handleColumnFilter(activeFilterColumn, 'notEmpty')}
+                    className="w-full text-left px-3 py-2 text-xs text-gray-600 hover:bg-gray-100 rounded-md flex items-center space-x-2 transition-colors group"
+                  >
+                    <span className="text-gray-400 group-hover:text-gray-600">✓</span>
+                    <span className="font-medium">(Not Empty)</span>
+                  </button>
                 </div>
-              )}
-            </div>
+                
+                {/* Divider */}
+                {getUniqueColumnValues(activeFilterColumn).length > 0 && (
+                  <div className="border-t border-gray-200 my-2"></div>
+                )}
+                
+                {/* Value Options */}
+                <div className="px-2 space-y-0.5">
+                  {getUniqueColumnValues(activeFilterColumn)
+                    .filter(value => 
+                      filterSearchQuery === '' || 
+                      value.toLowerCase().includes(filterSearchQuery.toLowerCase())
+                    )
+                    .map((value, idx) => {
+                      const isSelected = isValueSelected(activeFilterColumn, value)
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handleColumnFilter(activeFilterColumn, 'toggleValue', value)}
+                          className={`
+                            w-full text-left px-3 py-2 text-xs rounded-md flex items-center space-x-2 transition-all
+                            ${isSelected 
+                              ? 'bg-blue-50 hover:bg-blue-100 border border-blue-200' 
+                              : 'hover:bg-gray-50 border border-transparent'
+                            }
+                          `}
+                        >
+                          <span className={`text-sm ${isSelected ? 'text-blue-600' : 'text-gray-400'}`}>
+                            {isSelected ? '☑' : '☐'}
+                          </span>
+                          <span className={`truncate flex-1 ${isSelected ? 'text-blue-900 font-semibold' : 'text-gray-700'}`}>
+                            {value}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  
+                  {/* No Results Message */}
+                  {filterSearchQuery && getUniqueColumnValues(activeFilterColumn)
+                    .filter(value => value.toLowerCase().includes(filterSearchQuery.toLowerCase()))
+                    .length === 0 && (
+                    <div className="text-xs text-gray-500 text-center py-8">
+                      <div className="text-2xl mb-2">🔍</div>
+                      <div>No matching values</div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
           
           {/* Footer Actions */}

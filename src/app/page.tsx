@@ -1,1462 +1,694 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { Calendar, Users, FileText, BarChart3, TrendingUp, Activity, Clock, CheckCircle2, AlertCircle, Target, Filter, Maximize2, X, XCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { 
+  Calendar, 
+  FileText, 
+  TrendingUp, 
+  Activity,
+  BarChart3,
+  DollarSign,
+  Users,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  ArrowRight,
+  MapPin,
+  Loader2
+} from 'lucide-react'
 
-interface DashboardStats {
-  totalRecords: number
-  lastUpdated: string
-  todayTasks: number
-  todayCompleted: number
-  todayPending: number
-  todayInProgress: number
-  todayFailed: number
-  todayTeamsWorking: number
-  workingTeams: string[]
-  idleTeams: string[]
-  todaySites: string[]
-  completedSites: string[]
-  inProgressSites: string[]
-  pendingSites: string[]
-  failedSites: string[]
-  todayActivityBreakdown: { activity: string; count: number; completed: number; pending: number; inProgress: number; completedTeams: string[]; inProgressTeams: string[]; pendingTeams: string[]; completedSites: string[]; inProgressSites: string[]; pendingSites: string[] }[]
-  todayStatusBreakdown: { status: string; count: number; percentage: number }[]
-  todayTeamBreakdown: { team: string; count: number; completed: number; pending: number; activities: string[]; sites: string[]; activitySites: Record<string, string[]> }[]
-  topTeams: { team: string; count: number; completionRate: number }[]
+// Helper function to compress data for localStorage
+const compressData = (data: any[]): string => {
+  // Remove unnecessary fields and compress
+  const compressed = data.map(row => {
+    // Only keep essential fields
+    const essential: any = {}
+    const keepFields = [
+      'Project No.', 'Project Name', 'PO Number', 'Line', 'Ship',
+      'Site ID', 'Site ID PO', 'Site Name', 'Area', 'Contract Number',
+      'SOW', 'Qty', 'Unit', 'Payment terms', 'Start Date', 'End Date',
+      'Amount', 'Invoice Amount', 'Invoice Pending', 'Remaining',
+      '_sheet', '_spreadsheet'
+    ]
+    
+    // Find and include status field dynamically
+    const statusKey = Object.keys(row).find(key => 
+      key.toLowerCase().includes('status') && 
+      !key.toLowerCase().includes('site') &&
+      !key.toLowerCase().includes('payment')
+    )
+    if (statusKey) keepFields.push(statusKey)
+    
+    keepFields.forEach(field => {
+      if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
+        essential[field] = row[field]
+      }
+    })
+    return essential
+  })
+  return JSON.stringify(compressed)
 }
 
-export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalRecords: 0,
-    lastUpdated: 'Loading...',
-    todayTasks: 0,
-    todayCompleted: 0,
-    todayPending: 0,
-    todayInProgress: 0,
-    todayFailed: 0,
-    todayTeamsWorking: 0,
-    workingTeams: [],
-    idleTeams: [],
-    todaySites: [],
-    completedSites: [],
-    inProgressSites: [],
-    pendingSites: [],
-    failedSites: [],
-    todayActivityBreakdown: [],
-    todayStatusBreakdown: [],
-    todayTeamBreakdown: [],
-    topTeams: []
-  })
-  const [loading, setLoading] = useState(true)
-  const [selectedRegion, setSelectedRegion] = useState<string>('All')
-  const [selectedVendor, setSelectedVendor] = useState<string>('All')
-  const [selectedTeamCategory, setSelectedTeamCategory] = useState<string>('All')
-  const [selectedDateCategory, setSelectedDateCategory] = useState<string>('Today')
-  const [regions, setRegions] = useState<string[]>(['All'])
-  const [vendors, setVendors] = useState<string[]>(['All'])
-  const [teamCategories, setTeamCategories] = useState<string[]>(['All'])
-  const [flippedTeamCards, setFlippedTeamCards] = useState<{[key: number]: boolean}>({})
-  const [flippedActivityCards, setFlippedActivityCards] = useState<{[key: number]: boolean}>({})
-  const [zoomedActivityCard, setZoomedActivityCard] = useState<number | null>(null)
-  const [zoomedTeamCard, setZoomedTeamCard] = useState<number | null>(null)
-  const [zoomedStatsCard, setZoomedStatsCard] = useState<number | null>(null)
-
-  useEffect(() => {
-    const loadDashboardData = async () => {
+// Helper function to safely set localStorage with size check
+const safeSetItem = (key: string, value: string): boolean => {
+  try {
+    // Check if storage would exceed 4MB (safe limit)
+    const estimatedSize = value.length + key.length
+    if (estimatedSize > 4 * 1024 * 1024) {
+      console.warn('Data too large for localStorage, skipping cache')
+      return false
+    }
+    localStorage.setItem(key, value)
+    return true
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      console.warn('localStorage quota exceeded, clearing old cache')
+      // Try to clear old PO caches and retry
+      localStorage.removeItem('po_huawei_full_data_cache')
+      localStorage.removeItem('po_huawei_dashboard_cache')
       try {
-        // Fetch data from Daily Plan API
-        const response = await fetch('/api/sheets')
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch data')
-        }
-        
-        const result = await response.json()
-        const data = result.data || []
-        
-        
-        // Extract unique regions from data
-        const uniqueRegions = Array.from(new Set(
-          data
-            .map((row: any) => row.Region || row.region)
-            .filter((region: any) => region && region !== '')
-        )) as string[]
-        setRegions(['All', ...uniqueRegions.sort()])
-
-        // Extract unique vendors from data
-        const uniqueVendors = Array.from(new Set(
-          data
-            .map((row: any) => row.Vendor || row.vendor)
-            .filter((vendor: any) => vendor && vendor !== '')
-        )) as string[]
-        setVendors(['All', ...uniqueVendors.sort()])
-
-        // Extract unique team categories from data
-        const uniqueTeamCategories = Array.from(new Set(
-          data
-            .map((row: any) => row['Team Category'] || row.teamCategory || row.team_category)
-            .filter((category: any) => category && category !== '')
-        )) as string[]
-        setTeamCategories(['All', ...uniqueTeamCategories.sort()])
-        
-        
-        
-        // Get date ranges based on selected category
-        const today = new Date()
-        today.setHours(0, 0, 0, 0) // Reset to start of day
-        const todayStr = today.toISOString().split('T')[0]
-        
-        let startDateStr = todayStr
-        let endDateStr = todayStr
-        
-        switch (selectedDateCategory) {
-          case 'Today':
-            startDateStr = todayStr
-            endDateStr = todayStr
-            break
-          case 'Tomorrow':
-            const tomorrow = new Date(today)
-            tomorrow.setDate(tomorrow.getDate() + 1)
-            startDateStr = tomorrow.toISOString().split('T')[0]
-            endDateStr = startDateStr
-            break
-          case 'This Week':
-            // Get start of week (Monday)
-            const startOfWeek = new Date(today)
-            const day = startOfWeek.getDay()
-            const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1)
-            startOfWeek.setDate(diff)
-            startDateStr = startOfWeek.toISOString().split('T')[0]
-            
-            // Get end of week (Sunday)
-            const endOfWeek = new Date(startOfWeek)
-            endOfWeek.setDate(endOfWeek.getDate() + 6)
-            endDateStr = endOfWeek.toISOString().split('T')[0]
-            break
-          case 'This Month':
-            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-            startDateStr = startOfMonth.toISOString().split('T')[0]
-
-            const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-            endDateStr = endOfMonth.toISOString().split('T')[0]
-            break
-          case 'This Year':
-            const startOfYear = new Date(today.getFullYear(), 0, 1)
-            startDateStr = startOfYear.toISOString().split('T')[0]
-
-            const endOfYear = new Date(today.getFullYear(), 11, 31)
-            endDateStr = endOfYear.toISOString().split('T')[0]
-            break
-        }
-        
-        // Get month start date (for team performance)
-        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
-        const monthStartStr = monthStart.toISOString().split('T')[0]
-        
-        
-        // Filter data based on selected date range
-        let todayData = data.filter((row: any) => {
-          if (!row.Date) return false
-          
-          try {
-            const rowDate = new Date(row.Date)
-            const rowDateStr = rowDate.toISOString().split('T')[0]
-            
-            // Check if date is within the selected range
-            return rowDateStr >= startDateStr && rowDateStr <= endDateStr
-          } catch (e) {
-            return false
-          }
-        })
-        
-        // Apply region filter if not "All"
-        if (selectedRegion !== 'All') {
-          todayData = todayData.filter((row: any) => {
-            const rowRegion = row.Region || row.region || ''
-            return rowRegion === selectedRegion
-          })
-        }
-
-        // Apply vendor filter if not "All"
-        if (selectedVendor !== 'All') {
-          todayData = todayData.filter((row: any) => {
-            const rowVendor = row.Vendor || row.vendor || ''
-            return rowVendor === selectedVendor
-          })
-        }
-
-        // Apply team category filter if not "All"
-        if (selectedTeamCategory !== 'All') {
-          todayData = todayData.filter((row: any) => {
-            const rowTeamCategory = row['Team Category'] || row.teamCategory || row.team_category || ''
-            return rowTeamCategory === selectedTeamCategory
-          })
-        }
-        
-        // Filter this month's data for team performance (from day 1 to today)
-        let monthData = data.filter((row: any) => {
-          if (!row.Date) return false
-          try {
-            const rowDate = new Date(row.Date)
-            const rowDateStr = rowDate.toISOString().split('T')[0]
-            return rowDateStr >= monthStartStr && rowDateStr <= todayStr
-          } catch (e) {
-            return false
-          }
-        })
-        
-        // Apply region filter to month data
-        if (selectedRegion !== 'All') {
-          monthData = monthData.filter((row: any) => {
-            const rowRegion = row.Region || row.region || ''
-            return rowRegion === selectedRegion
-          })
-        }
-
-        // Apply vendor filter to month data
-        if (selectedVendor !== 'All') {
-          monthData = monthData.filter((row: any) => {
-            const rowVendor = row.Vendor || row.vendor || ''
-            return rowVendor === selectedVendor
-          })
-        }
-
-        // Apply team category filter to month data
-        if (selectedTeamCategory !== 'All') {
-          monthData = monthData.filter((row: any) => {
-            const rowTeamCategory = row['Team Category'] || row.teamCategory || row.team_category || ''
-            return rowTeamCategory === selectedTeamCategory
-          })
-        }
-        
-        
-        // Calculate today's statistics
-        let todayCompleted = 0
-        let todayPending = 0
-        let todayInProgress = 0
-        let todayFailed = 0
-        
-        const activityCounts: Record<string, { count: number; completed: number; pending: number; inProgress: number; completedTeams: Set<string>; inProgressTeams: Set<string>; pendingTeams: Set<string>; completedSites: Set<string>; inProgressSites: Set<string>; pendingSites: Set<string> }> = {}
-        const statusCounts: Record<string, number> = {}
-        const teamCountsMonth: Record<string, { count: number; completed: number; pending: number; activities: Set<string>; sites: Set<string>; activitySites: Record<string, Set<string>> }> = {}
-        const todayTeamsWorking = new Set<string>() // Track teams working today
-        const todaySitesSet = new Set<string>()
-        const completedSitesSet = new Set<string>()
-        const inProgressSitesSet = new Set<string>()
-        const pendingSitesSet = new Set<string>()
-        const failedSitesSet = new Set<string>()
-        
-        // Process today's data for activities and status
-        todayData.forEach((row: any) => {
-          const status = row.Status || 'No Status'
-          const activity = row.Activity || 'No Activity'
-          // Try multiple possible field names for team
-          const team = row['Team Name'] || row['Team'] || row['team'] || row['team_name'] || row['TeamName'] || 'No Team'
-          // Try multiple possible field names for site
-          const site = row['Site ID'] || row['Site'] || row['site'] || row['site_id'] || row['SiteID'] || row['Site Name'] || 'No Site'
-          
-          // Debug: log first few rows to see team field
-          const rowIndex = todayData.indexOf(row)
-          
-          // Determine task state based on dashboard status mapping
-          // On Plan > Pending, On Going > In Progress, Carry Over > Completed, Done > Completed, Failed > Failed, Idle > idle teams, Off > idle teams
-          const normalizedStatus = status.toLowerCase().trim()
-          const isDone = normalizedStatus === 'carry over' || normalizedStatus === 'done'
-          const isInProgress = normalizedStatus === 'on going'
-          const isFailed = normalizedStatus === 'failed'
-          const isIdle = normalizedStatus === 'idle' || normalizedStatus === 'off'
-
-          // Track teams working today (exclude 'No Team' and idle teams)
-          if (team && team !== 'No Team' && team.trim() !== '' && !isIdle) {
-            todayTeamsWorking.add(team)
-          }
-          
-          // Track sites
-          if (site && site !== 'No Site' && site.trim() !== '') {
-            todaySitesSet.add(site)
-          }
-          
-          // Count by status
-          statusCounts[status] = (statusCounts[status] || 0) + 1
-          
-          if (isDone) {
-            todayCompleted++
-            if (site && site !== 'No Site' && site.trim() !== '') {
-              completedSitesSet.add(site)
-            }
-          } else if (isInProgress) {
-            todayInProgress++
-            if (site && site !== 'No Site' && site.trim() !== '') {
-              inProgressSitesSet.add(site)
-            }
-          } else if (isFailed) {
-            todayFailed++
-            if (site && site !== 'No Site' && site.trim() !== '') {
-              failedSitesSet.add(site)
-            }
-          } else {
-            todayPending++
-            if (site && site !== 'No Site' && site.trim() !== '') {
-              pendingSitesSet.add(site)
-            }
-          }
-          
-          // Count by activity with status breakdown
-          if (!activityCounts[activity]) {
-            activityCounts[activity] = {
-              count: 0,
-              completed: 0,
-              pending: 0,
-              inProgress: 0,
-              completedTeams: new Set(),
-              inProgressTeams: new Set(),
-              pendingTeams: new Set(),
-              completedSites: new Set(),
-              inProgressSites: new Set(),
-              pendingSites: new Set()
-            }
-          }
-          activityCounts[activity].count++
-          if (isDone) {
-            activityCounts[activity].completed++
-            if (team && team !== 'No Team' && team.trim() !== '') {
-              activityCounts[activity].completedTeams.add(team)
-            }
-            if (site && site !== 'No Site' && site.trim() !== '') {
-              activityCounts[activity].completedSites.add(site)
-            }
-          } else if (isInProgress) {
-            activityCounts[activity].inProgress++
-            if (team && team !== 'No Team' && team.trim() !== '') {
-              activityCounts[activity].inProgressTeams.add(team)
-            }
-            if (site && site !== 'No Site' && site.trim() !== '') {
-              activityCounts[activity].inProgressSites.add(site)
-            }
-          } else {
-            activityCounts[activity].pending++
-            if (team && team !== 'No Team' && team.trim() !== '') {
-              activityCounts[activity].pendingTeams.add(team)
-            }
-            if (site && site !== 'No Site' && site.trim() !== '') {
-              activityCounts[activity].pendingSites.add(site)
-            }
-          }
-        })
-        
-        // Process selected date range data for team performance
-        todayData.forEach((row: any) => {
-          const status = row.Status || 'No Status'
-          const activity = row.Activity || 'No Activity'
-          // Try multiple possible field names for team
-          const team = row['Team Name'] || row['Team'] || row['team'] || row['team_name'] || row['TeamName'] || 'No Team'
-
-          // Use same status mapping for monthly data
-          const normalizedStatus = status.toLowerCase().trim()
-          const isDone = normalizedStatus === 'carry over' || normalizedStatus === 'done'
-          
-          // Count by team (monthly) - exclude 'No Team'
-          if (team && team !== 'No Team' && team.trim() !== '') {
-            if (!teamCountsMonth[team]) {
-              teamCountsMonth[team] = { count: 0, completed: 0, pending: 0, activities: new Set(), sites: new Set(), activitySites: {} }
-            }
-            teamCountsMonth[team].count++
-            if (isDone) teamCountsMonth[team].completed++
-            else teamCountsMonth[team].pending++
-            teamCountsMonth[team].activities.add(activity)
-            // Try multiple possible field names for site
-            const site = row['Site ID'] || row['Site'] || row['site'] || row['site_id'] || row['SiteID'] || row['Site Name'] || 'No Site'
-            if (site && site !== 'No Site' && site.trim() !== '') {
-              teamCountsMonth[team].sites.add(site)
-              // Group sites by activity
-              if (!teamCountsMonth[team].activitySites[activity]) {
-                teamCountsMonth[team].activitySites[activity] = new Set()
-              }
-              teamCountsMonth[team].activitySites[activity].add(site)
-            }
-          }
-        })
-        
-        // Sort activity breakdown
-        const todayActivityBreakdown = Object.entries(activityCounts)
-          .map(([activity, data]) => ({
-            activity,
-            count: data.count,
-            completed: data.completed,
-            pending: data.pending,
-            inProgress: data.inProgress,
-            completedTeams: Array.from(data.completedTeams),
-            inProgressTeams: Array.from(data.inProgressTeams),
-            pendingTeams: Array.from(data.pendingTeams),
-            completedSites: Array.from(data.completedSites),
-            inProgressSites: Array.from(data.inProgressSites),
-            pendingSites: Array.from(data.pendingSites)
-          }))
-          .sort((a, b) => b.count - a.count)
-        
-        // Sort status breakdown
-        const todayStatusBreakdown = Object.entries(statusCounts)
-          .map(([status, count]) => ({
-            status,
-            count,
-            percentage: (count / todayData.length) * 100
-          }))
-          .sort((a, b) => b.count - a.count)
-        
-        // Sort team breakdown (using monthly data)
-        const todayTeamBreakdown = Object.entries(teamCountsMonth)
-          .map(([team, data]: [string, any]) => ({
-            team,
-            count: data.count,
-            completed: data.completed,
-            pending: data.pending,
-            activities: Array.from(data.activities) as string[],
-            sites: Array.from(data.sites) as string[],
-            activitySites: Object.fromEntries(
-              Object.entries(data.activitySites).map(([activity, sitesSet]: [string, any]) => [
-                activity,
-                Array.from(sitesSet) as string[]
-              ])
-            )
-          }))
-          .sort((a, b) => b.count - a.count)
-        
-        // Top 3 teams by completion rate
-        const topTeams = todayTeamBreakdown
-          .map(team => ({
-            team: team.team,
-            count: team.count,
-            completionRate: team.count > 0 ? (team.completed / team.count) * 100 : 0
-          }))
-          .sort((a, b) => b.completionRate - a.completionRate)
-          .slice(0, 3)
-        
-        // Find idle teams (teams in selected period data but not working in the period)
-        const allTeamsInPeriod = new Set(Object.keys(teamCountsMonth))
-        const idleTeams = Array.from(allTeamsInPeriod).filter(team => !todayTeamsWorking.has(team))
-        
-        
-        setStats({
-          totalRecords: data.length,
-          lastUpdated: new Date().toLocaleString(),
-          todayTasks: todayData.length,
-          todayCompleted,
-          todayPending,
-          todayInProgress,
-          todayFailed,
-          todayTeamsWorking: todayTeamsWorking.size,
-          workingTeams: Array.from(todayTeamsWorking).sort(),
-          idleTeams: idleTeams.sort(),
-          todaySites: Array.from(todaySitesSet).sort(),
-          completedSites: Array.from(completedSitesSet).sort(),
-          inProgressSites: Array.from(inProgressSitesSet).sort(),
-          pendingSites: Array.from(pendingSitesSet).sort(),
-          failedSites: Array.from(failedSitesSet).sort(),
-          todayActivityBreakdown,
-          todayStatusBreakdown,
-          todayTeamBreakdown,
-          topTeams
-        })
-        
-      } catch (error) {
-      } finally {
-        setLoading(false)
+        localStorage.setItem(key, value)
+        return true
+      } catch (retryError) {
+        console.error('Still failed after clearing cache')
+        return false
       }
     }
+    console.error('Error setting localStorage:', e)
+    return false
+  }
+}
 
-    loadDashboardData()
+interface DashboardSummary {
+  daily: {
+    totalTasks: number
+    completed: number
+    inProgress: number
+    pending: number
+    teamsWorking: number
+  }
+  itcHuawei: {
+    totalSites: number
+    mosCompleted: number
+    atpApproved: number
+    surveyCompleted: number
+  }
+  poHuawei: {
+    totalSites: number
+    statusCounts: {
+      cancelled: number
+      closed: number
+      longAging: number
+      new: number
+      open: number
+    }
+    totalAmount: number
+    cancelledAmount: number
+    invoiced: number
+  }
+}
+
+export default function LandingDashboard() {
+  const [summary, setSummary] = useState<DashboardSummary>({
+    daily: {
+      totalTasks: 0,
+      completed: 0,
+      inProgress: 0,
+      pending: 0,
+      teamsWorking: 0
+    },
+    itcHuawei: {
+      totalSites: 0,
+      mosCompleted: 0,
+      atpApproved: 0,
+      surveyCompleted: 0
+    },
+    poHuawei: {
+      totalSites: 0,
+      statusCounts: {
+        cancelled: 0,
+        closed: 0,
+        longAging: 0,
+        new: 0,
+        open: 0
+      },
+      totalAmount: 0,
+      cancelledAmount: 0,
+      invoiced: 0
+    }
+  })
+  const [loading, setLoading] = useState(true)
+  const [poLoading, setPoLoading] = useState(true)
+
+  useEffect(() => {
+    loadSummaryData()
+  }, [])
+
+  const loadSummaryData = async () => {
+    setLoading(true)
+    setPoLoading(true)
     
-    // Auto refresh every 5 minutes (300000 ms)
-    const refreshInterval = setInterval(() => {
-      loadDashboardData()
-    }, 300000)
-    
-    // Cleanup interval on unmount
-    return () => clearInterval(refreshInterval)
-  }, [selectedRegion, selectedVendor, selectedTeamCategory, selectedDateCategory]) // Re-run when filters change
+    try {
+      // Load Daily Plan and ITC Huawei in parallel (fast data)
+      const [dailyResponse, itcResponse] = await Promise.all([
+        fetch('/api/sheets'),
+        fetch('/api/sheets/itc-huawei')
+      ])
+
+      // Process Daily Plan data
+      if (dailyResponse.ok) {
+        const dailyData = await dailyResponse.json()
+        const data = dailyData.data || []
+        
+        // Filter today's data
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const todayStr = today.toISOString().split('T')[0]
+        
+        const todayData = data.filter((row: any) => {
+          if (!row.Date) return false
+          try {
+            const rowDate = new Date(row.Date)
+            const rowDateStr = rowDate.toISOString().split('T')[0]
+            return rowDateStr === todayStr
+          } catch (e) {
+            return false
+          }
+        })
+
+        let completed = 0
+        let inProgress = 0
+        let pending = 0
+        const teamsWorking = new Set<string>()
+
+        todayData.forEach((row: any) => {
+          const status = (row.Status || '').toLowerCase().trim()
+          const team = row['Team Name'] || row['Team'] || row['team']
+          
+          if (status === 'carry over' || status === 'done') {
+            completed++
+          } else if (status === 'on going') {
+            inProgress++
+          } else {
+            pending++
+          }
+
+          if (team && team !== 'No Team' && status !== 'idle' && status !== 'off') {
+            teamsWorking.add(team)
+          }
+        })
+
+        setSummary(prev => ({
+          ...prev,
+          daily: {
+            totalTasks: todayData.length,
+            completed,
+            inProgress,
+            pending,
+            teamsWorking: teamsWorking.size
+          }
+        }))
+      }
+
+      // Process ITC Huawei data
+      if (itcResponse.ok) {
+        const itcData = await itcResponse.json()
+        const data = itcData.data || []
+        
+        let mosCompleted = 0
+        let atpApproved = 0
+        let surveyCompleted = 0
+
+        data.forEach((row: any) => {
+          if (row['MOS'] && row['MOS'] !== 'N/A' && row['MOS'] !== '') mosCompleted++
+          if (row['ATP Approved'] && row['ATP Approved'] !== 'N/A' && row['ATP Approved'] !== '') atpApproved++
+          if (row['Survey'] && row['Survey'] !== 'N/A' && row['Survey'] !== '') surveyCompleted++
+        })
+
+        setSummary(prev => ({
+          ...prev,
+          itcHuawei: {
+            totalSites: data.length,
+            mosCompleted,
+            atpApproved,
+            surveyCompleted
+          }
+        }))
+      }
+
+      // Mark initial load complete (Daily + ITC loaded)
+      setLoading(false)
+
+      // Load PO Huawei data in background (large dataset)
+      loadPOData()
+
+    } catch (error) {
+      console.error('Error loading summary data:', error)
+      setLoading(false)
+      setPoLoading(false)
+    }
+  }
+
+  const loadPOData = async () => {
+    try {
+      // Check cache first
+      const cacheKey = 'po_huawei_dashboard_cache'
+      const cacheTimestampKey = 'po_huawei_dashboard_cache_timestamp'
+      const cacheExpiry = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+      
+      const cachedData = localStorage.getItem(cacheKey)
+      const cachedTimestamp = localStorage.getItem(cacheTimestampKey)
+      
+      // Check if cache exists and is not expired
+      if (cachedData && cachedTimestamp) {
+        const timestamp = parseInt(cachedTimestamp)
+        const now = Date.now()
+        
+        if (now - timestamp < cacheExpiry) {
+          // Use cached data
+          const cached = JSON.parse(cachedData)
+          setSummary(prev => ({
+            ...prev,
+            poHuawei: cached
+          }))
+          setPoLoading(false)
+          return
+        }
+      }
+      
+      // No cache or expired - fetch fresh data
+      const poResponse = await fetch('/api/sheets/po-huawei')
+      if (poResponse.ok) {
+        const poData = await poResponse.json()
+        const data = poData.data || []
+        
+        // Save full data to cache for detail dashboard with compression
+        const fullDataCacheKey = 'po_huawei_full_data_cache'
+        const fullDataCacheTimestampKey = 'po_huawei_full_data_cache_timestamp'
+        const compressedData = compressData(data)
+        const cacheSaved = safeSetItem(fullDataCacheKey, compressedData)
+        
+        if (cacheSaved) {
+          safeSetItem(fullDataCacheTimestampKey, Date.now().toString())
+          console.log('PO full data cache saved successfully')
+        } else {
+          console.warn('PO full data cache not saved due to size limitations')
+        }
+        
+        const uniqueSiteIDs = new Set(data.map((row: any) => row['Site ID'] || row['Site ID PO']))
+        
+        const statusCounts = {
+          cancelled: 0,
+          closed: 0,
+          longAging: 0,
+          new: 0,
+          open: 0
+        }
+        
+        let totalAmount = 0
+        let cancelledAmount = 0
+        let invoiced = 0
+
+        data.forEach((row: any) => {
+          const amount = parseFloat(row['Amount']?.toString().replace(/,/g, '') || '0')
+          const invoiceAmount = parseFloat(row['Invoice Amount']?.toString().replace(/,/g, '') || '0')
+          
+          // Find status column dynamically
+          const keys = Object.keys(row)
+          const statusKey = keys.find(key => 
+            key.toLowerCase().includes('status') && 
+            !key.toLowerCase().includes('site') &&
+            !key.toLowerCase().includes('payment')
+          )
+          const status = (statusKey && row[statusKey] ? row[statusKey].toString() : '').toUpperCase().trim()
+          
+          totalAmount += amount
+          invoiced += invoiceAmount
+          
+          // Count status (case-insensitive)
+          if (status === 'CANCELLED' || status === 'CANCEL') {
+            statusCounts.cancelled++
+            cancelledAmount += amount
+          } else if (status === 'CLOSED' || status === 'CLOSE') {
+            statusCounts.closed++
+          } else if (status === 'LONG AGING' || status === 'LONGAGING' || status.includes('LONG')) {
+            statusCounts.longAging++
+          } else if (status === 'NEW') {
+            statusCounts.new++
+          } else if (status === 'OPEN') {
+            statusCounts.open++
+          }
+        })
+
+        const poSummary = {
+          totalSites: uniqueSiteIDs.size,
+          statusCounts,
+          totalAmount,
+          cancelledAmount,
+          invoiced
+        }
+
+        // Save summary to cache with safe storage
+        const summaryCacheSaved = safeSetItem(cacheKey, JSON.stringify(poSummary))
+        if (summaryCacheSaved) {
+          safeSetItem(cacheTimestampKey, Date.now().toString())
+          console.log('PO summary cache saved successfully')
+        }
+
+        setSummary(prev => ({
+          ...prev,
+          poHuawei: poSummary
+        }))
+      }
+    } catch (error) {
+      console.error('Error loading PO data:', error)
+    } finally {
+      setPoLoading(false)
+    }
+  }
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value)
+  }
 
   const dashboardCards = [
     {
-      title: "Total Tasks",
-      value: stats.todayTasks,
+      title: 'Daily Operations',
+      description: 'Real-time task management and team performance',
       icon: Calendar,
-      color: 'bg-gradient-to-br from-blue-500 to-indigo-600',
-      change: loading ? '...' : `${stats.todayTasks} tasks`,
-      description: selectedDateCategory === 'Today' ? 'Scheduled for today' : selectedDateCategory === 'Tomorrow' ? 'Scheduled for tomorrow' : selectedDateCategory === 'This Year' ? 'Scheduled for this year' : `Scheduled for ${selectedDateCategory.toLowerCase()}`,
-      showDetail: true,
-      siteList: stats.todaySites,
-      flipTitle: selectedDateCategory === 'Today' ? '📍 Today\'s Sites' : selectedDateCategory === 'Tomorrow' ? '📍 Tomorrow\'s Sites' : selectedDateCategory === 'This Year' ? '📍 This Year\'s Sites' : `📍 ${selectedDateCategory} Sites`,
-      flipColor: 'from-blue-50 to-indigo-50',
-      flipBorder: 'border-blue-200'
-    },
-    {
-      title: 'Teams Working',
-      value: stats.todayTeamsWorking,
-      icon: Users,
-      color: 'bg-gradient-to-br from-purple-500 to-violet-600',
-      change: loading ? '...' : `${stats.todayTeamsWorking} teams active`,
-      description: selectedDateCategory === 'Today' ? 'Teams working today' : selectedDateCategory === 'Tomorrow' ? 'Teams working tomorrow' : selectedDateCategory === 'This Year' ? 'Teams working this year' : `Teams working in ${selectedDateCategory.toLowerCase()}`,
-      showDetail: true,
-      siteList: stats.workingTeams,
-      flipTitle: '👥 Working Teams',
-      flipColor: 'from-purple-50 to-violet-50',
-      flipBorder: 'border-purple-200',
-      idleList: stats.idleTeams
-    },
-    {
-      title: 'Completed',
-      value: stats.todayCompleted,
-      icon: CheckCircle2,
-      color: 'bg-gradient-to-br from-emerald-500 to-green-600',
-      change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayCompleted / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
-      description: selectedDateCategory === 'Today' ? 'Tasks completed today' : selectedDateCategory === 'Tomorrow' ? 'Tasks completed tomorrow' : selectedDateCategory === 'This Year' ? 'Tasks completed this year' : 'Tasks completed',
-      showDetail: true,
-      siteList: stats.completedSites,
-      flipTitle: '✅ Completed Sites',
-      flipColor: 'from-emerald-50 to-green-50',
-      flipBorder: 'border-emerald-200'
-    },
-    {
-      title: 'In Progress',
-      value: stats.todayInProgress,
-      icon: Clock,
-      color: 'bg-gradient-to-br from-amber-500 to-orange-600',
-      change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayInProgress / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
-      description: selectedDateCategory === 'Today' ? 'Tasks in progress today' : selectedDateCategory === 'Tomorrow' ? 'Tasks in progress tomorrow' : selectedDateCategory === 'This Year' ? 'Tasks in progress this year' : 'Tasks in progress',
-      showDetail: true,
-      siteList: stats.inProgressSites,
-      flipTitle: '⏳ In Progress Sites',
-      flipColor: 'from-amber-50 to-orange-50',
-      flipBorder: 'border-amber-200'
-    },
-    {
-      title: 'Pending',
-      value: stats.todayPending,
-      icon: AlertCircle,
-      color: 'bg-gradient-to-br from-rose-500 to-red-600',
-      change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayPending / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
-      description: selectedDateCategory === 'Today' ? 'Tasks pending today' : selectedDateCategory === 'Tomorrow' ? 'Tasks pending tomorrow' : selectedDateCategory === 'This Year' ? 'Tasks pending this year' : 'Tasks pending',
-      showDetail: true,
-      siteList: stats.pendingSites,
-      flipTitle: '⚠️ Pending Sites',
-      flipColor: 'from-rose-50 to-pink-50',
-      flipBorder: 'border-rose-200'
-    },
-    {
-      title: 'Failed',
-      value: stats.todayFailed,
-      icon: XCircle,
-      color: 'bg-gradient-to-br from-red-600 to-red-700',
-      change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayFailed / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
-      description: selectedDateCategory === 'Today' ? 'Tasks failed today' : selectedDateCategory === 'Tomorrow' ? 'Tasks failed tomorrow' : selectedDateCategory === 'This Year' ? 'Tasks failed this year' : 'Tasks failed',
-      showDetail: true,
-      siteList: stats.failedSites,
-      flipTitle: '❌ Failed Sites',
-      flipColor: 'from-red-50 to-red-100',
-      flipBorder: 'border-red-300'
-    },
-  ];
-
-  const quickActions = [
-    {
-      title: 'View Daily Plans',
-      description: 'Access and manage daily planning data',
-      icon: Calendar,
-      href: '/daily-plan',
-      color: 'bg-blue-50 text-blue-600 border-blue-200'
+      href: '/dashboard/daily',
+      color: 'from-blue-500 to-indigo-600',
+      stats: [
+        { label: 'Total Tasks', value: summary.daily.totalTasks, icon: Activity },
+        { label: 'Completed', value: summary.daily.completed, icon: CheckCircle2 },
+        { label: 'In Progress', value: summary.daily.inProgress, icon: Clock },
+        { label: 'Teams Working', value: summary.daily.teamsWorking, icon: Users }
+      ]
     },
     {
       title: 'ITC Huawei Rollout',
-      description: 'Track Huawei project rollout progress',
-      icon: Activity,
-      href: '/itc-huawei',
-      color: 'bg-red-50 text-red-600 border-red-200'
-    },
-    {
-      title: 'Huawei Dashboard',
-      description: 'View project analytics and metrics',
-      icon: BarChart3,
+      description: 'Project rollout progress and site tracking',
+      icon: TrendingUp,
       href: '/dashboard/itc-huawei',
-      color: 'bg-indigo-50 text-indigo-600 border-indigo-200'
+      color: 'from-emerald-500 to-green-600',
+      stats: [
+        { label: 'Total Sites', value: summary.itcHuawei.totalSites, icon: Activity },
+        { label: 'Survey Done', value: summary.itcHuawei.surveyCompleted, icon: CheckCircle2 },
+        { label: 'MOS Completed', value: summary.itcHuawei.mosCompleted, icon: BarChart3 },
+        { label: 'ATP Approved', value: summary.itcHuawei.atpApproved, icon: CheckCircle2 }
+      ]
     },
     {
-      title: 'Generate Reports',
-      description: 'Create and download reports',
+      title: 'PO Management',
+      description: 'Purchase order tracking and financial overview',
       icon: FileText,
-      href: '/reports',
-      color: 'bg-purple-50 text-purple-600 border-purple-200'
+      href: '/dashboard/po-huawei',
+      color: 'from-purple-500 to-violet-600',
+      loading: poLoading,
+      stats: [
+        { label: 'Unique Sites', value: summary.poHuawei.totalSites, icon: MapPin },
+        { 
+          label: 'Status Breakdown', 
+          value: `${summary.poHuawei.statusCounts.open} Open`, 
+          detail: `${summary.poHuawei.statusCounts.new} New | ${summary.poHuawei.statusCounts.closed} Closed | ${summary.poHuawei.statusCounts.longAging} Long Aging | ${summary.poHuawei.statusCounts.cancelled} Cancelled`,
+          icon: Activity 
+        },
+        { 
+          label: 'Total Amount', 
+          value: formatCurrency(summary.poHuawei.totalAmount), 
+          detail: `Cancelled: ${formatCurrency(summary.poHuawei.cancelledAmount)}`,
+          icon: DollarSign 
+        },
+        { label: 'Invoiced', value: formatCurrency(summary.poHuawei.invoiced), icon: CheckCircle2 }
+      ]
     }
-  ];
+  ]
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
-      {/* Header Section - Fixed */}
-      <div className="flex-none">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 bg-white rounded-xl shadow-sm border border-slate-200/60 p-3">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
-              <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
-                <Calendar className="h-4 w-4 text-white" />
-              </div>
-              Daily Dashboard
-            </h1>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Real-time overview of tasks and team performance
-            </p>
-          </div>
-          
-          <div className="mt-2 sm:mt-0 flex flex-col items-end gap-1">
-            <div className="text-xs text-slate-600 bg-slate-50 px-2 py-1 rounded-lg">
-              <span className="font-semibold">{new Date().toLocaleDateString('id-ID', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-              })}</span>
-            </div>
-            <div className="text-[10px] text-slate-500">
-              Last updated: {stats.lastUpdated}
-            </div>
+    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 overflow-y-auto p-3">
+      {/* Loading State */}
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 text-blue-600 animate-spin mx-auto mb-4" />
+            <p className="text-slate-600">Loading dashboard data...</p>
           </div>
         </div>
-
-        {/* Filters and Quick Actions Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-10 gap-3 mb-3">
-          {/* Filters */}
-          <div className="lg:col-span-7 bg-gradient-to-br from-white via-blue-50/30 to-white rounded-xl shadow-sm border-2 border-slate-100 hover:border-blue-200 transition-all">
-            <div className="px-3 py-1.5 border-b border-slate-100 bg-white/50 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <div className="p-1 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-sm">
-                  <Filter className="h-3 w-3 text-white" />
-                </div>
-                <h3 className="text-xs font-medium text-slate-800">Filters</h3>
-              </div>
-            </div>
-            <div className="p-2">
-              <div className="space-y-1.5">
-                {/* Region Filter */}
+      ) : (
+        <>
+          {/* Single Unified Container */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            {/* Header */}
+            <div className="mb-4 pb-4 border-b border-slate-200">
+              <div className="flex items-center justify-between">
                 <div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 min-w-[120px]">
-                      <div className="w-0.5 h-3.5 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-full"></div>
-                      <span className="text-xs font-medium text-slate-700">Region</span>
+                  <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-sm">
+                      <BarChart3 className="h-5 w-5 text-white" />
                     </div>
-                    <div className="h-4 w-px bg-slate-200"></div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {regions.map((region) => (
-                        <button
-                          key={region}
-                          onClick={() => setSelectedRegion(region)}
-                          className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-all duration-200 ${
-                            selectedRegion === region
-                              ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md scale-105'
-                              : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                          }`}
-                        >
-                          {region}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                    Dashboard Overview
+                  </h1>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Comprehensive view of all operations and projects
+                  </p>
                 </div>
-
-                {/* Vendor Filter */}
-                <div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 min-w-[120px]">
-                      <div className="w-0.5 h-3.5 bg-gradient-to-b from-purple-500 to-violet-600 rounded-full"></div>
-                      <span className="text-xs font-medium text-slate-700">Vendor</span>
-                    </div>
-                    <div className="h-4 w-px bg-slate-200"></div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {vendors.map((vendor) => (
-                        <button
-                          key={vendor}
-                          onClick={() => setSelectedVendor(vendor)}
-                          className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-all duration-200 ${
-                            selectedVendor === vendor
-                              ? 'bg-gradient-to-r from-purple-500 to-violet-600 text-white shadow-md scale-105'
-                              : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                          }`}
-                        >
-                          {vendor}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Team Category Filter */}
-                <div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 min-w-[120px]">
-                      <div className="w-0.5 h-3.5 bg-gradient-to-b from-emerald-500 to-green-600 rounded-full"></div>
-                      <span className="text-xs font-medium text-slate-700">Team Category</span>
-                    </div>
-                    <div className="h-4 w-px bg-slate-200"></div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {teamCategories.map((category) => (
-                        <button
-                          key={category}
-                          onClick={() => setSelectedTeamCategory(category)}
-                          className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-all duration-200 ${
-                            selectedTeamCategory === category
-                              ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-md scale-105'
-                              : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                          }`}
-                        >
-                          {category}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Date Category Filter */}
-                <div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 min-w-[120px]">
-                      <div className="w-0.5 h-3.5 bg-gradient-to-b from-orange-500 to-red-600 rounded-full"></div>
-                      <span className="text-xs font-medium text-slate-700">Date Range</span>
-                    </div>
-                    <div className="h-4 w-px bg-slate-200"></div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {['Today', 'Tomorrow', 'This Week', 'This Month', 'This Year'].map((category) => (
-                        <button
-                          key={category}
-                          onClick={() => setSelectedDateCategory(category)}
-                          className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-all duration-200 ${
-                            selectedDateCategory === category
-                              ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-md scale-105'
-                              : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                          }`}
-                        >
-                          {category}
-                        </button>
-                      ))}
-                    </div>
+                <div className="text-right">
+                  <div className="text-xs text-slate-600 bg-gradient-to-br from-slate-50 to-slate-100 px-3 py-1.5 rounded-lg shadow-sm border border-slate-200">
+                    <span className="font-semibold">{new Date().toLocaleDateString('id-ID', { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}</span>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Quick Actions */}
-          <div className="lg:col-span-3 bg-gradient-to-br from-white via-indigo-50/30 to-white shadow-sm rounded-xl border-2 border-slate-100 hover:border-indigo-200 transition-all">
-            <div className="px-3 py-1.5 border-b border-slate-100 bg-white/50 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <div className="p-1 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg shadow-sm">
-                  <Filter className="h-3 w-3 text-white" />
-                </div>
-                <h3 className="text-xs font-medium text-slate-800">Quick Actions</h3>
-              </div>
-            </div>
-            <div className="p-2">
-              <div className="grid grid-cols-2 gap-1.5">
-                {quickActions.map((action, index) => {
-                  const IconComponent = action.icon
-                  return (
-                    <a
-                      key={index}
-                      href={action.href}
-                      className={`group relative p-2 border-2 rounded-lg hover:shadow-lg transition-all duration-300 ${action.color}`}
-                    >
-                      <div className="relative z-10">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <div className="p-1 bg-white/80 backdrop-blur-sm rounded-md shadow-sm">
-                            <IconComponent className="h-3.5 w-3.5" />
-                          </div>
-                          <h4 className="font-medium text-[11px] leading-tight">{action.title}</h4>
-                        </div>
-                        <p className="text-[8px] opacity-75 font-medium leading-tight">{action.description}</p>
-                      </div>
-                      {/* Hover Effect */}
-                      <div className="absolute inset-0 bg-gradient-to-br from-white/0 to-white/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></div>
-                    </a>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-3">
-          {dashboardCards.map((card, index) => {
-            const IconComponent = card.icon
-            const hasDetail = card.showDetail && card.siteList && card.siteList.length > 0 && !loading
-            
-            return (
-              <div 
-                key={index} 
-                className="bg-white overflow-hidden shadow-sm rounded-xl border border-slate-200/60 hover:shadow-md transition-all duration-300 cursor-pointer"
-                onClick={() => hasDetail && setZoomedStatsCard(index)}
-              >
-                <div className="p-4 h-[120px] flex flex-col">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <div className={`w-12 h-12 ${card.color} rounded-xl flex items-center justify-center shadow-md`}>
-                        <IconComponent className="h-6 w-6 text-white" />
-                      </div>
-                    </div>
-                    <div className="ml-4 w-0 flex-1">
-                      <dl>
-                        <dt className="text-xs font-medium text-slate-600 uppercase tracking-wider truncate">{card.title}</dt>
-                        <dd className="flex items-baseline mt-1">
-                          <div className="text-2xl font-semibold text-slate-900">
-                            {loading ? '...' : card.value}
-                          </div>
-                        </dd>
-                        <dd className="text-xs text-slate-500 mt-1 font-medium">{card.change}</dd>
-                      </dl>
-                    </div>
+            {/* Dashboard Modules Section */}
+            <div className="mb-4 pb-4 border-b border-slate-200">
+              <div className="mb-3">
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
+                    <Activity className="h-4 w-4 text-white" />
                   </div>
-                  {/* Click hint */}
-                  {hasDetail && (
-                    <div className="mt-auto pt-2.5 border-t border-slate-200">
-                      <div className="text-[10px] font-medium text-blue-600 flex items-center justify-center gap-1.5">
-                        <Maximize2 className="h-3 w-3" />
-                        {card.title === 'Teams Working' 
-                          ? `${card.siteList.length} Working • ${(card as any).idleList?.length || 0} Idle`
-                          : `${card.siteList.length} ${card.title === 'Teams Working' ? 'Team' : 'Site'}${card.siteList.length > 1 ? 's' : ''}`
-                        }
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  Dashboard Modules
+                </h2>
+                <p className="text-xs text-slate-600 mt-0.5">Access your key operational dashboards</p>
               </div>
-            )
-          })}
-        </div>
-      </div>
 
-      {/* Main Content - Fixed Height */}
-      <div className="flex-1 min-h-0">
-        {/* Today's Activities & Team Performance in 1 Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-full">
-          {/* Today's Activities - Compact */}
-          <div className="bg-white shadow-sm rounded-xl border border-slate-200/60 flex flex-col overflow-hidden">
-            <div className="px-4 py-2 border-b border-slate-200 flex-none">
-              <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <div className="p-1 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
-                  <Activity className="h-3 w-3 text-white" />
-                </div>
-                {selectedDateCategory === 'Today' ? "Today's Activities" : selectedDateCategory === 'Tomorrow' ? "Tomorrow's Activities" : selectedDateCategory === 'This Year' ? "This Year's Activities" : `${selectedDateCategory} Activities`}
-              </h3>
-              <p className="mt-0.5 text-[10px] text-slate-500">
-                Activity breakdown for {selectedDateCategory.toLowerCase()}
-              </p>
-            </div>
-            <div className="p-3 flex-1 overflow-y-auto">
-              {loading ? (
-                <div className="text-center py-8">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <p className="mt-2 text-sm text-slate-500">Loading data...</p>
-                </div>
-              ) : stats.todayActivityBreakdown.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
-                  No activities scheduled for {selectedDateCategory === 'This Year' ? 'this year' : selectedDateCategory.toLowerCase()}
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {stats.todayActivityBreakdown.slice(0, 10).map((item, index) => {
-                    const completionRate = item.count > 0 ? (item.completed / item.count) * 100 : 0
-                    const isFlipped = flippedActivityCards[index] || false
-
-                    return (
-                      <div
-                        key={index}
-                        className="relative h-[130px]"
-                        style={{ perspective: '1000px' }}
-                      >
-                        <div
-                          className={`relative w-full h-full transition-transform duration-500 ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}
-                          style={{ transformStyle: 'preserve-3d' }}
-                        >
-                          {/* Front Card */}
-                          <div
-                            className="absolute inset-0 rounded-xl p-3 bg-white hover:shadow-lg transition-all border-2 border-slate-100 hover:border-blue-200 cursor-pointer group"
-                            style={{ backfaceVisibility: 'hidden' }}
-                            onClick={() => setFlippedActivityCards(prev => ({ ...prev, [index]: true }))}
-                          >
-                            <div className="h-full flex flex-col">
-                              {/* Header */}
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex-1 min-w-0">
-                                  <h4 className="text-xs font-medium text-slate-800 truncate mb-1.5 group-hover:text-blue-600 transition-colors">
-                                    {item.activity}
-                                  </h4>
-                                  <div className="flex items-center gap-1.5 text-[10px] flex-wrap">
-                                    <div className="flex items-center gap-0.5">
-                                      <span className="text-emerald-600 font-medium">Completed:</span>
-                                      <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded font-semibold">{item.completed}</span>
-                                    </div>
-                                    <div className="flex items-center gap-0.5">
-                                      <span className="text-amber-600 font-medium">In Progress:</span>
-                                      <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-semibold">{item.inProgress}</span>
-                                    </div>
-                                    <div className="flex items-center gap-0.5">
-                                      <span className="text-rose-600 font-medium">Pending:</span>
-                                      <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 rounded font-semibold">{item.pending}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="ml-2 text-center">
-                                  <div className="text-2xl font-semibold text-slate-900 leading-none">{item.count}</div>
-                                  <div className="text-[8px] text-slate-500 font-normal mt-0.5">TASKS</div>
-                                </div>
-                              </div>
-
-                              {/* Progress Section */}
-                              <div className="mt-auto">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="text-[9px] font-medium text-slate-600">COMPLETION</span>
-                                  <span className="text-xs font-medium text-emerald-600">{completionRate.toFixed(0)}%</span>
-                                </div>
-                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                                  <div
-                                    className="bg-gradient-to-r from-emerald-400 via-emerald-500 to-green-600 h-2 rounded-full transition-all duration-500 shadow-sm"
-                                    style={{ width: `${completionRate}%` }}
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Flip Hint */}
-                              <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="text-[9px] text-blue-500 font-medium bg-blue-50 px-1.5 py-0.5 rounded">📊</div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Back Card (Details) */}
-                          <div
-                            className="absolute inset-0 rounded-xl bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-50 p-4 overflow-y-auto cursor-pointer border-2 border-blue-200 shadow-lg"
-                            style={{
-                              backfaceVisibility: 'hidden',
-                              transform: 'rotateY(180deg)'
-                            }}
-                            onClick={() => setFlippedActivityCards(prev => ({ ...prev, [index]: false }))}
-                          >
-                            {/* Header */}
-                            <div className="flex items-center justify-between mb-3 pb-2 border-b-2 border-blue-200">
-                              <h5 className="text-sm font-medium text-slate-800">📊 {item.activity}</h5>
-                              <div className="flex items-center gap-1">
-                                <button
-                                  className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setZoomedActivityCard(index)
-                                  }}
-                                >
-                                  <Maximize2 className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  className="p-1.5 bg-slate-500 hover:bg-slate-600 text-white rounded-md transition-colors"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setFlippedActivityCards(prev => ({ ...prev, [index]: false }))
-                                  }}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Stats Summary */}
-                            <div className="bg-white/60 backdrop-blur-sm rounded-lg p-2 mb-3">
-                              <div className="text-xs font-medium text-slate-700 text-center">{item.count} Total Tasks</div>
-                            </div>
-
-                            {/* Status Details */}
-                            <div className="space-y-2.5">
-                              {/* Completed */}
-                              <div className="bg-white/70 rounded-lg p-2">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <span className="text-xs font-medium text-emerald-700">✓ Completed</span>
-                                  <span className="ml-auto text-xs font-medium text-emerald-700">{item.completed}</span>
-                                </div>
-                                <div className="text-[9px] text-slate-600">
-                                  <div className="font-semibold mb-0.5">Teams: <span className="font-normal">{item.completedTeams.length > 0 ? item.completedTeams.slice(0, 2).join(', ') + (item.completedTeams.length > 2 ? '...' : '') : 'None'}</span></div>
-                                  <div className="font-semibold">Sites: <span className="font-normal">{item.completedSites.length > 0 ? item.completedSites.slice(0, 2).join(', ') + (item.completedSites.length > 2 ? '...' : '') : 'None'}</span></div>
-                                </div>
-                              </div>
-
-                              {/* In Progress */}
-                              <div className="bg-white/70 rounded-lg p-2">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <span className="text-xs font-medium text-amber-700">⏳ In Progress</span>
-                                  <span className="ml-auto text-xs font-medium text-amber-700">{item.inProgress}</span>
-                                </div>
-                                <div className="text-[9px] text-slate-600">
-                                  <div className="font-semibold mb-0.5">Teams: <span className="font-normal">{item.inProgressTeams.length > 0 ? item.inProgressTeams.slice(0, 2).join(', ') + (item.inProgressTeams.length > 2 ? '...' : '') : 'None'}</span></div>
-                                  <div className="font-semibold">Sites: <span className="font-normal">{item.inProgressSites.length > 0 ? item.inProgressSites.slice(0, 2).join(', ') + (item.inProgressSites.length > 2 ? '...' : '') : 'None'}</span></div>
-                                </div>
-                              </div>
-
-                              {/* Pending */}
-                              <div className="bg-white/70 rounded-lg p-2">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <span className="text-xs font-medium text-rose-700">⚠ Pending</span>
-                                  <span className="ml-auto text-xs font-medium text-rose-700">{item.pending}</span>
-                                </div>
-                                <div className="text-[9px] text-slate-600">
-                                  <div className="font-semibold mb-0.5">Teams: <span className="font-normal">{item.pendingTeams.length > 0 ? item.pendingTeams.slice(0, 2).join(', ') + (item.pendingTeams.length > 2 ? '...' : '') : 'None'}</span></div>
-                                  <div className="font-semibold">Sites: <span className="font-normal">{item.pendingSites.length > 0 ? item.pendingSites.slice(0, 2).join(', ') + (item.pendingSites.length > 2 ? '...' : '') : 'None'}</span></div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Team Performance Analysis - Compact */}
-          <div className="bg-white shadow-sm rounded-xl border border-slate-200/60 flex flex-col overflow-hidden">
-            <div className="px-4 py-2 border-b border-slate-200 flex-none">
-              <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <div className="p-1 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg">
-                  <Users className="h-3 w-3 text-white" />
-                </div>
-                {selectedDateCategory === 'Today' ? "Today's Team Performance" : selectedDateCategory === 'Tomorrow' ? "Tomorrow's Team Performance" : selectedDateCategory === 'This Year' ? "This Year's Team Performance" : `${selectedDateCategory} Team Performance`}
-              </h3>
-              <p className="mt-0.5 text-[10px] text-slate-500">
-                Team performance for {selectedDateCategory.toLowerCase()}
-              </p>
-            </div>
-            <div className="p-3 flex-1 overflow-y-auto">
-              {loading ? (
-                <div className="text-center py-8">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <p className="mt-2 text-sm text-slate-500">Loading data...</p>
-                </div>
-              ) : stats.todayTeamBreakdown.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
-                  No team data for {selectedDateCategory === 'This Year' ? 'this year' : selectedDateCategory.toLowerCase()}
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {stats.todayTeamBreakdown.slice(0, 10).map((team, index) => {
-                    const completionRate = team.count > 0 ? (team.completed / team.count) * 100 : 0
-                    const isFlipped = flippedTeamCards[index] || false
-
-                    return (
-                      <div
-                        key={index}
-                        className="relative h-[130px]"
-                        style={{ perspective: '1000px' }}
-                      >
-                        <div
-                          className={`relative w-full h-full transition-transform duration-500 ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}
-                          style={{ transformStyle: 'preserve-3d' }}
-                        >
-                          {/* Front Card */}
-                          <div
-                            className="absolute inset-0 rounded-xl p-3 bg-white hover:shadow-lg transition-all border-2 border-slate-100 hover:border-emerald-200 cursor-pointer group"
-                            style={{ backfaceVisibility: 'hidden' }}
-                            onClick={() => setFlippedTeamCards(prev => ({ ...prev, [index]: true }))}
-                          >
-                            <div className="h-full flex flex-col">
-                              {/* Header */}
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex-1 min-w-0">
-                                  <h4 className="text-xs font-medium text-slate-800 truncate mb-1.5 group-hover:text-emerald-600 transition-colors">
-                                    {team.team}
-                                  </h4>
-                                  <div className="flex items-center gap-1.5 text-[10px] flex-wrap">
-                                    <div className="flex items-center gap-0.5">
-                                      <span className="text-emerald-600 font-medium">Completed:</span>
-                                      <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded font-semibold">{team.completed}</span>
-                                    </div>
-                                    <div className="flex items-center gap-0.5">
-                                      <span className="text-rose-600 font-medium">Pending:</span>
-                                      <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 rounded font-semibold">{team.pending}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="ml-2 text-center">
-                                  <div className="text-2xl font-semibold text-slate-900 leading-none">{team.count}</div>
-                                  <div className="text-[8px] text-slate-500 font-normal mt-0.5">TASKS</div>
-                                </div>
-                              </div>
-
-                              {/* Progress Section */}
-                              <div className="mt-auto">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="text-[9px] font-medium text-slate-600">COMPLETION</span>
-                                  <span className="text-xs font-medium text-emerald-600">{completionRate.toFixed(0)}%</span>
-                                </div>
-                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                                  <div
-                                    className="bg-gradient-to-r from-emerald-400 via-emerald-500 to-green-600 h-2 rounded-full transition-all duration-500 shadow-sm"
-                                    style={{ width: `${completionRate}%` }}
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Flip Hint */}
-                              <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="text-[9px] text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded">📍</div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Back Card (Sitelist) */}
-                          <div
-                            className="absolute inset-0 rounded-xl bg-gradient-to-br from-emerald-50 via-green-50 to-emerald-50 p-4 overflow-y-auto cursor-pointer border-2 border-emerald-200 shadow-lg"
-                            style={{
-                              backfaceVisibility: 'hidden',
-                              transform: 'rotateY(180deg)'
-                            }}
-                            onClick={() => setFlippedTeamCards(prev => ({ ...prev, [index]: false }))}
-                          >
-                            {/* Header */}
-                            <div className="flex items-center justify-between mb-3 pb-2 border-b-2 border-emerald-200">
-                              <h5 className="text-sm font-medium text-slate-800">📍 {team.team}</h5>
-                              <div className="flex items-center gap-1">
-                                <button
-                                  className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md transition-colors"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setZoomedTeamCard(index)
-                                  }}
-                                >
-                                  <Maximize2 className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  className="p-1.5 bg-slate-500 hover:bg-slate-600 text-white rounded-md transition-colors"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setFlippedTeamCards(prev => ({ ...prev, [index]: false }))
-                                  }}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Stats Summary */}
-                            <div className="bg-white/70 backdrop-blur-sm rounded-lg p-2 mb-3">
-                              <div className="text-xs font-medium text-slate-700 text-center">
-                                {team.count} tasks • {team.sites.length} sites
-                              </div>
-                            </div>
-
-                            {/* Activity Sites Breakdown */}
-                            <div className="space-y-2">
-                              {Object.entries(team.activitySites).map(([activity, sites]) => (
-                                <div key={activity} className="bg-white/70 rounded-lg p-2">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[10px] font-medium text-slate-700 truncate">{activity}</span>
-                                    <span className="text-xs font-medium text-emerald-600">{sites.length}</span>
-                                  </div>
-                                  <div className="text-[9px] text-slate-600 font-medium">
-                                    Sites: {sites.slice(0, 3).join(', ')}{sites.length > 3 ? '...' : ''}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-
-      </div>
-
-      {/* Zoom Modal for Activity Card */}
-      {zoomedActivityCard !== null && stats.todayActivityBreakdown[zoomedActivityCard] && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => setZoomedActivityCard(null)}
-        >
-          <div 
-            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {(() => {
-              const item = stats.todayActivityBreakdown[zoomedActivityCard]
+              {/* Dashboard Cards */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            {dashboardCards.map((card, index) => {
+              const IconComponent = card.icon
+              const isCardLoading = (card as any).loading
+              
               return (
-                <>
-                  {/* Modal Header */}
-                  <div className="bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-4 flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xl font-semibold text-white">📊 {item.activity}</h3>
-                      <p className="text-sm text-blue-100 font-medium">{item.count} Total Tasks</p>
+                <Link
+                  key={index}
+                  href={card.href}
+                  className="group bg-white rounded-xl shadow-sm border border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all duration-300 overflow-hidden"
+                >
+                  {/* Card Header */}
+                  <div className={`bg-gradient-to-r ${card.color} p-3`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="p-2 bg-white/20 backdrop-blur-sm rounded-lg">
+                        {isCardLoading ? (
+                          <Loader2 className="h-5 w-5 text-white animate-spin" />
+                        ) : (
+                          <IconComponent className="h-5 w-5 text-white" />
+                        )}
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-white/80 group-hover:translate-x-1 transition-transform" />
                     </div>
-                    <button
-                      onClick={() => setZoomedActivityCard(null)}
-                      className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
-                    >
-                      <X className="h-5 w-5 text-white" />
-                    </button>
+                    <h2 className="text-base font-bold text-white mb-0.5">{card.title}</h2>
+                    <p className="text-xs text-white/90">{card.description}</p>
+                    {isCardLoading && (
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <Loader2 className="h-3 w-3 text-white/80 animate-spin" />
+                        <span className="text-xs text-white/80">Loading data...</span>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Modal Content */}
-                  <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
-                    <div className="space-y-4">
-                      {/* Completed Section */}
-                      <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-base font-semibold text-emerald-700">✅ Completed</h4>
-                          <span className="text-2xl font-semibold text-emerald-700">{item.completed}</span>
-                        </div>
-                        <div className="space-y-2">
-                          <div>
-                            <p className="text-xs font-medium text-slate-700 mb-1">Teams:</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {item.completedTeams.length > 0 ? item.completedTeams.map((team, idx) => (
-                                <span key={idx} className="px-2 py-1 bg-white rounded-md text-[10px] font-semibold text-slate-700 border border-emerald-200">{team}</span>
-                              )) : <span className="text-xs text-slate-500">None</span>}
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-slate-700 mb-1">Sites ({item.completedSites.length}):</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {item.completedSites.length > 0 ? item.completedSites.map((site, idx) => (
-                                <span key={idx} className="px-2 py-1 bg-white rounded-md text-[10px] font-semibold text-slate-700 border border-emerald-200">{site}</span>
-                              )) : <span className="text-xs text-slate-500">None</span>}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* In Progress Section */}
-                      <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-base font-semibold text-amber-700">⏳ In Progress</h4>
-                          <span className="text-2xl font-semibold text-amber-700">{item.inProgress}</span>
-                        </div>
-                        <div className="space-y-2">
-                          <div>
-                            <p className="text-xs font-medium text-slate-700 mb-1">Teams:</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {item.inProgressTeams.length > 0 ? item.inProgressTeams.map((team, idx) => (
-                                <span key={idx} className="px-2 py-1 bg-white rounded-md text-[10px] font-semibold text-slate-700 border border-amber-200">{team}</span>
-                              )) : <span className="text-xs text-slate-500">None</span>}
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-slate-700 mb-1">Sites ({item.inProgressSites.length}):</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {item.inProgressSites.length > 0 ? item.inProgressSites.map((site, idx) => (
-                                <span key={idx} className="px-2 py-1 bg-white rounded-md text-[10px] font-semibold text-slate-700 border border-amber-200">{site}</span>
-                              )) : <span className="text-xs text-slate-500">None</span>}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Pending Section */}
-                      <div className="bg-rose-50 border-2 border-rose-200 rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-base font-semibold text-rose-700">⚠️ Pending</h4>
-                          <span className="text-2xl font-semibold text-rose-700">{item.pending}</span>
-                        </div>
-                        <div className="space-y-2">
-                          <div>
-                            <p className="text-xs font-medium text-slate-700 mb-1">Teams:</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {item.pendingTeams.length > 0 ? item.pendingTeams.map((team, idx) => (
-                                <span key={idx} className="px-2 py-1 bg-white rounded-md text-[10px] font-semibold text-slate-700 border border-rose-200">{team}</span>
-                              )) : <span className="text-xs text-slate-500">None</span>}
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-slate-700 mb-1">Sites ({item.pendingSites.length}):</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {item.pendingSites.length > 0 ? item.pendingSites.map((site, idx) => (
-                                <span key={idx} className="px-2 py-1 bg-white rounded-md text-[10px] font-semibold text-slate-700 border border-rose-200">{site}</span>
-                              )) : <span className="text-xs text-slate-500">None</span>}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )
-            })()}
-          </div>
-        </div>
-      )}
-
-      {/* Zoom Modal for Stats Card */}
-      {zoomedStatsCard !== null && dashboardCards[zoomedStatsCard] && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => setZoomedStatsCard(null)}
-        >
-          <div 
-            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {(() => {
-              const card = dashboardCards[zoomedStatsCard]
-              const isTeamsCard = card.title === 'Teams Working'
-              return (
-                <>
-                  {/* Modal Header */}
-                  <div className={`bg-gradient-to-r ${isTeamsCard ? 'from-purple-500 to-violet-600' : 'from-blue-500 to-indigo-600'} px-6 py-4 flex items-center justify-between`}>
-                    <div>
-                      <h3 className="text-xl font-semibold text-white">{isTeamsCard ? '👥 Team Status' : card.flipTitle}</h3>
-                      <p className="text-sm text-purple-100 font-medium">
-                        {isTeamsCard ? `${card.siteList.length} working • ${(card as any).idleList?.length || 0} idle` : `${card.siteList.length} items`}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setZoomedStatsCard(null)}
-                      className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
-                    >
-                      <X className="h-5 w-5 text-white" />
-                    </button>
-                  </div>
-
-                  {/* Modal Content */}
-                  <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
-                    {isTeamsCard ? (
-                      <div className="space-y-6">
-                        {/* Working Teams Section */}
-                        <div>
-                          <h4 className="text-lg font-semibold text-emerald-700 mb-3 flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                            Working Teams ({card.siteList.length})
-                          </h4>
-                          {card.siteList.length > 0 ? (
-                            <div className="space-y-2">
-                              {card.siteList.map((item: string, idx: number) => (
-                                <div 
-                                  key={idx} 
-                                  className="flex items-center gap-3 px-4 py-3 rounded-lg bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200 hover:border-emerald-300 hover:shadow-md transition-all group"
-                                >
-                                  <div className="w-2 h-2 rounded-full bg-emerald-500 group-hover:bg-emerald-600 transition-colors flex-shrink-0" />
-                                  <span className="text-sm font-medium text-slate-700 break-all flex-1">{item}</span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-slate-500 italic">No teams working</p>
-                          )}
-                        </div>
-
-                        {/* Idle Teams Section */}
-                        <div>
-                          <h4 className="text-lg font-semibold text-rose-700 mb-3 flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-rose-500"></div>
-                            Idle Teams ({(card as any).idleList?.length || 0})
-                          </h4>
-                          {(card as any).idleList && (card as any).idleList.length > 0 ? (
-                            <div className="space-y-2">
-                              {(card as any).idleList.map((item: string, idx: number) => (
-                                <div 
-                                  key={idx} 
-                                  className="flex items-center gap-3 px-4 py-3 rounded-lg bg-gradient-to-br from-rose-50 to-red-50 border-2 border-rose-200 hover:border-rose-300 hover:shadow-md transition-all group"
-                                >
-                                  <div className="w-2 h-2 rounded-full bg-rose-500 group-hover:bg-rose-600 transition-colors flex-shrink-0" />
-                                  <span className="text-sm font-medium text-slate-700 break-all flex-1">{item}</span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-slate-500 italic">No idle teams</p>
-                          )}
-                        </div>
-                      </div>
-                    ) : card.siteList.length > 0 ? (
-                      <div className="space-y-2">
-                        {card.siteList.map((item: string, idx: number) => (
-                          <div 
-                            key={idx} 
-                            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 hover:border-blue-300 hover:shadow-md transition-all group cursor-pointer"
+                  {/* Card Stats */}
+                  <div className="p-3">
+                    {isCardLoading ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        {[1, 2, 3, 4].map((i) => (
+                          <div
+                            key={i}
+                            className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg p-2 border border-slate-200 animate-pulse"
                           >
-                            <div className="w-2 h-2 rounded-full bg-blue-400 group-hover:bg-blue-600 transition-colors flex-shrink-0" />
-                            <span className="text-sm font-medium text-slate-700 break-all flex-1">{item}</span>
+                            <div className="h-3 bg-slate-200 rounded w-3/4 mb-1"></div>
+                            <div className="h-4 bg-slate-200 rounded w-1/2"></div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center py-12">
-                        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-3">
-                          <AlertCircle className="h-8 w-8 text-slate-400" />
-                        </div>
-                        <p className="text-base font-medium text-slate-600">No data available</p>
-                        <p className="text-sm text-slate-400 mt-1">There is no data in this category</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {card.stats.map((stat, statIndex) => {
+                          const StatIcon = stat.icon
+                          return (
+                            <div
+                              key={statIndex}
+                              className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg p-2 border border-slate-200"
+                            >
+                              <div className="flex items-center gap-1 mb-1">
+                                <div className="p-1 bg-white rounded shadow-sm">
+                                  <StatIcon className="h-3 w-3 text-slate-600" />
+                                </div>
+                                <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">
+                                  {stat.label}
+                                </span>
+                              </div>
+                              <div className="text-sm font-bold text-slate-900 break-words">
+                                {stat.value}
+                              </div>
+                              {(stat as any).detail && (
+                                <div className="mt-1 text-xs text-slate-500 border-t border-slate-200 pt-1">
+                                  {(stat as any).detail}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </div>
-                </>
-              )
-            })()}
-          </div>
-        </div>
-      )}
 
-      {/* Zoom Modal for Team Card */}
-      {zoomedTeamCard !== null && stats.todayTeamBreakdown[zoomedTeamCard] && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => setZoomedTeamCard(null)}
-        >
-          <div 
-            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {(() => {
-              const team = stats.todayTeamBreakdown[zoomedTeamCard]
-              return (
-                <>
-                  {/* Modal Header */}
-                  <div className="bg-gradient-to-r from-emerald-500 to-green-600 px-6 py-4 flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xl font-semibold text-white">📍 {team.team}</h3>
-                      <p className="text-sm text-emerald-100 font-medium">{team.count} tasks • {team.sites.length} sites</p>
-                    </div>
-                    <button
-                      onClick={() => setZoomedTeamCard(null)}
-                      className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
-                    >
-                      <X className="h-5 w-5 text-white" />
-                    </button>
-                  </div>
-
-                  {/* Modal Content */}
-                  <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
-                    <div className="space-y-4">
-                      {Object.entries(team.activitySites).map(([activity, sites]) => (
-                        <div key={activity} className="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200 rounded-xl p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-base font-semibold text-slate-800">{activity}</h4>
-                            <span className="text-2xl font-semibold text-emerald-600">{sites.length}</span>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-slate-700 mb-2">Sites:</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {sites.map((site, idx) => (
-                                <span key={idx} className="px-2.5 py-1.5 bg-white rounded-lg text-[10px] font-semibold text-slate-700 border border-emerald-300 shadow-sm">
-                                  {site}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                  {/* Card Footer */}
+                  <div className="px-3 pb-3">
+                    <div className="flex items-center justify-center gap-2 text-xs font-medium text-blue-600 group-hover:text-blue-700">
+                      View Full Dashboard
+                      <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
                     </div>
                   </div>
-                </>
+                </Link>
               )
-            })()}
+            })}
+              </div>
+            </div>
+
+            {/* Quick Stats Summary Section */}
+            <div className="mb-4 pb-4 border-b border-slate-200">
+              <h3 className="text-base font-bold text-slate-900 mb-3 flex items-center gap-2">
+                <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg">
+                  <Activity className="h-4 w-4 text-white" />
+                </div>
+                Today's Quick Summary
+              </h3>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-3 border border-blue-200">
+                <div className="text-xs font-medium text-blue-700 mb-1">Daily Tasks</div>
+                <div className="text-2xl font-bold text-blue-600">{summary.daily.totalTasks}</div>
+                <div className="text-xs text-blue-600 mt-0.5">
+                  {summary.daily.completed} completed
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-lg p-3 border border-emerald-200">
+                <div className="text-xs font-medium text-emerald-700 mb-1">ITC Sites</div>
+                <div className="text-2xl font-bold text-emerald-600">{summary.itcHuawei.totalSites}</div>
+                <div className="text-xs text-emerald-600 mt-0.5">
+                  {summary.itcHuawei.atpApproved} ATP approved
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-lg p-3 border border-purple-200">
+                <div className="text-xs font-medium text-purple-700 mb-1">Unique Sites</div>
+                {poLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-5 w-5 text-purple-600 animate-spin" />
+                    <span className="text-xs text-purple-600">Loading...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold text-purple-600">{summary.poHuawei.totalSites}</div>
+                    <div className="text-xs text-purple-600 mt-0.5">
+                      {summary.poHuawei.statusCounts.open} open POs
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg p-3 border border-amber-200">
+                <div className="text-xs font-medium text-amber-700 mb-1">Teams Active</div>
+                <div className="text-2xl font-bold text-amber-600">{summary.daily.teamsWorking}</div>
+                <div className="text-xs text-amber-600 mt-0.5">
+                  Working today
+                </div>
+              </div>
+            </div>
+            </div>
+
+            {/* Quick Actions Section */}
+            <div>
+              <div className="mb-3">
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <div className="p-1.5 bg-gradient-to-br from-purple-500 to-violet-600 rounded-lg">
+                    <Activity className="h-4 w-4 text-white" />
+                  </div>
+                  Quick Actions
+                </h2>
+                <p className="text-xs text-slate-600 mt-0.5">Fast access to frequently used features</p>
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Link
+              href="/daily-plan"
+              className="group bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg p-3 border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all"
+            >
+              <Calendar className="h-6 w-6 text-blue-600 mb-1.5" />
+              <div className="text-xs font-semibold text-slate-900 group-hover:text-blue-600">
+                Daily Plan
+              </div>
+              <div className="text-xs text-slate-500">Manage tasks</div>
+            </Link>
+
+            <Link
+              href="/itc-huawei"
+              className="group bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg p-3 border border-slate-200 hover:border-emerald-300 hover:shadow-md transition-all"
+            >
+              <TrendingUp className="h-6 w-6 text-emerald-600 mb-1.5" />
+              <div className="text-xs font-semibold text-slate-900 group-hover:text-emerald-600">
+                ITC Rollout
+              </div>
+              <div className="text-xs text-slate-500">Site tracking</div>
+            </Link>
+
+            <Link
+              href="/reports"
+              className="group bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg p-3 border border-slate-200 hover:border-purple-300 hover:shadow-md transition-all"
+            >
+              <BarChart3 className="h-6 w-6 text-purple-600 mb-1.5" />
+              <div className="text-xs font-semibold text-slate-900 group-hover:text-purple-600">
+                Reports
+              </div>
+              <div className="text-xs text-slate-500">View analytics</div>
+            </Link>
+
+            <Link
+              href="/documents"
+              className="group bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg p-3 border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all"
+            >
+              <FileText className="h-6 w-6 text-amber-600 mb-1.5" />
+              <div className="text-xs font-semibold text-slate-900 group-hover:text-amber-600">
+                Documents
+              </div>
+              <div className="text-xs text-slate-500">File management</div>
+            </Link>
+              </div>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { DailyPlanTable } from '@/components/DailyPlanTable'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
-import { RefreshCcw, Calendar } from 'lucide-react'
+import { RefreshCcw, Calendar, Upload, X, CheckCircle, AlertCircle, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { getDefaultDateFilter } from '@/lib/dateFilterUtils'
 
@@ -16,12 +16,23 @@ export default function DailyPlanPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [tableRefreshing, setTableRefreshing] = useState(false)
   const [filteredData, setFilteredData] = useState<any[]>([])
   const [activeStatusFilter, setActiveStatusFilter] = useState<string | null>(null)
   const [activeActivityFilter, setActiveActivityFilter] = useState<string | null>(null)
   
   // Date filter state - starts with default 3 days range (yesterday-today-tomorrow)
   const [dateFilter, setDateFilter] = useState(getDefaultDateFilter)
+  
+  // Import Excel state
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ success: boolean; message: string; count?: number } | null>(null)
+  
+  // Success notification state
+  const [showSuccessNotification, setShowSuccessNotification] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
 
   const fetchData = async (startDate?: string, endDate?: string) => {
     try {
@@ -78,9 +89,16 @@ export default function DailyPlanPage() {
   }
 
   const handleRefresh = async () => {
-    setRefreshing(true)
+    setTableRefreshing(true)
     await fetchData(dateFilter.startDate, dateFilter.endDate)
-    setRefreshing(false)
+    setTableRefreshing(false)
+  }
+
+  const handleSaveComplete = async () => {
+    // Refresh data after save without full page reload
+    setTableRefreshing(true)
+    await fetchData(dateFilter.startDate, dateFilter.endDate)
+    setTableRefreshing(false)
   }
 
   // Calculate status summary from filtered/rendered data
@@ -146,6 +164,161 @@ export default function DailyPlanPage() {
     } catch (error) {
       console.error('❌ Safe update error:', error)
       throw error // Re-throw to let DataTable handle the error
+    }
+  }
+
+  const handleImportExcel = async () => {
+    if (!importFile) {
+      alert('Please select a file first')
+      return
+    }
+
+    setImporting(true)
+    setImportResult(null)
+
+    try {
+      console.log('📂 Reading Excel file:', importFile.name)
+      
+      // Read Excel file
+      const data = await importFile.arrayBuffer()
+      console.log('📦 File size:', data.byteLength, 'bytes')
+      
+      const workbook = XLSX.read(data, { type: 'array' })
+      console.log('📚 Workbook sheets:', workbook.SheetNames)
+      
+      const sheetName = workbook.SheetNames[0]
+      console.log('📄 Using sheet:', sheetName)
+      
+      const worksheet = workbook.Sheets[sheetName]
+      const jsonData = XLSX.utils.sheet_to_json(worksheet)
+
+      console.log('📊 Parsed Excel data:')
+      console.log('  - Total rows:', jsonData.length)
+      console.log('  - Sample row (first):', jsonData[0])
+      console.log('  - Available columns:', Object.keys(jsonData[0] || {}))
+
+      if (jsonData.length === 0) {
+        setImportResult({
+          success: false,
+          message: 'No data found in Excel file'
+        })
+        setImporting(false)
+        return
+      }
+
+      // Validate dates - only allow today and tomorrow
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      
+      const invalidRows: number[] = []
+      const validData = jsonData.filter((row: any, index: number) => {
+        if (!row.Date) {
+          invalidRows.push(index + 1)
+          return false
+        }
+        
+        // Parse date from Excel (can be in various formats)
+        let rowDate: Date
+        if (typeof row.Date === 'number') {
+          // Excel serial date
+          rowDate = new Date((row.Date - 25569) * 86400 * 1000)
+        } else {
+          // String date
+          rowDate = new Date(row.Date)
+        }
+        rowDate.setHours(0, 0, 0, 0)
+        
+        const isValid = rowDate.getTime() === today.getTime() || rowDate.getTime() === tomorrow.getTime()
+        if (!isValid) {
+          invalidRows.push(index + 1)
+        }
+        return isValid
+      })
+
+      if (invalidRows.length > 0) {
+        setImportResult({
+          success: false,
+          message: `Import failed: ${invalidRows.length} row(s) have invalid dates. Only today and tomorrow are allowed`
+        })
+        setImporting(false)
+        return
+      }
+
+      if (validData.length === 0) {
+        setImportResult({
+          success: false,
+          message: 'No valid data to import. All rows have dates outside allowed range (today/tomorrow).'
+        })
+        setImporting(false)
+        return
+      }
+
+      // Send to API
+      const response = await fetch('/api/sheets/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ data: validData }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to import data')
+      }
+
+      const result = await response.json()
+      
+      // Close modal immediately
+      setImportModalOpen(false)
+      setImportFile(null)
+      setImportResult(null)
+      
+      // Show success notification
+      setSuccessMessage(`✅ Successfully imported ${result.count} rows!`)
+      setShowSuccessNotification(true)
+      
+      // Hide notification after 3 seconds
+      setTimeout(() => {
+        setShowSuccessNotification(false)
+      }, 3000)
+
+      // Refresh only table data (not full page)
+      setTableRefreshing(true)
+      await fetchData(dateFilter.startDate, dateFilter.endDate)
+      setTableRefreshing(false)
+
+    } catch (error) {
+      console.error('Import error:', error)
+      console.error('Error details:', error instanceof Error ? error.stack : error)
+      
+      let errorMessage = 'An error occurred during import'
+      
+      if (error instanceof Error) {
+        errorMessage = error.message
+        
+        // Try to parse additional error details from message
+        if (errorMessage.includes('Failed to import data')) {
+          errorMessage = 'Failed to import data. Please check browser console for details.'
+        }
+      }
+      
+      setImportResult({
+        success: false,
+        message: errorMessage
+      })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setImportFile(file)
+      setImportResult(null)
     }
   }
 
@@ -476,17 +649,6 @@ export default function DailyPlanPage() {
               </div>
             )}
           </div>
-          
-          <div className="mt-2 sm:mt-0 flex items-center space-x-2">
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-          </div>
         </div>
       </div>
 
@@ -504,9 +666,156 @@ export default function DailyPlanPage() {
             initialDateFilter={dateFilter} // Pass date filter from parent
             showFilters={true} // Enable the new filters section
             onExport={handleExport} // Pass export function to table header
+            onSaveComplete={handleSaveComplete} // Callback after save completes
+            loading={tableRefreshing} // Pass loading state for table body
+            onImport={() => setImportModalOpen(true)} // Pass import trigger
+            onRefresh={handleRefresh} // Pass refresh function
+            refreshing={refreshing} // Pass refresh state
           />
         </div>
       </div>
+
+      {/* Success Notification Toast */}
+      {showSuccessNotification && (
+        <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
+          <div className="bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-2xl flex items-center space-x-3 min-w-[300px]">
+            <CheckCircle className="h-5 w-5 flex-shrink-0" />
+            <p className="text-sm font-medium">{successMessage}</p>
+            <button
+              onClick={() => setShowSuccessNotification(false)}
+              className="ml-auto hover:bg-emerald-700 rounded p-1 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Import Excel Modal */}
+      {importModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <Upload className="h-5 w-5 mr-2 text-emerald-600" />
+                Import Excel File
+              </h3>
+              <button
+                onClick={() => {
+                  setImportModalOpen(false)
+                  setImportFile(null)
+                  setImportResult(null)
+                }}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5">
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-3">
+                  Upload an Excel file to import new data.
+                </p>
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <p className="text-xs font-medium text-blue-900 mb-1">📋 Important Notes:</p>
+                  <ul className="text-xs text-blue-700 space-y-1 ml-4 list-disc">
+                    <li>All other columns must match existing table structure</li>
+                    <li>This will create NEW rows, not update existing ones</li>
+                    <li className="font-semibold text-blue-900">⚠️ Only dates for TODAY and TOMORROW are allowed</li>
+                  </ul>
+                </div>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700 mb-2 block">Select Excel File</span>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-gray-600
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-lg file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-emerald-50 file:text-emerald-700
+                      hover:file:bg-emerald-100
+                      cursor-pointer"
+                  />
+                </label>
+
+                {importFile && (
+                  <div className="mt-3 flex items-center text-sm text-gray-600 bg-gray-50 rounded-lg p-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 mr-2" />
+                    <span className="truncate">{importFile.name}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Import Result */}
+              {importResult && (
+                <div className={`mb-4 p-3 rounded-lg ${
+                  importResult.success 
+                    ? 'bg-emerald-50 border border-emerald-200' 
+                    : 'bg-rose-50 border border-rose-200'
+                }`}>
+                  <div className="flex items-start">
+                    {importResult.success ? (
+                      <CheckCircle className="h-5 w-5 text-emerald-600 mr-2 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 text-rose-600 mr-2 mt-0.5" />
+                    )}
+                    <div>
+                      <p className={`text-sm font-medium ${
+                        importResult.success ? 'text-emerald-900' : 'text-rose-900'
+                      }`}>
+                        {importResult.success ? 'Import Successful!' : 'Import Failed'}
+                      </p>
+                      <p className={`text-xs mt-1 ${
+                        importResult.success ? 'text-emerald-700' : 'text-rose-700'
+                      }`}>
+                        {importResult.message}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setImportModalOpen(false)
+                    setImportFile(null)
+                    setImportResult(null)
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImportExcel}
+                  disabled={!importFile || importing}
+                  className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                >
+                  {importing ? (
+                    <>
+                      <RefreshCcw className="h-4 w-4 mr-2 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Import Data
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

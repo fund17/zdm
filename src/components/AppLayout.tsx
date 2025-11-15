@@ -16,6 +16,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const [isMobile, setIsMobile] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<{
+    name: string
+    email: string
+    region: string
+    usertype: string
+  } | null>(null)
 
   // Check authentication status
   useEffect(() => {
@@ -32,8 +38,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         
         if (data.success && data.user) {
           setIsAuthenticated(true)
+          setUser(data.user)
         } else {
           setIsAuthenticated(false)
+          setUser(null)
           // Redirect to login if not authenticated and not on login page
           router.push('/login')
         }
@@ -95,8 +103,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <div className="flex-none">
-          <Sidebar collapsed={sidebarCollapsed} />
+        <div className={`flex-none ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
+          <Sidebar collapsed={sidebarCollapsed} user={user} />
         </div>
 
         {/* Mobile overlay when sidebar is open */}

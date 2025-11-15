@@ -64,6 +64,9 @@ async function fetchAllPOData() {
       const remainingIndex = headers.findIndex((h: string) => 
         h.toLowerCase() === 'remaining'
       )
+      const statusIndex = headers.findIndex((h: string) => 
+        h.toLowerCase().includes('status')
+      )
 
       if (siteIdIndex === -1 || remainingIndex === -1) continue
 
@@ -73,8 +76,12 @@ async function fetchAllPOData() {
 
         const siteId = row[siteIdIndex]?.toString().trim()
         const remainingValue = row[remainingIndex]
+        const status = statusIndex !== -1 ? row[statusIndex]?.toString().trim().toLowerCase() : ''
 
         if (!siteId) continue
+        
+        // Skip cancelled POs - tidak masuk dalam perhitungan
+        if (status.includes('cancel')) continue
 
         // Parse remaining value - could be percentage string or number
         let remaining = 0

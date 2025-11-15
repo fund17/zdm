@@ -582,7 +582,7 @@ export default function LandingDashboard() {
                 <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg">
                   <Activity className="h-4 w-4 text-white" />
                 </div>
-                Today's Quick Summary
+                Today&apos;s Quick Summary
               </h3>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

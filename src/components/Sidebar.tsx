@@ -50,33 +50,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
   const menuItems: MenuItem[] = [
     {
       icon: <Home className="h-4 w-4" />,
-      label: 'Dashboard',
+      label: 'Home',
       href: '/'
-    },
-    {
-      icon: <Calendar className="h-4 w-4" />,
-      label: 'Daily Plan',
-      href: '/daily-plan'
-    },
-    {
-      icon: <Users className="h-4 w-4" />,
-      label: 'Absensi',
-      href: '/absensi'
-    },
-    {
-      icon: <BarChart3 className="h-4 w-4" />,
-      label: 'Reports',
-      href: '/reports'
-    },
-    {
-      icon: <Database className="h-4 w-4" />,
-      label: 'Projects',
-      submenu: [
-        { label: 'ITC Huawei', href: '/itc-huawei' },
-        { label: 'ITC ZTE', href: '/itc-zte' },
-        { label: 'RNO Huawei', href: '/rno-huawei' },
-        { label: 'RNO ZTE', href: '/rno-zte' }
-      ]
     },
     {
       icon: <BarChart3 className="h-4 w-4" />,
@@ -88,15 +63,26 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
       ]
     },
     {
-      icon: <FileText className="h-4 w-4" />,
-      label: 'Documents',
-      href: '/documents'
+      icon: <Calendar className="h-4 w-4" />,
+      label: 'Daily Plan',
+      href: '/daily-plan'
     },
+
     {
-      icon: <Settings className="h-4 w-4" />,
-      label: 'Settings',
-      href: '/settings'
-    }
+      icon: <Database className="h-4 w-4" />,
+      label: 'Projects',
+      submenu: [
+        { label: 'ITC Huawei', href: '/itc-huawei' },
+        { label: 'ITC ZTE', href: '/itc-zte' },
+        { label: 'RNO Huawei', href: '/rno-huawei' },
+        { label: 'RNO ZTE', href: '/rno-zte' }
+      ]
+    },
+        {
+      icon: <Users className="h-4 w-4" />,
+      label: 'Absensi',
+      href: '/absensi'
+    },
   ]
 
   return (

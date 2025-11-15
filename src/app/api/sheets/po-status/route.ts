@@ -61,54 +61,65 @@ async function fetchAllPOData() {
       const siteIdIndex = headers.findIndex((h: string) => 
         h.toLowerCase().includes('site') && h.toLowerCase().includes('id')
       )
-      const statusIndex = headers.findIndex((h: string) => 
-        h.toLowerCase().includes('status')
+      const remainingIndex = headers.findIndex((h: string) => 
+        h.toLowerCase() === 'remaining'
       )
 
-      if (siteIdIndex === -1 || statusIndex === -1) continue
+      if (siteIdIndex === -1 || remainingIndex === -1) continue
 
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i]
         if (!row || row.length === 0) continue
 
         const siteId = row[siteIdIndex]?.toString().trim()
-        const status = row[statusIndex]?.toString().toLowerCase() || ''
+        const remainingValue = row[remainingIndex]
 
         if (!siteId) continue
+
+        // Parse remaining value - could be percentage string or number
+        let remaining = 0
+        if (typeof remainingValue === 'string') {
+          // Remove % sign and parse
+          const cleaned = remainingValue.replace('%', '').trim()
+          remaining = parseFloat(cleaned) || 0
+        } else if (typeof remainingValue === 'number') {
+          remaining = remainingValue
+        }
 
         if (!poIndex[siteId]) {
           poIndex[siteId] = []
         }
 
-        poIndex[siteId].push({ status })
+        poIndex[siteId].push({ remaining })
       }
     }
   }
 
-  // Calculate status for each DUID
+  // Calculate average remaining percentage for each DUID
   const result: Record<string, any> = {}
   
   for (const [duid, records] of Object.entries(poIndex)) {
-    const counts = { close: 0, open: 0, cancelled: 0 }
+    if (records.length === 0) continue
     
-    records.forEach(({ status }) => {
-      if (status.includes('close') || status.includes('closed')) {
-        counts.close++
-      } else if (status.includes('cancel')) {
-        counts.cancelled++
-      } else {
-        counts.open++
-      }
-    })
-
-    const total = counts.close + counts.open
+    // Calculate average of remaining values
+    const totalRemaining = records.reduce((sum, { remaining }) => sum + remaining, 0)
+    const avgRemaining = totalRemaining / records.length
+    
+    // If remaining is already in percentage (0-100), use as is
+    // If remaining is decimal (0-1), convert to percentage
+    let percentage = avgRemaining
+    if (avgRemaining <= 1) {
+      percentage = avgRemaining * 100
+    }
+    
+    // Round to nearest integer
+    percentage = Math.round(percentage)
+    
     result[duid] = {
-      close: counts.close,
-      open: counts.open,
-      cancelled: counts.cancelled,
-      total,
-      display: total > 0 ? `${counts.close}/${total}` : '0/0',
-      percentage: total > 0 ? Math.round((counts.close / total) * 100) : 0
+      totalLines: records.length,
+      avgRemaining: Math.round(avgRemaining * 100) / 100, // Keep 2 decimal for debugging
+      percentage: 100 - percentage, // Invert: high remaining = low completion
+      display: `${100 - percentage}%` // Show completion percentage
     }
   }
 

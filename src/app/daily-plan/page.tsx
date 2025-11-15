@@ -156,7 +156,6 @@ export default function DailyPlanPage() {
       }
 
       const result = await response.json()
-      console.log('✅ Safe update success:', result)
       
       // Optionally refresh data after successful update
       // await fetchData()
@@ -177,25 +176,15 @@ export default function DailyPlanPage() {
     setImportResult(null)
 
     try {
-      console.log('📂 Reading Excel file:', importFile.name)
-      
       // Read Excel file
       const data = await importFile.arrayBuffer()
-      console.log('📦 File size:', data.byteLength, 'bytes')
       
       const workbook = XLSX.read(data, { type: 'array' })
-      console.log('📚 Workbook sheets:', workbook.SheetNames)
       
       const sheetName = workbook.SheetNames[0]
-      console.log('📄 Using sheet:', sheetName)
       
       const worksheet = workbook.Sheets[sheetName]
       const jsonData = XLSX.utils.sheet_to_json(worksheet)
-
-      console.log('📊 Parsed Excel data:')
-      console.log('  - Total rows:', jsonData.length)
-      console.log('  - Sample row (first):', jsonData[0])
-      console.log('  - Available columns:', Object.keys(jsonData[0] || {}))
 
       if (jsonData.length === 0) {
         setImportResult({
@@ -324,8 +313,6 @@ export default function DailyPlanPage() {
 
   const handleExport = async () => {
     try {
-      console.log('📥 Starting Excel export...')
-
       // Use filtered data for export
       const dataToExport = filteredData.length > 0 ? filteredData : data
 
@@ -339,7 +326,6 @@ export default function DailyPlanPage() {
       if (!configResponse.ok) throw new Error('Failed to fetch column settings')
 
       const settingsResponse = await configResponse.json()
-      console.log('📋 Settings response:', settingsResponse)
 
       // Extract columns from the response structure
       const configs = settingsResponse?.data?.columns || []
@@ -354,13 +340,6 @@ export default function DailyPlanPage() {
       if (visibleColumns.length === 0) {
         throw new Error('No visible columns found')
       }
-
-      console.log('📊 Export details:', {
-        totalRows: dataToExport.length,
-        totalColumns: configs.length,
-        visibleColumns: visibleColumns.length,
-        columns: visibleColumns.map((c: any) => c.displayName)
-      })
 
       // Prepare data for Excel
       const excelData = dataToExport.map(row => {
@@ -398,8 +377,6 @@ export default function DailyPlanPage() {
 
       // Write and download file
       XLSX.writeFile(workbook, filename)
-
-      console.log(`✅ Exported ${dataToExport.length} rows with ${visibleColumns.length} visible columns to ${filename}`)
     } catch (error) {
       console.error('❌ Export failed:', error)
       alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`)

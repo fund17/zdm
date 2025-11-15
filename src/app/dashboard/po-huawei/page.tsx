@@ -241,7 +241,6 @@ export default function POHuaweiDashboard() {
         
         if (cacheSaved) {
           safeSetItem(cacheTimestampKey, Date.now().toString())
-          console.log('Cache saved successfully')
         } else {
           console.warn('Cache not saved due to size limitations')
         }

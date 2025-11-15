@@ -291,7 +291,6 @@ export default function LandingDashboard() {
         
         if (cacheSaved) {
           safeSetItem(fullDataCacheTimestampKey, Date.now().toString())
-          console.log('PO full data cache saved successfully')
         } else {
           console.warn('PO full data cache not saved due to size limitations')
         }
@@ -353,7 +352,6 @@ export default function LandingDashboard() {
         const summaryCacheSaved = safeSetItem(cacheKey, JSON.stringify(poSummary))
         if (summaryCacheSaved) {
           safeSetItem(cacheTimestampKey, Date.now().toString())
-          console.log('PO summary cache saved successfully')
         }
 
         setSummary(prev => ({

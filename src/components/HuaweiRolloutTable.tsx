@@ -16,6 +16,7 @@ import {
 } from '@tanstack/react-table'
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { Check, X, Edit2, XCircle, ChevronLeft, ChevronRight, Filter, Calendar, Download, Database, Search } from 'lucide-react'
+import { SiteDetailModal } from './SiteDetailModal'
 
 interface ColumnConfig {
   name: string
@@ -82,7 +83,7 @@ export function HuaweiRolloutTable({
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({})
   const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({ 
     left: ['DUID'], 
-    right: ['SiteStatus'] 
+    right: ['PO_Status'] 
   })
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -112,7 +113,9 @@ export function HuaweiRolloutTable({
   const [filterSearchQuery, setFilterSearchQuery] = useState('')
   const filterDropdownRef = useRef<HTMLDivElement>(null)
   
-  // Site detail modal removed for performance
+  // Site detail modal state
+  const [siteDetailModalOpen, setSiteDetailModalOpen] = useState(false)
+  const [selectedSite, setSelectedSite] = useState<{ duid: string; duName: string } | null>(null)
 
   // Callback functions for editing
   const handleCellEdit = useCallback((row: any, columnId: string, currentValue: any) => {
@@ -280,6 +283,59 @@ export function HuaweiRolloutTable({
     }
     return poStatusMap[duid.toString().trim()] || null
   }, [poStatusMap])
+
+  // Get status badge styling
+  const getStatusBadge = useCallback((status: string) => {
+    const statusLower = status.toLowerCase().trim()
+    
+    // Closed - Green
+    if (statusLower.includes('close') || statusLower === 'closed') {
+      return {
+        bg: 'bg-green-100',
+        text: 'text-green-800',
+        border: 'border-green-200',
+        icon: '✓'
+      }
+    }
+    
+    // In Progress - Blue
+    if (statusLower.includes('progress') || statusLower.includes('in progress')) {
+      return {
+        bg: 'bg-blue-100',
+        text: 'text-blue-800',
+        border: 'border-blue-200',
+        icon: '⟳'
+      }
+    }
+    
+    // Cancel - Red
+    if (statusLower.includes('cancel')) {
+      return {
+        bg: 'bg-red-100',
+        text: 'text-red-800',
+        border: 'border-red-200',
+        icon: '✕'
+      }
+    }
+    
+    // Not Start - Gray
+    if (statusLower.includes('not start') || statusLower.includes('not started')) {
+      return {
+        bg: 'bg-gray-100',
+        text: 'text-gray-800',
+        border: 'border-gray-200',
+        icon: '○'
+      }
+    }
+    
+    // Default - Neutral
+    return {
+      bg: 'bg-gray-50',
+      text: 'text-gray-700',
+      border: 'border-gray-300',
+      icon: '•'
+    }
+  }, [])
 
   // Create table columns
   const columns = useMemo<ColumnDef<any>[]>(() => {
@@ -450,9 +506,6 @@ export function HuaweiRolloutTable({
           const changeKey = `${rowId}-${columnId}`
           const hasChanges = changedCells.has(changeKey)
           
-          // Use new value if changed, otherwise use original
-          const displayValue = hasChanges ? changedCells.get(changeKey)?.newValue : cellValue
-
           // Fallback: try to get value if getValue() returns empty but data exists
           if (!cellValue && cellValue !== 0) {
             // Try exact match with config.name
@@ -496,6 +549,9 @@ export function HuaweiRolloutTable({
               }
             }
           }
+          
+          // Use new value if changed, otherwise use original (after fallback)
+          const displayValue = hasChanges ? changedCells.get(changeKey)?.newValue : cellValue
 
           // Date display with format dd-MMM-yyyy
           if (config.type === 'date' && displayValue) {
@@ -529,15 +585,23 @@ export function HuaweiRolloutTable({
             }
           }
 
-          // DUID column - just display (modal removed for performance)
+          // DUID column - clickable to open detail modal
           if (isDUIDColumn && !isEditing) {
             return (
-              <div className="flex items-center gap-1 text-xs font-medium text-blue-600">
-                {hasChanges && <div className="w-1 h-1 bg-orange-500 rounded-full" />}
-                <span className={hasChanges ? 'text-orange-700 font-medium' : ''}>
-                  {displayValue?.toString() || ''}
-                </span>
-              </div>
+              <button
+                onClick={() => {
+                  const duName = row.original['DU Name'] || row.original['DUName'] || ''
+                  setSelectedSite({ duid: displayValue?.toString() || '', duName })
+                  setSiteDetailModalOpen(true)
+                }}
+                className="group flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-50 transition-colors text-xs font-medium text-blue-600 hover:text-blue-700 cursor-pointer"
+                title="Click to view site details"
+              >
+                <span className="underline decoration-dotted">{displayValue?.toString() || ''}</span>
+                <svg className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </button>
             )
           }
           
@@ -601,13 +665,42 @@ export function HuaweiRolloutTable({
             )
           }
 
-          // Default non-editable cell
+          // Default non-editable cell with DUID check
           if (isDUIDColumn) {
             return (
-              <div className="flex items-center gap-1 text-xs font-medium text-blue-600">
+              <button
+                onClick={() => {
+                  const duName = row.original['DU Name'] || row.original['DUName'] || ''
+                  setSelectedSite({ duid: displayValue?.toString() || '', duName })
+                  setSiteDetailModalOpen(true)
+                }}
+                className="group flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-50 transition-colors text-xs font-medium text-blue-600 hover:text-blue-700 cursor-pointer"
+                title="Click to view site details"
+              >
+                <span className="underline decoration-dotted">{displayValue?.toString() || ''}</span>
+                <svg className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </button>
+            )
+          }
+          
+          // Status badge rendering for Site Status or similar columns
+          const columnNameLower = config.name.toLowerCase()
+          const displayNameLower = config.displayName.toLowerCase()
+          const isSiteStatusColumn = columnNameLower.includes('status') || displayNameLower.includes('status')
+          
+          // Apply badge to status columns (but not for PO_Status which is handled separately)
+          if (isSiteStatusColumn && displayValue && displayValue.toString().trim() && config.name !== 'PO_Status') {
+            const badge = getStatusBadge(displayValue.toString())
+            return (
+              <div className="flex items-center gap-1">
                 {hasChanges && <div className="w-1 h-1 bg-orange-500 rounded-full" />}
-                <span className={hasChanges ? 'text-orange-700 font-medium' : ''}>
-                  {displayValue?.toString() || ''}
+                <span 
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${badge.bg} ${badge.text} ${badge.border}`}
+                >
+                  <span className="text-[10px]">{badge.icon}</span>
+                  <span>{displayValue.toString()}</span>
                 </span>
               </div>
             )
@@ -651,40 +744,38 @@ export function HuaweiRolloutTable({
         
         const status = getPOStatus(duid)
         
-        if (!status || status.total === 0) {
+        if (!status || !status.totalLines) {
           return <span className="text-xs text-gray-400">No PO</span>
         }
         
-        // Use pre-calculated percentage from API
+        // Use pre-calculated percentage from API (based on average Remaining)
         const percentage = status.percentage || 0
         const isComplete = percentage === 100
         const isPartial = percentage > 0 && percentage < 100
+        const isEmpty = percentage === 0
         
         return (
           <div className="flex items-center gap-2">
-            <span 
-              className={`text-xs font-semibold ${
-                isComplete ? 'text-green-600' : 
-                isPartial ? 'text-orange-600' : 
-                'text-red-600'
-              }`}
-              title={`Close: ${status.close}, Open: ${status.open}, Cancelled: ${status.cancelled}`}
-            >
-              {status.display}
-            </span>
-            <div className="flex-1 min-w-[60px] max-w-[100px]">
-              <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className="flex-1 min-w-[80px] max-w-[120px]">
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div 
-                  className={`h-full ${
+                  className={`h-full transition-all ${
                     isComplete ? 'bg-green-500' : 
-                    isPartial ? 'bg-orange-500' : 
-                    'bg-red-500'
+                    isPartial ? 'bg-blue-500' : 
+                    'bg-gray-400'
                   }`}
                   style={{ width: `${percentage}%` }}
                 ></div>
               </div>
             </div>
-            <span className="text-[10px] text-gray-500 font-medium min-w-[30px] text-right">
+            <span 
+              className={`text-xs font-semibold min-w-[35px] text-right ${
+                isComplete ? 'text-green-600' : 
+                isPartial ? 'text-blue-600' : 
+                'text-gray-600'
+              }`}
+              title={`Average completion from ${status.totalLines} PO lines`}
+            >
               {percentage}%
             </span>
           </div>
@@ -1597,6 +1688,18 @@ export function HuaweiRolloutTable({
           </div>
         </div>
       )}
+      
+      {/* Site Detail Modal */}
+      <SiteDetailModal
+        isOpen={siteDetailModalOpen}
+        onClose={() => {
+          setSiteDetailModalOpen(false)
+          setSelectedSite(null)
+        }}
+        duid={selectedSite?.duid || ''}
+        duName={selectedSite?.duName}
+        selectedSheet={selectedSheet}
+      />
     </div>
   )
 }

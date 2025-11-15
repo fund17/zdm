@@ -269,21 +269,36 @@ export default function ItcHuaweiDashboard() {
     let surveyCompleted = 0
     let tssrClosed = 0
     
-    // Rollout Progress
+    // Rollout Progress (Regular Projects)
     let mosCompleted = 0
     let installCompleted = 0
     let integratedCompleted = 0
     let atpSubmit = 0
     let atpApproved = 0
     
-    // Dismantle Progress
+    // Dismantle Progress (Regular Projects)
     let dismantle = 0
     let baDismantle = 0
     let inbound = 0
     
+    // CME/PLN/BPUJL Progress (Special Projects)
+    let cmeStart = 0
+    let civilDone = 0
+    let meDone = 0
+    let plnMG = 0
+    let plnConnected = 0
+    let atpPLN = 0
+    let bpujl = 0
+    let atpCME = 0
+    
+    // Detect project type from first row
+    const hasRegularColumns = filteredData.length > 0 && ('Survey' in filteredData[0] || 'MOS' in filteredData[0])
+    const hasCMEColumns = filteredData.length > 0 && ('CME Start' in filteredData[0] || 'ATP CME' in filteredData[0])
+    
     filteredData.forEach(row => {
       // Only count rows that have at least one valid date field in filter range
       const hasValidDateInRange = 
+        // Regular project columns
         getFilteredValue(row['Survey']) ||
         getFilteredValue(row['TSSR Closed']) ||
         getFilteredValue(row['TSSRClosed']) ||
@@ -298,7 +313,16 @@ export default function ItcHuaweiDashboard() {
         getFilteredValue(row['Dismantle']) ||
         getFilteredValue(row['BA Dismantle']) ||
         getFilteredValue(row['BADismantle']) ||
-        getFilteredValue(row['Inbound'])
+        getFilteredValue(row['Inbound']) ||
+        // CME/PLN/BPUJL columns
+        getFilteredValue(row['CME Start']) ||
+        getFilteredValue(row['Civil Done']) ||
+        getFilteredValue(row['ME Done']) ||
+        getFilteredValue(row['PLN MG']) ||
+        getFilteredValue(row['PLN Connected']) ||
+        getFilteredValue(row['ATP PLN']) ||
+        getFilteredValue(row['BPUJL']) ||
+        getFilteredValue(row['ATP CME'])
       
       // Site Status - only count if row has activity in filter range
       if (hasValidDateInRange || periodFilter === 'all') {
@@ -345,25 +369,34 @@ export default function ItcHuaweiDashboard() {
       
       const inboundValue = row['Inbound']
       if (getFilteredValue(inboundValue)) inbound++
+      
+      // CME/PLN/BPUJL Progress - for special projects
+      if (getFilteredValue(row['CME Start'])) cmeStart++
+      if (getFilteredValue(row['Civil Done'])) civilDone++
+      if (getFilteredValue(row['ME Done'])) meDone++
+      if (getFilteredValue(row['PLN MG'])) plnMG++
+      if (getFilteredValue(row['PLN Connected'])) plnConnected++
+      if (getFilteredValue(row['ATP PLN'])) atpPLN++
+      if (getFilteredValue(row['BPUJL'])) bpujl++
+      if (getFilteredValue(row['ATP CME'])) atpCME++
     })
-
-    // Debug log for MOS
-    if (periodFilter !== 'all') {
-      console.log(`Filter: ${periodFilter}, MOS Completed: ${mosCompleted}`)
-    }
 
     return {
       totalSites,
       siteStatusCounts,
       regionCounts,
       
-      // Survey Progress (compare within group)
+      // Project type detection
+      hasRegularColumns,
+      hasCMEColumns,
+      
+      // Survey Progress (compare within group) - Regular Projects
       surveyCompleted,
       tssrClosed,
       surveyProgress: ((surveyCompleted / totalSites) * 100).toFixed(1),
       tssrClosedProgress: surveyCompleted > 0 ? ((tssrClosed / surveyCompleted) * 100).toFixed(1) : '0',
       
-      // Rollout Progress (compare within group)
+      // Rollout Progress (compare within group) - Regular Projects
       mosCompleted,
       installCompleted,
       integratedCompleted,
@@ -375,13 +408,31 @@ export default function ItcHuaweiDashboard() {
       atpSubmitProgress: integratedCompleted > 0 ? ((atpSubmit / integratedCompleted) * 100).toFixed(1) : '0',
       atpApprovedProgress: atpSubmit > 0 ? ((atpApproved / atpSubmit) * 100).toFixed(1) : '0',
       
-      // Dismantle Progress (compare within group)
+      // Dismantle Progress (compare within group) - Regular Projects
       dismantle,
       baDismantle,
       inbound,
       dismantleProgress: ((dismantle / totalSites) * 100).toFixed(1),
       baDismantleProgress: dismantle > 0 ? ((baDismantle / dismantle) * 100).toFixed(1) : '0',
       inboundProgress: baDismantle > 0 ? ((inbound / baDismantle) * 100).toFixed(1) : '0',
+      
+      // CME/PLN/BPUJL Progress (Special Projects)
+      cmeStart,
+      civilDone,
+      meDone,
+      plnMG,
+      plnConnected,
+      atpPLN,
+      bpujl,
+      atpCME,
+      cmeStartProgress: ((cmeStart / totalSites) * 100).toFixed(1),
+      civilDoneProgress: cmeStart > 0 ? ((civilDone / cmeStart) * 100).toFixed(1) : '0',
+      meDoneProgress: civilDone > 0 ? ((meDone / civilDone) * 100).toFixed(1) : '0',
+      plnMGProgress: meDone > 0 ? ((plnMG / meDone) * 100).toFixed(1) : '0',
+      plnConnectedProgress: totalSites > 0 ? ((plnConnected / totalSites) * 100).toFixed(1) : '0',
+      atpPLNProgress: plnConnected > 0 ? ((atpPLN / plnConnected) * 100).toFixed(1) : '0',
+      bpujlProgress: totalSites > 0 ? ((bpujl / totalSites) * 100).toFixed(1) : '0',
+      atpCMEProgress: cmeStart > 0 ? ((atpCME / cmeStart) * 100).toFixed(1) : '0',
     }
   }, [filteredData, periodFilter, getFilteredValue])
 
@@ -662,7 +713,7 @@ export default function ItcHuaweiDashboard() {
               <div className="space-y-4 mt-6 pt-6 border-t border-slate-200">
               {/* Revenue Milestone Cards - Compact */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* ATP Approved - Implementation Revenue */}
+                {/* ATP Approved / ATP CME - Implementation Revenue */}
                 <div className="bg-gradient-to-br from-blue-50 via-white to-blue-50/30 rounded-xl border border-blue-200 p-4 shadow-sm hover:shadow-md transition-all duration-300">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -670,7 +721,9 @@ export default function ItcHuaweiDashboard() {
                         <CheckCircle2 className="h-4 w-4 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-sm font-semibold text-slate-900">ATP Approved</h3>
+                        <h3 className="text-sm font-semibold text-slate-900">
+                          {metrics.hasCMEColumns ? 'ATP CME' : 'ATP Approved'}
+                        </h3>
                         <p className="text-[10px] text-slate-500 font-medium">Implementation Invoice</p>
                       </div>
                     </div>
@@ -679,41 +732,72 @@ export default function ItcHuaweiDashboard() {
                   
                   <div className="mb-3">
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-2xl sm:text-3xl font-bold text-blue-600">{metrics.atpApproved}</span>
-                      <span className="text-base sm:text-lg font-semibold text-slate-400">/ {metrics.atpSubmit}</span>
+                      <span className="text-2xl sm:text-3xl font-bold text-blue-600">
+                        {metrics.hasCMEColumns ? metrics.atpCME : metrics.atpApproved}
+                      </span>
+                      <span className="text-base sm:text-lg font-semibold text-slate-400">
+                        / {metrics.hasCMEColumns ? metrics.meDone : metrics.atpSubmit}
+                      </span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-2">
                       <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all duration-500"
-                          style={{ width: `${metrics.atpSubmit > 0 ? (metrics.atpApproved / metrics.atpSubmit) * 100 : 0}%` }}
+                          style={{ width: `${metrics.hasCMEColumns 
+                            ? (metrics.meDone > 0 ? (metrics.atpCME / metrics.meDone) * 100 : 0)
+                            : (metrics.atpSubmit > 0 ? (metrics.atpApproved / metrics.atpSubmit) * 100 : 0)}%` }}
                         />
                       </div>
                       <span className="text-xs font-semibold text-blue-600 min-w-[2.5rem] text-right">
-                        {metrics.atpSubmit > 0 ? ((metrics.atpApproved / metrics.atpSubmit) * 100).toFixed(1) : '0'}%
+                        {metrics.hasCMEColumns
+                          ? (metrics.meDone > 0 ? ((metrics.atpCME / metrics.meDone) * 100).toFixed(1) : '0')
+                          : (metrics.atpSubmit > 0 ? ((metrics.atpApproved / metrics.atpSubmit) * 100).toFixed(1) : '0')}%
                       </span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="bg-white rounded-lg p-2 border border-slate-100">
-                      <div className="text-[10px] text-slate-500 font-medium">MOS</div>
-                      <div className="text-base font-bold text-slate-900">{metrics.mosCompleted}</div>
-                    </div>
-                    <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
-                      <div className="text-[10px] text-blue-600 font-medium">Submit</div>
-                      <div className="text-base font-bold text-blue-700">{metrics.atpSubmit}</div>
-                    </div>
-                    <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
-                      <div className="text-[10px] text-emerald-600 font-medium">Rate</div>
-                      <div className="text-base font-bold text-emerald-700">
-                        {metrics.atpSubmit > 0 ? ((metrics.atpApproved / metrics.atpSubmit) * 100).toFixed(0) : '0'}%
-                      </div>
-                    </div>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    {metrics.hasCMEColumns ? (
+                      <>
+                        <div className="bg-white rounded-lg p-2 border border-slate-100">
+                          <div className="text-[10px] text-slate-500 font-medium">CME Start</div>
+                          <div className="text-base font-bold text-slate-900">{metrics.cmeStart}</div>
+                        </div>
+                        <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
+                          <div className="text-[10px] text-blue-600 font-medium">Civil</div>
+                          <div className="text-base font-bold text-blue-700">{metrics.civilDone}</div>
+                        </div>
+                        <div className="bg-amber-50 rounded-lg p-2 border border-amber-100">
+                          <div className="text-[10px] text-amber-600 font-medium">ME</div>
+                          <div className="text-base font-bold text-amber-700">{metrics.meDone}</div>
+                        </div>
+                        <div className="bg-rose-50 rounded-lg p-2 border border-rose-100">
+                          <div className="text-[10px] text-rose-600 font-medium">ATP CME</div>
+                          <div className="text-base font-bold text-rose-700">{metrics.atpCME}</div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="bg-white rounded-lg p-2 border border-slate-100">
+                          <div className="text-[10px] text-slate-500 font-medium">MOS</div>
+                          <div className="text-base font-bold text-slate-900">{metrics.mosCompleted}</div>
+                        </div>
+                        <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
+                          <div className="text-[10px] text-blue-600 font-medium">Submit</div>
+                          <div className="text-base font-bold text-blue-700">{metrics.atpSubmit}</div>
+                        </div>
+                        <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
+                          <div className="text-[10px] text-emerald-600 font-medium">Rate</div>
+                          <div className="text-base font-bold text-emerald-700">
+                            {metrics.atpSubmit > 0 ? ((metrics.atpApproved / metrics.atpSubmit) * 100).toFixed(0) : '0'}%
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {/* Inbound - Asset Return Revenue */}
+                {/* Inbound / BPUJL - Asset Return / Regulatory Revenue */}
                 <div className="bg-gradient-to-br from-purple-50 via-white to-purple-50/30 rounded-xl border border-purple-200 p-4 shadow-sm hover:shadow-md transition-all duration-300">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -721,8 +805,12 @@ export default function ItcHuaweiDashboard() {
                         <Database className="h-4 w-4 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-sm font-semibold text-slate-900">Inbound</h3>
-                        <p className="text-[10px] text-slate-500 font-medium">Asset Return Invoice</p>
+                        <h3 className="text-sm font-semibold text-slate-900">
+                          {metrics.hasCMEColumns ? 'BPUJL' : 'Inbound'}
+                        </h3>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          {metrics.hasCMEColumns ? 'Regulatory Invoice' : 'Asset Return Invoice'}
+                        </p>
                       </div>
                     </div>
                     <div className="px-2 py-1 bg-purple-600 text-white rounded text-[10px] font-semibold">BILLABLE</div>
@@ -730,41 +818,68 @@ export default function ItcHuaweiDashboard() {
                   
                   <div className="mb-3">
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-2xl sm:text-3xl font-bold text-purple-600">{metrics.inbound}</span>
-                      <span className="text-base sm:text-lg font-semibold text-slate-400">/ {metrics.dismantle}</span>
+                      <span className="text-2xl sm:text-3xl font-bold text-purple-600">
+                        {metrics.hasCMEColumns ? metrics.bpujl : metrics.inbound}
+                      </span>
+                      <span className="text-base sm:text-lg font-semibold text-slate-400">
+                        / {metrics.hasCMEColumns ? metrics.totalSites : metrics.dismantle}
+                      </span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-2">
                       <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500"
-                          style={{ width: `${metrics.dismantle > 0 ? (metrics.inbound / metrics.dismantle) * 100 : 0}%` }}
+                          style={{ width: `${metrics.hasCMEColumns
+                            ? (metrics.totalSites > 0 ? (metrics.bpujl / metrics.totalSites) * 100 : 0)
+                            : (metrics.dismantle > 0 ? (metrics.inbound / metrics.dismantle) * 100 : 0)}%` }}
                         />
                       </div>
                       <span className="text-xs font-semibold text-purple-600 min-w-[2.5rem] text-right">
-                        {metrics.dismantle > 0 ? ((metrics.inbound / metrics.dismantle) * 100).toFixed(1) : '0'}%
+                        {metrics.hasCMEColumns
+                          ? (metrics.totalSites > 0 ? ((metrics.bpujl / metrics.totalSites) * 100).toFixed(1) : '0')
+                          : (metrics.dismantle > 0 ? ((metrics.inbound / metrics.dismantle) * 100).toFixed(1) : '0')}%
                       </span>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="bg-white rounded-lg p-2 border border-slate-100">
-                      <div className="text-[10px] text-slate-500 font-medium">Dismantle</div>
-                      <div className="text-base font-bold text-slate-900">{metrics.dismantle}</div>
-                    </div>
-                    <div className="bg-amber-50 rounded-lg p-2 border border-amber-100">
-                      <div className="text-[10px] text-amber-600 font-medium">BA Done</div>
-                      <div className="text-base font-bold text-amber-700">{metrics.baDismantle}</div>
-                    </div>
-                    <div className="bg-purple-50 rounded-lg p-2 border border-purple-100">
-                      <div className="text-[10px] text-purple-600 font-medium">Rate</div>
-                      <div className="text-base font-bold text-purple-700">
-                        {metrics.baDismantle > 0 ? ((metrics.inbound / metrics.baDismantle) * 100).toFixed(0) : '0'}%
-                      </div>
-                    </div>
+                    {metrics.hasCMEColumns ? (
+                      <>
+                        <div className="bg-purple-50 rounded-lg p-2 border border-purple-100">
+                          <div className="text-[10px] text-purple-600 font-medium">PLN MG</div>
+                          <div className="text-base font-bold text-purple-700">{metrics.plnMG}</div>
+                        </div>
+                        <div className="bg-indigo-50 rounded-lg p-2 border border-indigo-100">
+                          <div className="text-[10px] text-indigo-600 font-medium">Connected</div>
+                          <div className="text-base font-bold text-indigo-700">{metrics.plnConnected}</div>
+                        </div>
+                        <div className="bg-cyan-50 rounded-lg p-2 border border-cyan-100">
+                          <div className="text-[10px] text-cyan-600 font-medium">ATP PLN</div>
+                          <div className="text-base font-bold text-cyan-700">{metrics.atpPLN}</div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="bg-white rounded-lg p-2 border border-slate-100">
+                          <div className="text-[10px] text-slate-500 font-medium">Dismantle</div>
+                          <div className="text-base font-bold text-slate-900">{metrics.dismantle}</div>
+                        </div>
+                        <div className="bg-amber-50 rounded-lg p-2 border border-amber-100">
+                          <div className="text-[10px] text-amber-600 font-medium">BA Done</div>
+                          <div className="text-base font-bold text-amber-700">{metrics.baDismantle}</div>
+                        </div>
+                        <div className="bg-purple-50 rounded-lg p-2 border border-purple-100">
+                          <div className="text-[10px] text-purple-600 font-medium">Rate</div>
+                          <div className="text-base font-bold text-purple-700">
+                            {metrics.baDismantle > 0 ? ((metrics.inbound / metrics.baDismantle) * 100).toFixed(0) : '0'}%
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {/* TSSR Closed - Survey Revenue */}
+                {/* TSSR Closed / ATP PLN - Survey / PLN Revenue */}
                 <div className="bg-gradient-to-br from-emerald-50 via-white to-emerald-50/30 rounded-xl border border-emerald-200 p-4 shadow-sm hover:shadow-md transition-all duration-300">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -772,8 +887,12 @@ export default function ItcHuaweiDashboard() {
                         <CheckCircle2 className="h-4 w-4 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-sm font-semibold text-slate-900">TSSR Closed</h3>
-                        <p className="text-[10px] text-slate-500 font-medium">Survey Invoice</p>
+                        <h3 className="text-sm font-semibold text-slate-900">
+                          {metrics.hasCMEColumns ? 'ATP PLN' : 'TSSR Closed'}
+                        </h3>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          {metrics.hasCMEColumns ? 'PLN Acceptance Invoice' : 'Survey Invoice'}
+                        </p>
                       </div>
                     </div>
                     <div className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-semibold">BILLABLE</div>
@@ -781,123 +900,64 @@ export default function ItcHuaweiDashboard() {
                   
                   <div className="mb-3">
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-2xl sm:text-3xl font-bold text-emerald-600">{metrics.tssrClosed}</span>
-                      <span className="text-base sm:text-lg font-semibold text-slate-400">/ {metrics.surveyCompleted}</span>
+                      <span className="text-2xl sm:text-3xl font-bold text-emerald-600">
+                        {metrics.hasCMEColumns ? metrics.atpPLN : metrics.tssrClosed}
+                      </span>
+                      <span className="text-base sm:text-lg font-semibold text-slate-400">
+                        / {metrics.hasCMEColumns ? metrics.plnConnected : metrics.surveyCompleted}
+                      </span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-2">
                       <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full transition-all duration-500"
-                          style={{ width: `${metrics.surveyCompleted > 0 ? (metrics.tssrClosed / metrics.surveyCompleted) * 100 : 0}%` }}
+                          style={{ width: `${metrics.hasCMEColumns
+                            ? (metrics.plnConnected > 0 ? (metrics.atpPLN / metrics.plnConnected) * 100 : 0)
+                            : (metrics.surveyCompleted > 0 ? (metrics.tssrClosed / metrics.surveyCompleted) * 100 : 0)}%` }}
                         />
                       </div>
                       <span className="text-xs font-semibold text-emerald-600 min-w-[2.5rem] text-right">
-                        {metrics.surveyCompleted > 0 ? ((metrics.tssrClosed / metrics.surveyCompleted) * 100).toFixed(1) : '0'}%
+                        {metrics.hasCMEColumns
+                          ? (metrics.plnConnected > 0 ? ((metrics.atpPLN / metrics.plnConnected) * 100).toFixed(1) : '0')
+                          : (metrics.surveyCompleted > 0 ? ((metrics.tssrClosed / metrics.surveyCompleted) * 100).toFixed(1) : '0')}%
                       </span>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="bg-white rounded-lg p-2 border border-slate-100">
-                      <div className="text-[10px] text-slate-500 font-medium">Survey</div>
-                      <div className="text-base font-bold text-slate-900">{metrics.surveyCompleted}</div>
-                    </div>
-                    <div className="bg-rose-50 rounded-lg p-2 border border-rose-100">
-                      <div className="text-[10px] text-rose-600 font-medium">Pending</div>
-                      <div className="text-base font-bold text-rose-700">{metrics.surveyCompleted - metrics.tssrClosed}</div>
-                    </div>
-                    <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
-                      <div className="text-[10px] text-emerald-600 font-medium">Rate</div>
-                      <div className="text-base font-bold text-emerald-700">
-                        {metrics.surveyCompleted > 0 ? ((metrics.tssrClosed / metrics.surveyCompleted) * 100).toFixed(0) : '0'}%
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Predictive Analytics Panel */}
-              <div className="bg-gradient-to-br from-slate-50 via-white to-slate-50 rounded-xl border border-slate-200 p-4 md:p-5 shadow-sm">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2.5 bg-gradient-to-br from-slate-700 to-slate-800 rounded-lg shadow-sm">
-                      <BarChart3 className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900">Project Performance & Forecast</h3>
-                      <p className="text-xs text-slate-600 mt-0.5 font-medium">Real-time analytics with predictive insights</p>
-                    </div>
-                  </div>
-                  <div className="px-3 py-1.5 bg-slate-800 text-white rounded-lg shadow-sm">
-                    <span className="text-xs font-semibold">LIVE</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-                  {/* Current Velocity */}
-                  <div className="bg-white rounded-xl p-4 border border-blue-200 shadow-sm hover:shadow-md transition-all">
-                    <div className="flex items-center gap-2 mb-3">
-                      <TrendingUp className="h-4 w-4 text-blue-600" />
-                      <span className="text-sm font-semibold text-slate-900">Current Velocity</span>
-                    </div>
-                    <div className="text-2xl sm:text-3xl font-bold text-blue-600 mb-1">{analytics.velocity}</div>
-                    <div className="text-xs text-slate-600 font-medium">sites/day completion rate</div>
-                    <div className="mt-3 pt-3 border-t border-slate-100">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-600 font-medium">Remaining</span>
-                        <span className="font-semibold text-slate-900">{metrics.totalSites - metrics.atpApproved} sites</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Completion Forecast */}
-                  <div className="bg-white rounded-xl p-4 border border-emerald-200 shadow-sm hover:shadow-md transition-all">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Calendar className="h-4 w-4 text-emerald-600" />
-                      <span className="text-sm font-semibold text-slate-900">Est. Completion</span>
-                    </div>
-                    <div className="text-xl font-bold text-emerald-600 mb-1 leading-tight">{analytics.estimatedCompletion}</div>
-                    <div className="text-xs text-slate-600 font-medium">based on current pace</div>
-                    <div className="mt-3 pt-3 border-t border-slate-100">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-600 font-medium">Days to Go</span>
-                        <span className="font-semibold text-slate-900">{analytics.daysToComplete < 999 ? analytics.daysToComplete : 'N/A'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Risk Alert */}
-                  <div className="bg-white rounded-xl p-4 border border-amber-200 shadow-sm hover:shadow-md transition-all">
-                    <div className="flex items-center gap-2 mb-3">
-                      <AlertCircle className="h-4 w-4 text-amber-600" />
-                      <span className="text-sm font-semibold text-slate-900">Stuck Sites</span>
-                    </div>
-                    <div className="text-2xl sm:text-3xl font-bold text-amber-600 mb-1">{analytics.stuckSites}</div>
-                    <div className="text-xs text-slate-600 font-medium">&gt;30 days no activity</div>
-                    <div className="mt-3 pt-3 border-t border-slate-100">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-600 font-medium">Risk Level</span>
-                        <span className={`font-semibold ${analytics.stuckSites / metrics.totalSites > 0.15 ? 'text-rose-600' : analytics.stuckSites / metrics.totalSites > 0.05 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                          {analytics.stuckSites / metrics.totalSites > 0.15 ? 'HIGH' : analytics.stuckSites / metrics.totalSites > 0.05 ? 'MEDIUM' : 'LOW'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bottleneck Detection */}
-                  <div className="bg-white rounded-xl p-4 border border-rose-200 shadow-sm hover:shadow-md transition-all">
-                    <div className="flex items-center gap-2 mb-3">
-                      <XCircle className="h-4 w-4 text-rose-600" />
-                      <span className="text-sm font-semibold text-slate-900">Bottleneck</span>
-                    </div>
-                    <div className="text-lg font-bold text-rose-600 mb-1 leading-tight">{analytics.bottleneck.name}</div>
-                    <div className="text-xs text-slate-600 font-medium">slowest phase</div>
-                    <div className="mt-3 pt-3 border-t border-slate-100">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-600 font-medium">Completion</span>
-                        <span className="font-semibold text-rose-600">{analytics.bottleneck.progress.toFixed(1)}%</span>
-                      </div>
-                    </div>
+                    {metrics.hasCMEColumns ? (
+                      <>
+                        <div className="bg-white rounded-lg p-2 border border-slate-100">
+                          <div className="text-[10px] text-slate-500 font-medium">BPUJL</div>
+                          <div className="text-base font-bold text-slate-900">{metrics.bpujl}</div>
+                        </div>
+                        <div className="bg-purple-50 rounded-lg p-2 border border-purple-100">
+                          <div className="text-[10px] text-purple-600 font-medium">Connected</div>
+                          <div className="text-base font-bold text-purple-700">{metrics.plnConnected}</div>
+                        </div>
+                        <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
+                          <div className="text-[10px] text-emerald-600 font-medium">ATP PLN</div>
+                          <div className="text-base font-bold text-emerald-700">{metrics.atpPLN}</div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="bg-white rounded-lg p-2 border border-slate-100">
+                          <div className="text-[10px] text-slate-500 font-medium">Survey</div>
+                          <div className="text-base font-bold text-slate-900">{metrics.surveyCompleted}</div>
+                        </div>
+                        <div className="bg-rose-50 rounded-lg p-2 border border-rose-100">
+                          <div className="text-[10px] text-rose-600 font-medium">Pending</div>
+                          <div className="text-base font-bold text-rose-700">{metrics.surveyCompleted - metrics.tssrClosed}</div>
+                        </div>
+                        <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
+                          <div className="text-[10px] text-emerald-600 font-medium">Rate</div>
+                          <div className="text-base font-bold text-emerald-700">
+                            {metrics.surveyCompleted > 0 ? ((metrics.tssrClosed / metrics.surveyCompleted) * 100).toFixed(0) : '0'}%
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -907,7 +967,11 @@ export default function ItcHuaweiDashboard() {
             {/* Summary Cards */}
             {!loading && !error && metrics && (
               <div className="mt-6 pt-6 border-t border-slate-200">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 md:gap-4">
+                <div className={`grid gap-3 md:gap-4 ${
+                  metrics.hasCMEColumns 
+                    ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5' 
+                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7'
+                }`}>
             {/* Total Sites */}
             <div className="group bg-white rounded-xl border border-slate-200/60 p-3 md:p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
               <div className="flex items-center justify-between">
@@ -921,6 +985,9 @@ export default function ItcHuaweiDashboard() {
               </div>
             </div>
 
+            {/* Regular Project Cards */}
+            {metrics.hasRegularColumns && (
+              <>
             {/* Survey */}
             <div 
               onClick={() => openSiteListModal('Survey', 'Survey')}
@@ -1030,6 +1097,153 @@ export default function ItcHuaweiDashboard() {
                 </div>
               </div>
             </div>
+            </>
+            )}
+
+            {/* CME/PLN/BPUJL Project Cards */}
+            {metrics.hasCMEColumns && (
+              <>
+            {/* CME Start */}
+            <div 
+              onClick={() => openSiteListModal('CME Start', 'CME Start')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">CME Start</p>
+                  <p className="text-2xl font-bold text-emerald-600 mt-1">{metrics.cmeStart}</p>
+                  <div className="flex items-center gap-1 mt-1">
+                    <div className="px-2 py-0.5 bg-emerald-50 rounded-full">
+                      <p className="text-xs font-semibold text-emerald-700">{metrics.cmeStartProgress}%</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="w-11 h-11 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <CheckCircle2 className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            {/* Civil Done */}
+            <div 
+              onClick={() => openSiteListModal('Civil Done', 'Civil Done')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Civil Done</p>
+                  <p className="text-2xl font-bold text-blue-600 mt-1">{metrics.civilDone}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.civilDoneProgress}% of CME Start</p>
+                </div>
+                <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <CheckCircle2 className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            {/* ME Done */}
+            <div 
+              onClick={() => openSiteListModal('ME Done', 'ME Done')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">ME Done</p>
+                  <p className="text-2xl font-bold text-amber-600 mt-1">{metrics.meDone}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.meDoneProgress}% of Civil</p>
+                </div>
+                <div className="w-11 h-11 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <Clock className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            {/* ATP CME */}
+            <div 
+              onClick={() => openSiteListModal('ATP CME', 'ATP CME')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">ATP CME</p>
+                  <p className="text-2xl font-bold text-rose-600 mt-1">{metrics.atpCME}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.atpCMEProgress}% of CME Start</p>
+                </div>
+                <div className="w-11 h-11 bg-gradient-to-br from-rose-500 to-red-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <AlertCircle className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            {/* PLN MG */}
+            <div 
+              onClick={() => openSiteListModal('PLN MG', 'PLN MG')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">PLN MG</p>
+                  <p className="text-2xl font-bold text-purple-600 mt-1">{metrics.plnMG}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.plnMGProgress}% of ME Done</p>
+                </div>
+                <div className="w-11 h-11 bg-gradient-to-br from-purple-500 to-violet-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <TrendingUp className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            {/* BPUJL */}
+            <div 
+              onClick={() => openSiteListModal('BPUJL', 'BPUJL')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">BPUJL</p>
+                  <p className="text-2xl font-bold text-cyan-600 mt-1">{metrics.bpujl}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.bpujlProgress}% of total</p>
+                </div>
+                <div className="w-11 h-11 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <CheckCircle2 className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            {/* PLN Connected */}
+            <div 
+              onClick={() => openSiteListModal('PLN Connected', 'PLN Connected')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">PLN Connected</p>
+                  <p className="text-2xl font-bold text-indigo-600 mt-1">{metrics.plnConnected}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.plnConnectedProgress}% of total</p>
+                </div>
+                <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <TrendingUp className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            {/* ATP PLN */}
+            <div 
+              onClick={() => openSiteListModal('ATP PLN', 'ATP PLN')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">ATP PLN</p>
+                  <p className="text-2xl font-bold text-emerald-600 mt-1">{metrics.atpPLN}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.atpPLNProgress}% of PLN Connected</p>
+                </div>
+                <div className="w-11 h-11 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <CheckCircle2 className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+            </>
+            )}
           </div>
 
           {/* Charts Row */}
@@ -1270,6 +1484,94 @@ export default function ItcHuaweiDashboard() {
                 })}
               </div>
             </div>
+                </div>
+              </div>
+            )}
+
+            {/* Predictive Analytics Panel */}
+            {analytics && metrics && (
+              <div className="bg-gradient-to-br from-slate-50 via-white to-slate-50 rounded-xl border border-slate-200 p-4 md:p-5 shadow-sm mb-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2.5 bg-gradient-to-br from-slate-700 to-slate-800 rounded-lg shadow-sm">
+                      <BarChart3 className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">Project Performance & Forecast</h3>
+                      <p className="text-xs text-slate-600 mt-0.5 font-medium">Real-time analytics with predictive insights</p>
+                    </div>
+                  </div>
+                  <div className="px-3 py-1.5 bg-slate-800 text-white rounded-lg shadow-sm">
+                    <span className="text-xs font-semibold">LIVE</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                  {/* Current Velocity */}
+                  <div className="bg-white rounded-xl p-4 border border-blue-200 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex items-center gap-2 mb-3">
+                      <TrendingUp className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-semibold text-slate-900">Current Velocity</span>
+                    </div>
+                    <div className="text-2xl sm:text-3xl font-bold text-blue-600 mb-1">{analytics.velocity}</div>
+                    <div className="text-xs text-slate-600 font-medium">sites/day completion rate</div>
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600 font-medium">Remaining</span>
+                        <span className="font-semibold text-slate-900">{metrics.totalSites - metrics.atpApproved} sites</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Completion Forecast */}
+                  <div className="bg-white rounded-xl p-4 border border-emerald-200 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Calendar className="h-4 w-4 text-emerald-600" />
+                      <span className="text-sm font-semibold text-slate-900">Est. Completion</span>
+                    </div>
+                    <div className="text-xl font-bold text-emerald-600 mb-1 leading-tight">{analytics.estimatedCompletion}</div>
+                    <div className="text-xs text-slate-600 font-medium">based on current pace</div>
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600 font-medium">Days to Go</span>
+                        <span className="font-semibold text-slate-900">{analytics.daysToComplete < 999 ? analytics.daysToComplete : 'N/A'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Risk Alert */}
+                  <div className="bg-white rounded-xl p-4 border border-amber-200 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertCircle className="h-4 w-4 text-amber-600" />
+                      <span className="text-sm font-semibold text-slate-900">Stuck Sites</span>
+                    </div>
+                    <div className="text-2xl sm:text-3xl font-bold text-amber-600 mb-1">{analytics.stuckSites}</div>
+                    <div className="text-xs text-slate-600 font-medium">&gt;30 days no activity</div>
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600 font-medium">Risk Level</span>
+                        <span className={`font-semibold ${analytics.stuckSites / metrics.totalSites > 0.15 ? 'text-rose-600' : analytics.stuckSites / metrics.totalSites > 0.05 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {analytics.stuckSites / metrics.totalSites > 0.15 ? 'HIGH' : analytics.stuckSites / metrics.totalSites > 0.05 ? 'MEDIUM' : 'LOW'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottleneck Detection */}
+                  <div className="bg-white rounded-xl p-4 border border-rose-200 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex items-center gap-2 mb-3">
+                      <XCircle className="h-4 w-4 text-rose-600" />
+                      <span className="text-sm font-semibold text-slate-900">Bottleneck</span>
+                    </div>
+                    <div className="text-lg font-bold text-rose-600 mb-1 leading-tight">{analytics.bottleneck.name}</div>
+                    <div className="text-xs text-slate-600 font-medium">slowest phase</div>
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600 font-medium">Completion</span>
+                        <span className="font-semibold text-rose-600">{analytics.bottleneck.progress.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

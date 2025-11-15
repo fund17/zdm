@@ -130,6 +130,7 @@ export default function ItcHuaweiPage() {
     try {
       setExporting(true)
       
+      // Use filtered data from table (respects all filters, sorting, etc)
       const dataToExport = filteredData.length > 0 ? filteredData : data
       
       if (dataToExport.length === 0) {
@@ -137,12 +138,20 @@ export default function ItcHuaweiPage() {
         return
       }
 
-      // Fetch column configuration
-      const configResponse = await fetch('/api/sheets/itc-huawei/settings')
+      // Fetch column configuration and PO status
+      const [configResponse, poStatusResponse] = await Promise.all([
+        fetch('/api/sheets/itc-huawei/settings'),
+        fetch('/api/sheets/po-status')
+      ])
+      
       if (!configResponse.ok) throw new Error('Failed to fetch column settings')
+      if (!poStatusResponse.ok) throw new Error('Failed to fetch PO status')
       
       const settingsResponse = await configResponse.json()
       const configs = settingsResponse?.data?.columns || []
+      
+      const poStatusResult = await poStatusResponse.json()
+      const poStatusMap = poStatusResult?.data || {}
       
       if (!Array.isArray(configs) || configs.length === 0) {
         throw new Error('Invalid column configuration received')
@@ -155,25 +164,38 @@ export default function ItcHuaweiPage() {
         throw new Error('No visible columns found')
       }
       
-      // Prepare data for Excel
+      // Prepare data for Excel with PO Status
       const excelData = dataToExport.map(row => {
         const excelRow: any = {}
+        
+        // Add visible columns
         visibleColumns.forEach((col: any) => {
-          const value = row[col.name]
+          const value = row[col.name] || row[col.displayName]
           excelRow[col.displayName] = value !== null && value !== undefined ? value : ''
         })
+        
+        // Add PO Status column
+        const duid = row['DUID'] || row['duid']
+        if (duid && poStatusMap[duid]) {
+          const status = poStatusMap[duid]
+          excelRow['PO Status'] = status.display || `${status.percentage}%`
+        } else {
+          excelRow['PO Status'] = '-'
+        }
+        
         return excelRow
       })
       
       // Create worksheet
       const worksheet = XLSX.utils.json_to_sheet(excelData)
       
-      // Auto-size columns
-      const columnWidths = visibleColumns.map((col: any) => {
+      // Auto-size columns (including PO Status)
+      const allColumns = [...visibleColumns, { displayName: 'PO Status', name: 'PO_Status' }]
+      const columnWidths = allColumns.map((col: any) => {
         const headerLength = col.displayName.length
         const maxDataLength = Math.max(
-          ...dataToExport.map(row => {
-            const value = row[col.name]
+          ...excelData.map(row => {
+            const value = row[col.displayName]
             return value ? String(value).length : 0
           })
         )
@@ -190,8 +212,6 @@ export default function ItcHuaweiPage() {
       
       // Download
       XLSX.writeFile(workbook, filename)
-      
-      console.log(`✅ Exported ${dataToExport.length} rows to ${filename}`)
     } catch (error) {
       console.error('❌ Export failed:', error)
       alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`)

@@ -83,7 +83,6 @@ export function SafeDataTable({ data, onUpdateData, rowIdColumn = 'id' }: DataTa
     if (onUpdateData) {
       try {
         await onUpdateData(rowId, columnId, value, oldValue)
-        console.log('✅ Safe cell update success:', { rowId, columnId, value })
       } catch (error) {
         // Revert local changes on error
         setLocalData([...data])

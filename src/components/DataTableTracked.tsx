@@ -119,7 +119,6 @@ export function DataTableWithTracking({ data, onUpdateData, showFilters = false 
       try {
         await onUpdateData(rowIndex, columnId, value, oldValue)
         updateCellStatus(rowIndex, columnId, 'success')
-        console.log('✅ Cell updated successfully:', { rowIndex, columnId, value })
       } catch (error) {
         // Revert local changes on error
         setLocalData([...data])

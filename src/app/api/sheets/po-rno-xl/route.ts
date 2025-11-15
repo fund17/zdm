@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { getSheetData } from '@/lib/googleSheets'
 import { google } from 'googleapis'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const spreadsheetId = process.env.GOOGLE_SHEET_ID_POHWRNOXL

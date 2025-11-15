@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { google } from 'googleapis'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     // Get all PO Huawei spreadsheet IDs from environment

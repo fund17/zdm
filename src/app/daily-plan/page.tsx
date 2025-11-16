@@ -414,9 +414,9 @@ export default function DailyPlanPage() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header Section - Fixed */}
-      <div className="flex-none">
+    <div className="h-full flex flex-col pb-2">
+      {/* Header */}
+      <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
           <div>
             <h1 className="text-lg font-bold text-gray-900 flex items-center">

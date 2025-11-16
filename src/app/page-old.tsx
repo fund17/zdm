@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Calendar, Users, FileText, BarChart3, TrendingUp, Activity, Clock, CheckCircle2, AlertCircle, Target, Filter, Maximize2, X, XCircle } from 'lucide-react'
+import { Calendar, Users, Activity, Clock, CheckCircle2, AlertCircle, Filter, Maximize2, X, XCircle } from 'lucide-react'
 
 interface DashboardStats {
   totalRecords: number
@@ -557,36 +557,7 @@ export default function Dashboard() {
     },
   ];
 
-  const quickActions = [
-    {
-      title: 'View Daily Plans',
-      description: 'Access and manage daily planning data',
-      icon: Calendar,
-      href: '/daily-plan',
-      color: 'bg-blue-50 text-blue-600 border-blue-200'
-    },
-    {
-      title: 'ITC Huawei Rollout',
-      description: 'Track Huawei project rollout progress',
-      icon: Activity,
-      href: '/itc-huawei',
-      color: 'bg-red-50 text-red-600 border-red-200'
-    },
-    {
-      title: 'Huawei Dashboard',
-      description: 'View project analytics and metrics',
-      icon: BarChart3,
-      href: '/dashboard/itc-huawei',
-      color: 'bg-indigo-50 text-indigo-600 border-indigo-200'
-    },
-    {
-      title: 'Generate Reports',
-      description: 'Create and download reports',
-      icon: FileText,
-      href: '/reports',
-      color: 'bg-purple-50 text-purple-600 border-purple-200'
-    }
-  ];
+
 
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
@@ -621,7 +592,7 @@ export default function Dashboard() {
         </div>
 
         {/* Filters and Quick Actions Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-10 gap-3 mb-3">
+        <div className="grid grid-cols-1 lg:grid-cols-7 gap-3 mb-3">
           {/* Filters */}
           <div className="lg:col-span-7 bg-gradient-to-br from-white via-blue-50/30 to-white rounded-xl shadow-sm border-2 border-slate-100 hover:border-blue-200 transition-all">
             <div className="px-3 py-1.5 border-b border-slate-100 bg-white/50 backdrop-blur-sm">
@@ -741,43 +712,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Quick Actions */}
-          <div className="lg:col-span-3 bg-gradient-to-br from-white via-indigo-50/30 to-white shadow-sm rounded-xl border-2 border-slate-100 hover:border-indigo-200 transition-all">
-            <div className="px-3 py-1.5 border-b border-slate-100 bg-white/50 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <div className="p-1 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg shadow-sm">
-                  <Filter className="h-3 w-3 text-white" />
-                </div>
-                <h3 className="text-xs font-medium text-slate-800">Quick Actions</h3>
-              </div>
-            </div>
-            <div className="p-2">
-              <div className="grid grid-cols-2 gap-1.5">
-                {quickActions.map((action, index) => {
-                  const IconComponent = action.icon
-                  return (
-                    <a
-                      key={index}
-                      href={action.href}
-                      className={`group relative p-2 border-2 rounded-lg hover:shadow-lg transition-all duration-300 ${action.color}`}
-                    >
-                      <div className="relative z-10">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <div className="p-1 bg-white/80 backdrop-blur-sm rounded-md shadow-sm">
-                            <IconComponent className="h-3.5 w-3.5" />
-                          </div>
-                          <h4 className="font-medium text-[11px] leading-tight">{action.title}</h4>
-                        </div>
-                        <p className="text-[8px] opacity-75 font-medium leading-tight">{action.description}</p>
-                      </div>
-                      {/* Hover Effect */}
-                      <div className="absolute inset-0 bg-gradient-to-br from-white/0 to-white/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"></div>
-                    </a>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
+
         </div>
 
         {/* Stats Cards */}

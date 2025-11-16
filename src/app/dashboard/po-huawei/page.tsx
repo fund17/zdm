@@ -434,7 +434,7 @@ export default function POHuaweiDashboard() {
   }
 
   return (
-    <div className="h-screen overflow-y-auto bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
+    <div className="h-full overflow-y-auto bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-2">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-2">
         <div className="flex flex-col space-y-3">
@@ -451,93 +451,103 @@ export default function POHuaweiDashboard() {
               </p>
             </div>
 
-            {/* Filters */}
-            <div className="space-y-3">
-              {/* Category Filter */}
-              <div className="flex items-center gap-3">
-                <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">Category:</label>
-                <div className="flex flex-wrap gap-2">
-                  {['all', 'ITC', 'RNO'].map((category) => (
-                    <button
-                      key={category}
-                      onClick={() => {
-                        setSelectedCategory(category)
-                        setSelectedMainProject('all')
-                        setSelectedProject('all')
-                      }}
-                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                        selectedCategory === category
-                          ? 'bg-purple-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {category === 'all' ? 'All Categories' : category}
-                    </button>
-                  ))}
+            {/* Filters - Compact Layout */}
+            <div className="space-y-2.5">
+              {/* Primary Filters Row */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                {/* Category Filter */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-semibold text-slate-700">Category:</label>
+                  <div className="flex gap-1.5">
+                    {['all', 'ITC', 'RNO'].map((category) => (
+                      <button
+                        key={category}
+                        onClick={() => {
+                          setSelectedCategory(category)
+                          setSelectedMainProject('all')
+                          setSelectedProject('all')
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          selectedCategory === category
+                            ? 'bg-purple-600 text-white shadow-sm'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {category === 'all' ? 'All' : category}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="h-5 w-px bg-slate-300" />
+
+                {/* Main Project Filter */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-semibold text-slate-700">Project:</label>
+                  <div className="flex gap-1.5">
+                    {['all', 'XL', 'XLS', 'IOH', 'TSEL'].map((mainProj) => (
+                      <button
+                        key={mainProj}
+                        onClick={() => {
+                          setSelectedMainProject(mainProj)
+                          setSelectedProject('all')
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          selectedMainProject === mainProj
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {mainProj === 'all' ? 'All' : mainProj}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Main Project Filter */}
-              <div className="flex items-center gap-3">
-                <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">Main Project:</label>
-                <div className="flex flex-wrap gap-2">
-                  {['all', 'XL', 'XLS', 'IOH', 'TSEL'].map((mainProj) => (
-                    <button
-                      key={mainProj}
-                      onClick={() => {
-                        setSelectedMainProject(mainProj)
-                        setSelectedProject('all')
-                      }}
-                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                        selectedMainProject === mainProj
-                          ? 'bg-blue-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {mainProj === 'all' ? 'All Projects' : mainProj}
-                    </button>
-                  ))}
+              {/* Date Range & Secondary Filters Row */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2 border-t border-slate-200">
+                {/* Date Range Filter */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-semibold text-slate-700">
+                    <Calendar className="h-3.5 w-3.5 inline-block mr-1" />
+                    Date:
+                  </label>
+                  <div className="flex gap-1.5">
+                    {[
+                      { value: 'all', label: 'All' },
+                      { value: 'this-month', label: 'This Month' },
+                      { value: 'last-6-months', label: '6 Months' },
+                      { value: 'this-year', label: 'This Year' },
+                      { value: 'last-year', label: 'Last Year' },
+                    ].map((range) => (
+                      <button
+                        key={range.value}
+                        onClick={() => {
+                          setSelectedDateRange(range.value)
+                          setSelectedProject('all')
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          selectedDateRange === range.value
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {range.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Date Range Filter */}
-              <div className="flex items-center gap-3">
-                <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">Date Range:</label>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { value: 'all', label: 'All Time' },
-                    { value: 'last-year', label: 'Last Year' },
-                    { value: 'this-year', label: 'This Year' },
-                    { value: 'last-6-months', label: 'Last 6 Months' },
-                    { value: 'this-month', label: 'This Month' },
-                  ].map((range) => (
-                    <button
-                      key={range.value}
-                      onClick={() => {
-                        setSelectedDateRange(range.value)
-                        setSelectedProject('all') // Reset project filter when date range changes
-                      }}
-                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                        selectedDateRange === range.value
-                          ? 'bg-emerald-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {range.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                <div className="h-5 w-px bg-slate-300" />
 
-              {/* Secondary Filters */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap pt-2 border-t border-slate-200">
-                {/* Project Filter */}
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <label className="text-xs font-medium text-slate-700 whitespace-nowrap">Project:</label>
+                {/* Project Detail Filter */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-semibold text-slate-700">Detail:</label>
                   <select
                     value={selectedProject}
                     onChange={(e) => setSelectedProject(e.target.value)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="all">All Projects</option>
                     {projects.map((project) => (
@@ -551,13 +561,42 @@ export default function POHuaweiDashboard() {
                 {/* Download Button */}
                 <button
                   onClick={downloadExcel}
-                  className="px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-xs font-medium ml-auto"
+                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5 text-xs font-semibold ml-auto"
                 >
-                  <Download className="h-4 w-4" />
-                  Download Excel
+                  <Download className="h-3.5 w-3.5" />
+                  Excel
                 </button>
               </div>
             </div>
+
+            {/* Loading State */}
+            {loading && (
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <div className="text-center py-12">
+                  <LoadingSpinner />
+                  <p className="mt-4 text-sm text-slate-600 font-medium">Loading PO data...</p>
+                </div>
+              </div>
+            )}
+
+            {/* Error State */}
+            {!loading && error && (
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 mx-auto mb-4 bg-rose-50 rounded-2xl flex items-center justify-center">
+                    <XCircle className="h-8 w-8 text-rose-500" />
+                  </div>
+                  <h3 className="text-base font-semibold text-slate-900 mb-2">Error Loading Data</h3>
+                  <p className="text-sm text-slate-600 mb-4 font-medium">{error}</p>
+                  <button
+                    onClick={fetchData}
+                    className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Summary Cards - Moved inside header container */}
             {!loading && !error && metrics && (
@@ -764,34 +803,6 @@ export default function POHuaweiDashboard() {
             )}
           </div>
         </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="container mx-auto px-3 sm:px-4 pb-8">
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center bg-white rounded-2xl shadow-sm border border-slate-200/60 p-12">
-            <div className="text-center">
-              <LoadingSpinner />
-              <p className="mt-4 text-sm text-slate-600 font-medium">Loading PO data...</p>
-            </div>
-          </div>
-        ) : error ? (
-          <div className="flex-1 flex items-center justify-center bg-white rounded-2xl shadow-sm border border-slate-200/60 p-12">
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-rose-50 rounded-2xl flex items-center justify-center">
-                <XCircle className="h-8 w-8 text-rose-500" />
-              </div>
-              <h3 className="text-base font-semibold text-slate-900 mb-2">Error Loading Data</h3>
-              <p className="text-sm text-slate-600 mb-4 font-medium">{error}</p>
-              <button
-                onClick={fetchData}
-                className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-              >
-                Try Again
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
 
       {/* Modal */}

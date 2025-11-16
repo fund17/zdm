@@ -429,7 +429,7 @@ export default function LandingDashboard() {
   ]
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 overflow-y-auto p-3">
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 overflow-y-auto p-3 pb-2">
       {/* Loading State */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">

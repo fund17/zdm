@@ -984,6 +984,7 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                               <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide whitespace-nowrap">Unit</th>
                               <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide whitespace-nowrap">Start Date</th>
                               <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide whitespace-nowrap">End Date</th>
+                              <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-700 uppercase tracking-wide whitespace-nowrap">Remaining</th>
                               <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide whitespace-nowrap">PO Status</th>
                             </tr>
                           </thead>
@@ -1006,6 +1007,25 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                                   <td className="px-3 py-2 text-xs text-gray-900 whitespace-nowrap">{po['Unit'] || '-'}</td>
                                   <td className="px-3 py-2 text-xs text-gray-900 whitespace-nowrap">{po['Start Date'] || '-'}</td>
                                   <td className="px-3 py-2 text-xs text-gray-900 whitespace-nowrap">{po['End Date'] || '-'}</td>
+                                  <td className="px-3 py-2 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">
+                                    {po['Remaining'] !== undefined && po['Remaining'] !== null ? (
+                                      (() => {
+                                        // Convert decimal (0-1) to percentage (0-100)
+                                        const percentage = Math.round(Number(po['Remaining']) * 100)
+                                        return (
+                                          <span className={`inline-flex items-center gap-1 ${
+                                            percentage === 0 
+                                              ? 'text-green-600' 
+                                              : percentage > 0 && percentage <= 30
+                                              ? 'text-blue-600'
+                                              : 'text-gray-600'
+                                          }`}>
+                                            {percentage}%
+                                          </span>
+                                        )
+                                      })()
+                                    ) : '-'}
+                                  </td>
                                   <td className="px-3 py-2 text-xs text-gray-900 whitespace-nowrap">
                                     <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${
                                       po['PO Status']?.toLowerCase().includes('complete') || po['PO Status']?.toLowerCase().includes('closed')

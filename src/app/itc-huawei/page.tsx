@@ -25,6 +25,12 @@ export default function ItcHuaweiPage() {
   const [sheetList, setSheetList] = useState<SheetListItem[]>([])
   const [selectedSheet, setSelectedSheet] = useState<string>('')
   const [loadingSheetList, setLoadingSheetList] = useState(true)
+  const [showToast, setShowToast] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+  const [exportData, setExportData] = useState<{
+    columns: { name: string; displayName: string }[],
+    poStatusMap: Record<string, any>
+  } | null>(null)
 
   const fetchData = useCallback(async (sheetName?: string) => {
     try {
@@ -121,107 +127,150 @@ export default function ItcHuaweiPage() {
     }
   }
 
-  const handleExport = async () => {
+  const handleExport = () => {
     if (!selectedSheet) {
       alert('Please select a project first')
+      return
+    }
+    
+    if (!exportData) {
+      alert('Export data not ready. Please wait...')
       return
     }
     
     try {
       setExporting(true)
       
-      // Use filtered data from table (respects all filters, sorting, etc)
+      // Use filtered data from table - already includes all filters
       const dataToExport = filteredData.length > 0 ? filteredData : data
       
+      console.log('📥 Export data:', {
+        filteredDataLength: filteredData.length,
+        allDataLength: data.length,
+        exportingCount: dataToExport.length,
+        visibleColumns: exportData.columns.length,
+        isFiltered: filteredData.length !== data.length && filteredData.length > 0
+      })
+      
       if (dataToExport.length === 0) {
-        alert('No data to export')
+        displayToast('No data to export', 'error')
+        setExporting(false)
         return
       }
 
-      // Fetch column configuration and PO status
-      const [configResponse, poStatusResponse] = await Promise.all([
-        fetch('/api/sheets/itc-huawei/settings'),
-        fetch('/api/sheets/po-status')
-      ])
+      // Use LOCAL data from table (no server fetch)
+      const { columns: visibleColumns, poStatusMap } = exportData
       
-      if (!configResponse.ok) throw new Error('Failed to fetch column settings')
-      if (!poStatusResponse.ok) throw new Error('Failed to fetch PO status')
+      // Prepare data for XLSX (optimized - build array directly)
+      const headers = [...visibleColumns.map((col) => col.displayName), 'PO Status']
       
-      const settingsResponse = await configResponse.json()
-      const configs = settingsResponse?.data?.columns || []
+      // Build data array (faster than creating objects)
+      const excelData = [headers]
       
-      const poStatusResult = await poStatusResponse.json()
-      const poStatusMap = poStatusResult?.data || {}
-      
-      if (!Array.isArray(configs) || configs.length === 0) {
-        throw new Error('Invalid column configuration received')
-      }
-      
-      // Filter only visible columns
-      const visibleColumns = configs.filter((col: any) => col.show === true)
-      
-      if (visibleColumns.length === 0) {
-        throw new Error('No visible columns found')
-      }
-      
-      // Prepare data for Excel with PO Status
-      const excelData = dataToExport.map(row => {
-        const excelRow: any = {}
+      // Process rows - use ONLY visible columns from table
+      for (let i = 0; i < dataToExport.length; i++) {
+        const row = dataToExport[i]
+        const rowData: any[] = []
         
-        // Add visible columns
-        visibleColumns.forEach((col: any) => {
+        // Add visible column values
+        for (let j = 0; j < visibleColumns.length; j++) {
+          const col = visibleColumns[j]
           const value = row[col.name] || row[col.displayName]
-          excelRow[col.displayName] = value !== null && value !== undefined ? value : ''
-        })
-        
-        // Add PO Status column
-        const duid = row['DUID'] || row['duid']
-        if (duid && poStatusMap[duid]) {
-          const status = poStatusMap[duid]
-          excelRow['PO Status'] = status.display || `${status.percentage}%`
-        } else {
-          excelRow['PO Status'] = '-'
+          rowData.push(value !== null && value !== undefined ? value : '')
         }
         
-        return excelRow
-      })
+        // Add PO Status
+        const duid = row['DUID'] || row['duid']
+        if (duid && poStatusMap[duid]) {
+          rowData.push(`${poStatusMap[duid].percentage}%`)
+        } else {
+          rowData.push('-')
+        }
+        
+        excelData.push(rowData)
+      }
       
-      // Create worksheet
-      const worksheet = XLSX.utils.json_to_sheet(excelData)
+      // Create worksheet from array (faster than json_to_sheet)
+      const worksheet = XLSX.utils.aoa_to_sheet(excelData)
       
-      // Auto-size columns (including PO Status)
-      const allColumns = [...visibleColumns, { displayName: 'PO Status', name: 'PO_Status' }]
-      const columnWidths = allColumns.map((col: any) => {
-        const headerLength = col.displayName.length
-        const maxDataLength = Math.max(
-          ...excelData.map(row => {
-            const value = row[col.displayName]
-            return value ? String(value).length : 0
-          })
-        )
-        return { wch: Math.min(Math.max(headerLength, maxDataLength) + 2, 50) }
+      // Set column widths (simplified calculation)
+      const colWidths = headers.map((header, idx) => {
+        let maxLength = header.length
+        // Sample first 100 rows for width calculation (faster)
+        const sampleSize = Math.min(100, excelData.length - 1)
+        for (let i = 1; i <= sampleSize; i++) {
+          const cellValue = excelData[i][idx]
+          if (cellValue) {
+            const len = String(cellValue).length
+            if (len > maxLength) maxLength = len
+          }
+        }
+        return { wch: Math.min(maxLength + 2, 50) }
       })
-      worksheet['!cols'] = columnWidths
+      worksheet['!cols'] = colWidths
       
       // Create workbook
       const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'ITC HUAWEI')
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Data')
       
       // Generate filename
-      const filename = `itc-huawei-export-${new Date().toISOString().split('T')[0]}.xlsx`
+      const isFiltered = filteredData.length > 0 && filteredData.length < data.length
+      const filename = `itc-huawei-${isFiltered ? 'filtered-' : ''}export-${new Date().toISOString().split('T')[0]}.xlsx`
       
-      // Download
-      XLSX.writeFile(workbook, filename)
+      // Write file (writeFile is optimized internally)
+      XLSX.writeFile(workbook, filename, { compression: true })
+      
+      // Show success toast
+      displayToast('Export completed successfully', 'success')
     } catch (error) {
       console.error('❌ Export failed:', error)
-      alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      displayToast(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
     } finally {
       setExporting(false)
     }
   }
 
+  // Toast notification function
+  const displayToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage(message)
+    setShowToast(true)
+    setTimeout(() => {
+      setShowToast(false)
+    }, 3000)
+  }
+
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col pb-2">
+      {/* Toast Notification */}
+      {showToast && (
+        <div 
+          className="fixed top-20 right-4 z-50 bg-white border-l-4 border-green-500 shadow-lg rounded-lg p-4 max-w-md animate-slide-in"
+          style={{
+            animation: 'slideIn 0.3s ease-out'
+          }}
+        >
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <p className="text-sm font-medium text-gray-900">{toastMessage}</p>
+            </div>
+            <button
+              onClick={() => setShowToast(false)}
+              className="ml-4 inline-flex text-gray-400 hover:text-gray-600"
+            >
+              <span className="sr-only">Close</span>
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header Section */}
       <div className="flex-none">
         <div className="flex items-center justify-between mb-3">
@@ -280,6 +329,7 @@ export default function ItcHuaweiPage() {
             loading={loading}
             error={error}
             selectedSheet={selectedSheet}
+            onExportDataReady={setExportData}
           />
         </div>
       </div>

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Navbar from './Navbar'
 import Sidebar from './Sidebar'
+import Footer from './Footer'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -119,6 +120,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         <main className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 p-6 overflow-hidden">
             {children}
+          </div>
+          
+          {/* Footer */}
+          <div className="flex-none">
+            <Footer />
           </div>
         </main>
       </div>

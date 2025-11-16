@@ -36,6 +36,10 @@ interface SimpleDataTableProps {
   loading?: boolean
   error?: string | null
   selectedSheet?: string
+  onExportDataReady?: (exportData: {
+    columns: { name: string; displayName: string }[],
+    poStatusMap: Record<string, any>
+  }) => void
 }
 
 interface EditingState {
@@ -70,7 +74,8 @@ export function HuaweiRolloutTable({
   exporting = false,
   loading = false,
   error = null,
-  selectedSheet = ''
+  selectedSheet = '',
+  onExportDataReady
 }: SimpleDataTableProps) {
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>([])
   const [editingCell, setEditingCell] = useState<EditingState | null>(null)
@@ -725,10 +730,20 @@ export function HuaweiRolloutTable({
         const duid = row['DUID'] || row['duid']
         if (!duid) return null
         const status = getPOStatus(duid)
-        return status?.display || null
+        // Return percentage as string for filtering (e.g., "75%")
+        return status?.percentage !== undefined ? `${status.percentage}%` : null
       },
       enableResizing: true,
       enableSorting: true,
+      sortingFn: (rowA: any, rowB: any, columnId: string) => {
+        const a = rowA.getValue(columnId) as string | null
+        const b = rowB.getValue(columnId) as string | null
+        if (!a) return 1
+        if (!b) return -1
+        const aNum = parseInt(a.replace('%', ''))
+        const bNum = parseInt(b.replace('%', ''))
+        return aNum - bNum
+      },
       cell: ({ row }: { row: any }) => {
         const duid = row.original['DUID'] || row.original['duid']
         if (!duid) return <span className="text-xs text-gray-400">-</span>
@@ -850,13 +865,38 @@ export function HuaweiRolloutTable({
     },
   })
 
-  // Notify parent of filtered data changes
+  // Notify parent of filtered data changes (including all filters: date, column, and global search)
   useEffect(() => {
     if (onFilteredDataChange) {
-      const filteredRows = table.getFilteredRowModel().rows.map(row => row.original)
-      onFilteredDataChange(filteredRows)
+      // Get the FINAL filtered rows after ALL filters are applied (date + column + search)
+      const allFilteredRows = table.getFilteredRowModel().rows.map(row => row.original)
+      console.log('📊 Filtered data updated:', {
+        dateFilteredRows: filteredData.length,
+        allFilteredRows: allFilteredRows.length,
+        hasColumnFilters: columnFilters.length > 0,
+        hasGlobalFilter: !!globalFilter,
+        difference: filteredData.length - allFilteredRows.length
+      })
+      onFilteredDataChange(allFilteredRows)
     }
-  }, [table, onFilteredDataChange])
+  }, [table, columnFilters, globalFilter, sorting, filteredData.length, onFilteredDataChange])
+
+  // Send export-ready data to parent (visible columns + PO status map)
+  useEffect(() => {
+    if (onExportDataReady && columnConfigs.length > 0) {
+      // Use columnVisibility state (table's current state) instead of config.show
+      const visibleColumns = columnConfigs
+        .filter(config => columnVisibility[config.name] !== false)
+        .map(config => ({
+          name: config.name,
+          displayName: config.displayName
+        }))
+      onExportDataReady({
+        columns: visibleColumns,
+        poStatusMap: poStatusMap
+      })
+    }
+  }, [columnConfigs, columnVisibility, poStatusMap, onExportDataReady])
 
   // Get unique values for a column
   const getUniqueColumnValues = (columnId: string) => {
@@ -864,44 +904,57 @@ export function HuaweiRolloutTable({
     const config = columnConfigs.find(c => c.name === columnId)
     
     filteredData.forEach(row => {
-      // Use same matching strategy as accessorFn
-      let value = row[columnId]
+      let value
       
-      // Try display name (with spaces)
-      if ((value === null || value === undefined) && config) {
-        value = row[config.displayName]
-      }
-      
-      // Try case-insensitive match
-      if ((value === null || value === undefined) && config) {
-        const matchingKey = Object.keys(row).find(
-          key => key.toLowerCase() === columnId.toLowerCase() ||
-                 key.toLowerCase() === config.displayName.toLowerCase()
-        )
-        if (matchingKey) {
-          value = row[matchingKey]
+      // Special handling for PO_Status column (computed from poStatusMap)
+      if (columnId === 'PO_Status') {
+        const duid = row['DUID'] || row['duid']
+        if (duid) {
+          const status = getPOStatus(duid)
+          if (status?.percentage !== undefined) {
+            value = `${status.percentage}%`
+          }
         }
-      }
-      
-      // Try without spaces
-      if ((value === null || value === undefined) && config) {
-        const matchingKey = Object.keys(row).find(
-          key => key.replace(/\s+/g, '') === columnId.replace(/\s+/g, '') ||
-                 key.replace(/\s+/g, '') === config.displayName.replace(/\s+/g, '')
-        )
-        if (matchingKey) {
-          value = row[matchingKey]
+      } else {
+        // Use same matching strategy as accessorFn for regular columns
+        value = row[columnId]
+        
+        // Try display name (with spaces)
+        if ((value === null || value === undefined) && config) {
+          value = row[config.displayName]
         }
-      }
-      
-      // Try trimmed match
-      if ((value === null || value === undefined) && config) {
-        const matchingKey = Object.keys(row).find(
-          key => key.trim() === columnId.trim() ||
-                 key.trim() === config.displayName.trim()
-        )
-        if (matchingKey) {
-          value = row[matchingKey]
+        
+        // Try case-insensitive match
+        if ((value === null || value === undefined) && config) {
+          const matchingKey = Object.keys(row).find(
+            key => key.toLowerCase() === columnId.toLowerCase() ||
+                   key.toLowerCase() === config.displayName.toLowerCase()
+          )
+          if (matchingKey) {
+            value = row[matchingKey]
+          }
+        }
+        
+        // Try without spaces
+        if ((value === null || value === undefined) && config) {
+          const matchingKey = Object.keys(row).find(
+            key => key.replace(/\s+/g, '') === columnId.replace(/\s+/g, '') ||
+                   key.replace(/\s+/g, '') === config.displayName.replace(/\s+/g, '')
+          )
+          if (matchingKey) {
+            value = row[matchingKey]
+          }
+        }
+        
+        // Try trimmed match
+        if ((value === null || value === undefined) && config) {
+          const matchingKey = Object.keys(row).find(
+            key => key.trim() === columnId.trim() ||
+                   key.trim() === config.displayName.trim()
+          )
+          if (matchingKey) {
+            value = row[matchingKey]
+          }
         }
       }
       
@@ -909,7 +962,15 @@ export function HuaweiRolloutTable({
         values.add(value.toString())
       }
     })
-    return Array.from(values).sort()
+    return Array.from(values).sort((a, b) => {
+      // Sort percentage values numerically
+      if (columnId === 'PO_Status') {
+        const aNum = parseInt(a.replace('%', ''))
+        const bNum = parseInt(b.replace('%', ''))
+        return aNum - bNum
+      }
+      return a.localeCompare(b)
+    })
   }
 
   // Get current filter value for a column
@@ -1261,61 +1322,87 @@ export function HuaweiRolloutTable({
             </div>
           </div>
           
-          {/* Export Button */}
-          {onExport && (
-            <button 
-              onClick={onExport}
-              disabled={exporting}
-              className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
-            >
-              <Download className={`h-3.5 w-3.5 mr-1.5 ${exporting ? 'animate-bounce' : ''}`} />
-              {exporting ? 'Exporting...' : 'Export Excel'}
-            </button>
-          )}
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
+            {/* Clear Date Filter */}
+            {(dateFilter.startDate !== (() => {
+              const today = new Date()
+              const oneMonthAgo = new Date(today)
+              oneMonthAgo.setMonth(today.getMonth() - 1)
+              return oneMonthAgo.toISOString().split('T')[0]
+            })() || dateFilter.endDate !== new Date().toISOString().split('T')[0]) && (
+              <button
+                onClick={() => {
+                  const today = new Date()
+                  const oneMonthAgo = new Date(today)
+                  oneMonthAgo.setMonth(today.getMonth() - 1)
+                  setDateFilter({
+                    startDate: oneMonthAgo.toISOString().split('T')[0],
+                    endDate: today.toISOString().split('T')[0]
+                  })
+                }}
+                className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                title="Reset date filter to last 30 days"
+              >
+                <Calendar className="h-3.5 w-3.5 mr-1" />
+                Reset Date
+              </button>
+            )}
+            
+            {/* Clear All Column Filters */}
+            {hasActiveFilters && (
+              <button
+                onClick={handleClearAllFilters}
+                className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                title="Clear all column filters"
+              >
+                <XCircle className="h-3.5 w-3.5 mr-1" />
+                Clear Filters
+              </button>
+            )}
+            
+            {/* Export Button */}
+            {onExport && (
+              <button 
+                onClick={onExport}
+                disabled={exporting}
+                className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                <Download className={`h-3.5 w-3.5 mr-1.5 ${exporting ? 'animate-bounce' : ''}`} />
+                {exporting ? 'Exporting...' : 'Export'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Action Bar */}
-      {(pendingChanges.size > 0 || hasActiveFilters) && (
+      {pendingChanges.size > 0 && (
         <div className="flex-none p-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            {pendingChanges.size > 0 && (
-              <>
-                <span className="text-xs text-gray-600">
-                  {pendingChanges.size} unsaved change{pendingChanges.size !== 1 ? 's' : ''}
-                </span>
-                <button
-                  onClick={handleBatchSave}
-                  disabled={isSaving}
-                  className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                >
-                  <Check className="h-3 w-3" />
-                  {isSaving ? 'Saving...' : 'Save All'}
-                </button>
-                <button
-                  onClick={handleCancelAll}
-                  disabled={isSaving}
-                  className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 flex items-center gap-1"
-                >
-                  <X className="h-3 w-3" />
-                  Cancel
-                </button>
-              </>
-            )}
+            <span className="text-xs text-gray-600">
+              {pendingChanges.size} unsaved change{pendingChanges.size !== 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={handleBatchSave}
+              disabled={isSaving}
+              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+            >
+              <Check className="h-3 w-3" />
+              {isSaving ? 'Saving...' : 'Save All'}
+            </button>
+            <button
+              onClick={handleCancelAll}
+              disabled={isSaving}
+              className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 flex items-center gap-1"
+            >
+              <X className="h-3 w-3" />
+              Cancel
+            </button>
             {saveError && (
               <span className="text-xs text-red-600">{saveError}</span>
             )}
           </div>
-
-          {hasActiveFilters && (
-            <button
-              onClick={handleClearAllFilters}
-              className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 flex items-center gap-1"
-            >
-              <XCircle className="h-3 w-3" />
-              Clear All Filters
-            </button>
-          )}
         </div>
       )}
 
@@ -1346,7 +1433,7 @@ export function HuaweiRolloutTable({
                         width: header.getSize(),
                         position: isPinned ? 'sticky' : 'relative',
                       }}
-                      className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide border-b-2 border-gray-300"
+                      className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide border-b-2 border-gray-300 border-r border-gray-200"
                     >
                       {header.isPlaceholder ? null : (
                         <div className="flex items-center justify-between">
@@ -1366,14 +1453,16 @@ export function HuaweiRolloutTable({
                           {/* Filter Button */}
                           <button
                             onClick={(e) => handleFilterDropdownToggle(e, header.column.id)}
-                            className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
+                            className={`relative p-1.5 rounded hover:bg-gray-200 transition-colors ${
                               getSelectedCount(header.column.id) > 0 ? 'bg-blue-100 text-blue-600' : 'text-gray-500'
                             }`}
                             title="Filter column"
                           >
                             <Filter className="h-3.5 w-3.5" />
                             {getSelectedCount(header.column.id) > 0 && (
-                              <span className="ml-0.5 text-[10px] font-bold">{getSelectedCount(header.column.id)}</span>
+                              <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[9px] rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center font-bold shadow-sm">
+                                {getSelectedCount(header.column.id)}
+                              </span>
                             )}
                           </button>
                         </div>
@@ -1423,7 +1512,7 @@ export function HuaweiRolloutTable({
                           ...pinStyles,
                           width: cell.column.getSize(),
                         }}
-                        className="px-2 py-1.5 whitespace-nowrap text-xs"
+                        className="px-2 py-1.5 whitespace-nowrap text-xs border-r border-gray-200"
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
@@ -1620,9 +1709,11 @@ export function HuaweiRolloutTable({
               
               {/* Selected Count Badge */}
               {getSelectedCount(activeFilterColumn) > 0 && (
-                <div className="mt-2 inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                  <span className="mr-1">✓</span>
-                  {getSelectedCount(activeFilterColumn)} selected
+                <div className="mt-2 flex items-center justify-center">
+                  <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                    <span className="mr-1">✓</span>
+                    {getSelectedCount(activeFilterColumn)} selected
+                  </span>
                 </div>
               )}
             </div>

@@ -12,12 +12,23 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
 
   useEffect(() => {
     // Check if user was redirected from protected page
     const redirect = searchParams.get('redirect')
     if (redirect) {
       setError('Please login to access that page')
+    }
+    // load remember me email
+    try {
+      const remembered = localStorage.getItem('rememberEmail')
+      if (remembered) {
+        setEmail(remembered)
+        setRememberMe(true)
+      }
+    } catch (e) {
+      // ignore
     }
   }, [searchParams])
 
@@ -38,6 +49,15 @@ function LoginForm() {
       const data = await response.json()
 
       if (data.success) {
+        try {
+          if (rememberMe) {
+            localStorage.setItem('rememberEmail', email)
+          } else {
+            localStorage.removeItem('rememberEmail')
+          }
+        } catch (e) {
+          // ignore
+        }
         // Get redirect parameter or default to home
         const redirectTo = searchParams.get('redirect') || '/'
         router.push(redirectTo)
@@ -61,26 +81,49 @@ function LoginForm() {
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-400/20 rounded-full blur-3xl"></div>
       </div>
 
-      {/* Login Card */}
-      <div className="relative w-full max-w-md">
-        {/* Logo/Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg mb-4">
-            <Lock className="h-10 w-10 text-white" />
+      {/* Grid Container */}
+      <div className="relative w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+        {/* Left Intro / Illustration */}
+        <div className="hidden md:flex flex-col justify-center px-6 py-8 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-lg h-[520px]">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="inline-flex items-center justify-center w-14 h-14 bg-white/10 rounded-lg">
+              <Lock className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold tracking-tight">ZMG Management System</h2>
+              <p className="text-sm opacity-90">Secure access for project and rollout management</p>
+            </div>
           </div>
-          <h1 className="text-3xl font-black text-slate-800 mb-2">Welcome Back</h1>
-          <p className="text-sm text-slate-600 font-medium">Sign in to access your dashboard</p>
+          <div className="mt-2">
+            <h3 className="text-3xl font-extrabold leading-tight mb-2">Welcome back</h3>
+            <p className="text-sm text-white/90 mb-6">Sign in to continue managing projects, POs, and daily plans.</p>
+            <ul className="text-sm list-disc pl-5 space-y-2 text-white/90">
+              <li>Fast project insights</li>
+              <li>PO tracking & status</li>
+              <li>File management & reports</li>
+            </ul>
+          </div>
+          <div className="mt-auto pt-6 text-xs text-white/80">
+            Need help? Contact <a href="mailto:support@zmg.co.id" className="underline">support@zmg.co.id</a>
+          </div>
         </div>
-
-        {/* Login Form */}
-        <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-100 p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Card / Form */}
+        <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-100 p-8 h-[520px] flex flex-col justify-center">
+          <form onSubmit={handleSubmit} className="space-y-6" aria-labelledby="login-title">
             {/* Error Message */}
             {error && (
               <div className="bg-rose-50 border-2 border-rose-200 rounded-xl p-4">
                 <p className="text-sm font-semibold text-rose-700 text-center">{error}</p>
               </div>
             )}
+
+            <div className="flex items-center justify-between">
+              <div className="text-left">
+                <h1 id="login-title" className="text-2xl font-extrabold text-slate-800">Sign in to your account</h1>
+                <p className="text-sm text-slate-500">Enter your company credentials to continue</p>
+              </div>
+              {/* Right side (Demo & Forgot) removed - moved Forgot link below password field */}
+            </div>
 
             {/* Email Field */}
             <div className="space-y-2">
@@ -102,6 +145,8 @@ function LoginForm() {
                   disabled={loading}
                 />
               </div>
+
+              {/* NOTE: Forgot password link moved under the Password field (see block below) */}
             </div>
 
             {/* Password Field */}
@@ -132,34 +177,42 @@ function LoginForm() {
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {/* Forgot password link - positioned under password field on the right */}
+              <div className="mt-2 text-right">
+                <a href="/forgot-password" className="text-xs text-blue-600 hover:underline">Forgot password?</a>
+              </div>
             </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-3 px-4 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Signing in...</span>
-                </>
-              ) : (
-                <>
-                  <LogIn className="h-5 w-5" />
-                  <span>Sign In</span>
-                </>
-              )}
-            </button>
-          </form>
+              {/* Remember / Submit Row */}
+              <div className="flex items-center justify-between gap-4">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="form-checkbox h-4 w-4" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+                  <span className="text-sm text-slate-600">Remember me</span>
+                </label>
+                <div className="flex gap-2 items-center">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold rounded-xl transition-all duration-200 shadow disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {loading ? (
+                      <div className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <LogIn className="h-4 w-4" />
+                    )}
+                    <span className="text-sm">Sign In</span>
+                  </button>
+                </div>
+              </div>
+              {/* Social SSO and OR divider removed */}
 
-        </div>
+              </form>
+              </div>
 
         {/* Footer */}
-        <div className="text-center mt-8">
+        <div className="text-center md:col-span-2 mt-8">
           <p className="text-xs text-slate-500 font-medium">
-            © 2025 ZMG Dashboard. All rights reserved.
+            © 2025 ZMG Management System. All rights reserved.
           </p>
         </div>
       </div>

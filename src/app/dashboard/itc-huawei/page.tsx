@@ -84,7 +84,6 @@ export default function ItcHuaweiDashboard() {
       const result = await response.json()
       setSheetList(result.data || [])
     } catch (err) {
-      console.error('Failed to fetch sheet list:', err)
       setSheetList([
         { sheetName: 'ITCHIOH', title: 'Huawei IOH Project' },
         { sheetName: 'ITCHWXL', title: 'Huawei XLS Project' },
@@ -627,11 +626,11 @@ export default function ItcHuaweiDashboard() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
-      <div className="container mx-auto px-2 sm:px-3 py-2 flex-1 flex flex-col max-h-[calc(100vh-4rem)]">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200/60 flex flex-col h-full">
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-2">
+      <div className="w-full px-2 sm:px-3 py-2 flex-1 flex flex-col overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200/60 flex flex-col h-full overflow-hidden">
           {/* Sticky Header */}
-          <div className="sticky top-0 z-10 bg-white border-b border-slate-200/60 p-4 md:p-5">
+          <div className="sticky top-0 z-10 bg-white rounded-t-xl border-b border-slate-200/60 p-4 md:p-5">
             {/* Header Title */}
             <div>
               <h1 className="text-lg md:text-xl font-semibold text-slate-900 flex items-center gap-2.5">
@@ -707,7 +706,7 @@ export default function ItcHuaweiDashboard() {
           </div>
 
           {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto p-4 md:p-5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 hover:scrollbar-thumb-slate-400">
+          <div className="flex-1 overflow-y-auto rounded-b-xl p-4 md:p-5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 hover:scrollbar-thumb-slate-400">
             {/* Professional Revenue & Performance Analytics */}
             {analytics && metrics && (
               <div className="space-y-4 mt-6 pt-6 border-t border-slate-200">

@@ -403,7 +403,7 @@ export default function DailyPlanPage() {
           <p className="text-sm text-gray-600 mb-4">{error}</p>
           <button 
             onClick={handleRefresh}
-            className="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-100 rounded-md hover:bg-blue-100 transition-colors"
           >
             <RefreshCcw className="h-3.5 w-3.5 mr-1.5" />
             Try Again
@@ -774,7 +774,7 @@ export default function DailyPlanPage() {
                 <button
                   onClick={handleImportExcel}
                   disabled={!importFile || importing}
-                  className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                  className="px-4 py-2 text-sm font-semibold text-emerald-800 bg-emerald-50 border border-emerald-600 rounded-lg hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center shadow-sm"
                 >
                   {importing ? (
                     <>

@@ -1814,7 +1814,7 @@ export function HuaweiRolloutTable({
           <p className="text-sm text-gray-500 mb-4">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="inline-flex items-center px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            className="inline-flex items-center px-4 py-2 text-sm bg-blue-50 text-blue-700 border border-blue-100 rounded-md hover:bg-blue-100"
           >
             Try Again
           </button>
@@ -1864,7 +1864,7 @@ export function HuaweiRolloutTable({
                     endDate: today.toISOString().split('T')[0]
                   })
                 }}
-                className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
                 title="Reset date filter to last 30 days"
               >
                 Reset Date
@@ -1886,7 +1886,7 @@ export function HuaweiRolloutTable({
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={importing}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 border border-transparent rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-600 rounded-md hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                     title="Import Excel to update data (matches by DUID)"
                   >
                     {importing ? (
@@ -1908,23 +1908,13 @@ export function HuaweiRolloutTable({
                 <button
                   onClick={handleExport}
                   disabled={localExporting}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-600 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                   title="Export filtered data to Excel (local data, no server fetch)"
                 >
                   <Download className={`h-3.5 w-3.5 mr-1.5 ${localExporting ? 'animate-bounce' : ''}`} />
                   {localExporting ? 'Exporting...' : 'Export'}
                 </button>
-                {onRefresh && (
-                  <button
-                    onClick={onRefresh}
-                    disabled={refreshing}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Refresh data from Google Sheets"
-                  >
-                    <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
-                    {refreshing ? 'Refreshing...' : 'Refresh'}
-                  </button>
-                )}
+                {/* Refresh is now placed in the search area (right side) */}
                 {!showPOStatus ? (
                   <button
                     onClick={() => {
@@ -1933,7 +1923,7 @@ export function HuaweiRolloutTable({
                       setColumnVisibility(prev => ({ ...prev, PO_Status: true }))
                     }}
                     disabled={poLoading}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-purple-600 border border-transparent rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-purple-800 bg-purple-50 border border-purple-600 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                     title="Load PO Status column"
                   >
                     <Database className="h-3.5 w-3.5 mr-1.5" />
@@ -1945,7 +1935,7 @@ export function HuaweiRolloutTable({
                       setShowPOStatus(false)
                       setColumnVisibility(prev => ({ ...prev, PO_Status: false }))
                     }}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-200"
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-purple-800 bg-purple-50 border border-purple-600 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors duration-200 shadow-sm"
                     title="Hide PO Status column"
                   >
                     <Database className="h-3.5 w-3.5 mr-1.5" />
@@ -1958,7 +1948,7 @@ export function HuaweiRolloutTable({
                   <button
                     onClick={handleUndoImport}
                     disabled={importing}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-100 rounded-md hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Undo last import and restore previous data"
                   >
                     <svg className="h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1976,7 +1966,7 @@ export function HuaweiRolloutTable({
                 <button
                   onClick={handleBatchSave}
                   disabled={isSaving}
-                  className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white border border-green-600 rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-xs font-semibold text-green-800 bg-green-50 border border-green-600 rounded hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-200 transition-colors duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   {isSaving ? (
                     <>
@@ -1994,7 +1984,7 @@ export function HuaweiRolloutTable({
                 <button
                   onClick={handleCancelAll}
                   disabled={isSaving}
-                  className="px-3 py-1.5 text-xs font-medium bg-gray-600 text-white border border-gray-600 rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-all duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-xs font-semibold text-gray-900 bg-gray-50 border border-gray-500 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-300 transition-colors duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   <X className="w-3 h-3" />
                   <span>Cancel</span>
@@ -2017,11 +2007,25 @@ export function HuaweiRolloutTable({
               {(globalFilter || hasActiveFilters) && (
                 <button
                   onClick={handleClearAllFilters}
-                  className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 flex items-center space-x-2 shadow-sm"
+                  className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-200 flex items-center space-x-2 shadow-sm"
                   title="Clear all filters"
                 >
                   <XCircle className="h-3.5 w-3.5" />
                   <span>Clear</span>
+                </button>
+              )}
+
+              {/* Icon-only Refresh aligned next to search */}
+              {onRefresh && (
+                <button
+                  type="button"
+                  onClick={onRefresh}
+                  disabled={refreshing}
+                  title="Refresh data"
+                  aria-label="Refresh data"
+                  className="p-2 rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
                 </button>
               )}
             </div>
@@ -2108,7 +2112,7 @@ export function HuaweiRolloutTable({
                           >
                             <Filter className="h-3.5 w-3.5" />
                             {getSelectedCount(header.column.id) > 0 && (
-                              <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[9px] rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center font-bold shadow-sm">
+                              <span className="absolute -top-1 -right-1 bg-blue-50 text-blue-700 border border-blue-100 text-[9px] rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center font-bold shadow-sm">
                                 {getSelectedCount(header.column.id)}
                               </span>
                             )}

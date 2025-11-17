@@ -469,7 +469,7 @@ export default function POHuaweiDashboard() {
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                           selectedCategory === category
-                            ? 'bg-purple-600 text-white shadow-sm'
+                            ? 'bg-purple-50 text-purple-700 border border-purple-100 shadow-sm'
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                       >
@@ -494,7 +494,7 @@ export default function POHuaweiDashboard() {
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                           selectedMainProject === mainProj
-                            ? 'bg-blue-600 text-white shadow-sm'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-100 shadow-sm'
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                       >
@@ -529,7 +529,7 @@ export default function POHuaweiDashboard() {
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                           selectedDateRange === range.value
-                            ? 'bg-emerald-600 text-white shadow-sm'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100 shadow-sm'
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                       >
@@ -561,7 +561,7 @@ export default function POHuaweiDashboard() {
                 {/* Download Button */}
                 <button
                   onClick={downloadExcel}
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5 text-xs font-semibold ml-auto"
+                  className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1.5 text-xs font-semibold ml-auto"
                 >
                   <Download className="h-3.5 w-3.5" />
                   Excel
@@ -590,7 +590,7 @@ export default function POHuaweiDashboard() {
                   <p className="text-sm text-slate-600 mb-4 font-medium">{error}</p>
                   <button
                     onClick={fetchData}
-                    className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2 text-sm font-medium bg-blue-50 text-blue-700 border border-blue-100 rounded-xl hover:bg-blue-100 transition-colors"
                   >
                     Try Again
                   </button>

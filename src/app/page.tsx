@@ -692,7 +692,7 @@ export default function LandingDashboard() {
                   <>
                     <div className="text-2xl font-bold text-purple-600">{summary.poHuawei.totalSites}</div>
                     <div className="text-xs text-purple-600 mt-0.5">
-                      {summary.poHuawei.statusCounts.open} open POs
+                      {(summary.poHuawei.statusCounts.new || 0) + (summary.poHuawei.statusCounts.open || 0) + (summary.poHuawei.statusCounts.longAging || 0)} Active POs
                     </div>
                   </>
                 )}

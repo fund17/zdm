@@ -385,7 +385,7 @@ export default function ProfilePage() {
                       </button>
                       <button
                         onClick={handleSaveProfile}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center"
+                        className="px-6 py-2 bg-blue-50 text-blue-700 border border-blue-100 rounded-xl hover:bg-blue-100 transition-colors flex items-center"
                       >
                         <Save className="h-4 w-4 mr-2" />
                         Save Changes

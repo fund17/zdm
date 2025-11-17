@@ -889,22 +889,22 @@ export default function Dashboard() {
                               <h5 className="text-sm font-medium text-slate-800">📊 {item.activity}</h5>
                               <div className="flex items-center gap-1">
                                 <button
-                                  className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
+                                  className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-100 rounded-md transition-colors"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     setZoomedActivityCard(index)
                                   }}
                                 >
-                                  <Maximize2 className="h-3.5 w-3.5" />
+                                  <Maximize2 className="h-3.5 w-3.5 text-blue-700" />
                                 </button>
                                 <button
-                                  className="p-1.5 bg-slate-500 hover:bg-slate-600 text-white rounded-md transition-colors"
+                                  className="p-1.5 bg-gray-50 hover:bg-gray-100 text-gray-800 border border-gray-200 rounded-md transition-colors"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     setFlippedActivityCards(prev => ({ ...prev, [index]: false }))
                                   }}
                                 >
-                                  <X className="h-3.5 w-3.5" />
+                                  <X className="h-3.5 w-3.5 text-gray-800" />
                                 </button>
                               </div>
                             </div>

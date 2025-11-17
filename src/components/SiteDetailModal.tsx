@@ -567,7 +567,7 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowCreateFolder(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                    className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 border border-green-100 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
                   >
                     <FolderOpen className="h-4 w-4" />
                     <span>New Folder</span>
@@ -581,7 +581,7 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                       disabled={uploading}
                       className="hidden"
                     />
-                    <div className={`flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors ${
+                    <div className={`flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg hover:bg-blue-100 transition-colors ${
                       uploading ? 'opacity-50 cursor-not-allowed' : ''
                     }`}>
                       <Upload className="h-4 w-4" />
@@ -1056,7 +1056,7 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
         <div className="border-t border-gray-200 p-4 bg-gray-50">
           <button
             onClick={onClose}
-            className="w-full sm:w-auto px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+            className="w-full sm:w-auto px-6 py-2 bg-gray-50 text-gray-800 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors font-medium"
           >
             Close
           </button>
@@ -1093,7 +1093,7 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
               <button
                 onClick={handleCreateFolder}
                 disabled={!newFolderName.trim() || creatingFolder}
-                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 text-sm font-semibold text-green-800 bg-green-50 border border-green-600 rounded-lg hover:bg-green-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
                 {creatingFolder ? 'Creating...' : 'Create'}
               </button>
@@ -1144,7 +1144,7 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                   <a
                     href={previewFile.downloadUrl}
                     download
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-800 bg-green-50 border border-green-600 rounded-lg hover:bg-green-100 transition-colors shadow-sm"
                   >
                     <Download className="h-3.5 w-3.5" />
                     Download
@@ -1256,7 +1256,7 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                         <a
                           href={previewFile.downloadUrl}
                           download
-                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-green-800 bg-green-50 border border-green-600 rounded-lg hover:bg-green-100 transition-colors shadow-sm"
                         >
                           <Download className="h-4 w-4" />
                           Download

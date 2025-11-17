@@ -1595,7 +1595,7 @@ export default function ItcHuaweiDashboard() {
                   <p className="text-sm text-slate-600 mb-4 font-medium">{error}</p>
                   <button
                     onClick={() => fetchAllData()}
-                    className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2 text-sm font-medium bg-blue-50 text-blue-700 border border-blue-100 rounded-xl hover:bg-blue-100 transition-colors"
                   >
                     Try Again
                   </button>
@@ -1619,7 +1619,7 @@ export default function ItcHuaweiDashboard() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={downloadFromModal}
-                  className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-xs sm:text-sm font-medium shadow-sm"
+                  className="px-3 sm:px-4 py-2 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-2 text-xs sm:text-sm font-medium shadow-sm"
                 >
                   <Download className="h-4 w-4" />
                   <span className="hidden sm:inline">Download Excel</span>

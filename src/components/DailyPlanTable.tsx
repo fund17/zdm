@@ -15,7 +15,7 @@ import {
   ColumnPinningState,
 } from '@tanstack/react-table'
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { Check, X, Edit2, Shield, AlertTriangle, Settings, Eye, EyeOff, Lock, CalendarRange, Filter, XCircle, Activity as ActivityIcon, Download } from 'lucide-react'
+import { Check, X, Edit2, Shield, AlertTriangle, Settings, Eye, EyeOff, Lock, CalendarRange, Filter, XCircle, Activity as ActivityIcon, Download, RefreshCcw } from 'lucide-react'
 
 interface ColumnConfig {
   name: string
@@ -1391,7 +1391,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                     onDateFilterChange({ startDate: todayStr, endDate: todayStr })
                   }
                 }}
-                className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
                 title="Filter to today's records"
               >
                 Today
@@ -1421,7 +1421,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                 {onImport && (
                   <button
                     onClick={onImport}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 border border-transparent rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all duration-200"
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-600 rounded-md hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors duration-200 shadow-sm"
                     title="Import Excel file"
                   >
                     <svg className="h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1433,27 +1433,13 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                 <button
                   onClick={handleExport}
                   disabled={exporting}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-600 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                   title="Export filtered data to Excel (local data, no server fetch)"
                 >
                   <Download className={`h-3.5 w-3.5 mr-1.5 ${exporting ? 'animate-bounce' : ''}`} />
                   {exporting ? 'Exporting...' : 'Export'}
                 </button>
-                {onRefresh && (
-                  <button
-                    onClick={async () => {
-                      if (onRefresh) await onRefresh()
-                    }}
-                    disabled={refreshing}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Refresh data from Google Sheets"
-                  >
-                    <svg className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    {refreshing ? 'Refreshing...' : 'Refresh'}
-                  </button>
-                )}
+                {/* Refresh is now placed in the search area (icon-only) */}
               </div>
             )}
 
@@ -1463,7 +1449,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                 <button
                   onClick={handleBatchSave}
                   disabled={isSaving}
-                  className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white border border-green-600 rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-xs font-semibold text-green-800 bg-green-50 border border-green-600 rounded hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-200 transition-colors duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   {isSaving ? (
                     <>
@@ -1483,7 +1469,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                 <button
                   onClick={handleBatchCancel}
                   disabled={isSaving}
-                  className="px-3 py-1.5 text-xs font-medium bg-gray-600 text-white border border-gray-600 rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-all duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-xs font-semibold text-gray-900 bg-gray-50 border border-gray-500 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-300 transition-colors duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1508,11 +1494,23 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
               {(globalFilter || columnFilters.length > 0) && (
                 <button
                   onClick={handleClearAllFilters}
-                  className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 flex items-center space-x-2 shadow-sm"
+                  className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors duration-200 flex items-center space-x-2 shadow-sm"
                   title="Clear all filters"
                 >
                   <XCircle className="h-3.5 w-3.5" />
                   <span>Clear</span>
+                </button>
+              )}
+              {onRefresh && (
+                <button
+                  type="button"
+                  onClick={async () => { if (onRefresh) await onRefresh() }}
+                  disabled={refreshing}
+                  title="Refresh data"
+                  aria-label="Refresh data"
+                  className="p-2 rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
                 </button>
               )}
             </div>

@@ -27,7 +27,7 @@ export function Button({
     secondary: 'btn-secondary', 
     outline: 'btn-outline',
     ghost: 'bg-transparent hover:bg-gray-100 text-gray-700',
-    danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500'
+    danger: 'bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 focus:ring-red-500'
   }
 
   const sizeClasses = {

@@ -15,7 +15,8 @@ import {
   AlertCircle,
   ArrowRight,
   MapPin,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react'
 
 // Helper function to compress data for localStorage
@@ -87,12 +88,14 @@ interface DashboardSummary {
     inProgress: number
     pending: number
     teamsWorking: number
+    lastUpdated?: string
   }
   itcHuawei: {
     totalSites: number
     mosCompleted: number
     atpApproved: number
     surveyCompleted: number
+    lastUpdated?: string
   }
   poHuawei: {
     totalSites: number
@@ -106,6 +109,7 @@ interface DashboardSummary {
     totalAmount: number
     cancelledAmount: number
     invoiced: number
+    lastUpdated?: string
   }
 }
 
@@ -206,7 +210,14 @@ export default function LandingDashboard() {
             completed,
             inProgress,
             pending,
-            teamsWorking: teamsWorking.size
+            teamsWorking: teamsWorking.size,
+            lastUpdated: new Date().toLocaleString('id-ID', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
           }
         }))
       }
@@ -232,7 +243,14 @@ export default function LandingDashboard() {
             totalSites: data.length,
             mosCompleted,
             atpApproved,
-            surveyCompleted
+            surveyCompleted,
+            lastUpdated: itcData.lastUpdated || new Date().toLocaleString('id-ID', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
           }
         }))
       }
@@ -250,7 +268,21 @@ export default function LandingDashboard() {
     }
   }
 
-  const loadPOData = async () => {
+  const forceRefreshPOData = async () => {
+    // Clear cache first
+    localStorage.removeItem('po_huawei_dashboard_cache')
+    localStorage.removeItem('po_huawei_dashboard_cache_timestamp')
+    localStorage.removeItem('po_huawei_full_data_cache')
+    localStorage.removeItem('po_huawei_full_data_cache_timestamp')
+    
+    // Set loading state
+    setPoLoading(true)
+    
+    // Fetch fresh data
+    await loadPOData(true)
+  }
+
+  const loadPOData = async (skipCache = false) => {
     try {
       // Check cache first
       const cacheKey = 'po_huawei_dashboard_cache'
@@ -260,17 +292,21 @@ export default function LandingDashboard() {
       const cachedData = localStorage.getItem(cacheKey)
       const cachedTimestamp = localStorage.getItem(cacheTimestampKey)
       
-      // Check if cache exists and is not expired
-      if (cachedData && cachedTimestamp) {
+      // Check if cache exists and is not expired (skip if skipCache is true)
+      if (!skipCache && cachedData && cachedTimestamp) {
         const timestamp = parseInt(cachedTimestamp)
         const now = Date.now()
         
         if (now - timestamp < cacheExpiry) {
-          // Use cached data
+          // Use cached data (includes lastUpdated)
           const cached = JSON.parse(cachedData)
           setSummary(prev => ({
             ...prev,
-            poHuawei: cached
+            poHuawei: {
+              ...cached,
+              // Ensure lastUpdated is preserved from cache
+              lastUpdated: cached.lastUpdated || 'Cached data'
+            }
           }))
           setPoLoading(false)
           return
@@ -345,7 +381,14 @@ export default function LandingDashboard() {
           statusCounts,
           totalAmount,
           cancelledAmount,
-          invoiced
+          invoiced,
+          lastUpdated: poData.lastUpdated || new Date().toLocaleString('id-ID', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
         }
 
         // Save summary to cache with safe storage
@@ -377,11 +420,12 @@ export default function LandingDashboard() {
 
   const dashboardCards = [
     {
-      title: 'Daily Operations',
-      description: 'Real-time task management and team performance',
+      title: `Daily Operations - ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+      description: summary.daily.lastUpdated ? `Updated: ${summary.daily.lastUpdated}` : 'Real-time task management and team performance',
       icon: Calendar,
       href: '/dashboard/daily',
       color: 'from-blue-500 to-indigo-600',
+      subtitle: 'Real-time task management and team performance',
       stats: [
         { label: 'Total Tasks', value: summary.daily.totalTasks, icon: Activity },
         { label: 'Completed', value: summary.daily.completed, icon: CheckCircle2 },
@@ -391,10 +435,11 @@ export default function LandingDashboard() {
     },
     {
       title: 'ITC Huawei Rollout',
-      description: 'Project rollout progress and site tracking',
+      description: summary.itcHuawei.lastUpdated ? `Updated: ${summary.itcHuawei.lastUpdated}` : 'Project rollout progress and site tracking',
       icon: TrendingUp,
       href: '/dashboard/itc-huawei',
       color: 'from-emerald-500 to-green-600',
+      subtitle: 'Project rollout progress and site tracking',
       stats: [
         { label: 'Total Sites', value: summary.itcHuawei.totalSites, icon: Activity },
         { label: 'Survey Done', value: summary.itcHuawei.surveyCompleted, icon: CheckCircle2 },
@@ -404,17 +449,24 @@ export default function LandingDashboard() {
     },
     {
       title: 'PO Management',
-      description: 'Purchase order tracking and financial overview',
+      description: summary.poHuawei.lastUpdated ? `Updated: ${summary.poHuawei.lastUpdated}` : 'Purchase order tracking and financial overview',
       icon: FileText,
       href: '/dashboard/po-huawei',
       color: 'from-purple-500 to-violet-600',
+      subtitle: 'PO  Tracking and Overview',
       loading: poLoading,
       stats: [
-        { label: 'Unique Sites', value: summary.poHuawei.totalSites, icon: MapPin },
+        { label: 'Total Sites', value: summary.poHuawei.totalSites, icon: MapPin },
         { 
           label: 'Status Breakdown', 
-          value: `${summary.poHuawei.statusCounts.open} Open`, 
-          detail: `${summary.poHuawei.statusCounts.new} New | ${summary.poHuawei.statusCounts.closed} Closed | ${summary.poHuawei.statusCounts.longAging} Long Aging | ${summary.poHuawei.statusCounts.cancelled} Cancelled`,
+          value: `${summary.poHuawei.statusCounts.new + summary.poHuawei.statusCounts.open + summary.poHuawei.statusCounts.longAging} Active`, 
+          detail: [
+            { text: `${summary.poHuawei.statusCounts.new} New |`, color: 'text-blue-600' },
+            { text: `${summary.poHuawei.statusCounts.open} Open |`, color: 'text-orange-600' },
+            { text: `${summary.poHuawei.statusCounts.longAging} Long Aging |`, color: 'text-red-600' },
+            { text: `${summary.poHuawei.statusCounts.closed} Closed |`, color: 'text-green-600' },
+            { text: `${summary.poHuawei.statusCounts.cancelled} Cancelled`, color: 'text-gray-500' }
+          ],
           icon: Activity 
         },
         { 
@@ -503,10 +555,29 @@ export default function LandingDashboard() {
                           <IconComponent className="h-5 w-5 text-white" />
                         )}
                       </div>
-                      <ArrowRight className="h-4 w-4 text-white/80 group-hover:translate-x-1 transition-transform" />
+                      <div className="flex items-center gap-2">
+                        {card.title === 'PO Management' && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              forceRefreshPOData()
+                            }}
+                            disabled={isCardLoading}
+                            className="p-1.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Refresh data from Google Sheet"
+                          >
+                            <RefreshCw className={`h-3.5 w-3.5 text-white ${isCardLoading ? 'animate-spin' : ''}`} />
+                          </button>
+                        )}
+                        <ArrowRight className="h-4 w-4 text-white/80 group-hover:translate-x-1 transition-transform" />
+                      </div>
                     </div>
                     <h2 className="text-base font-bold text-white mb-0.5">{card.title}</h2>
-                    <p className="text-xs text-white/90">{card.description}</p>
+                    {(card as any).subtitle && (
+                      <p className="text-xs text-white/70 mb-0.5">{(card as any).subtitle}</p>
+                    )}
+                    <p className="text-xs text-white/90 font-medium">{card.description}</p>
                     {isCardLoading && (
                       <div className="mt-1 flex items-center gap-1.5">
                         <Loader2 className="h-3 w-3 text-white/80 animate-spin" />
@@ -551,7 +622,17 @@ export default function LandingDashboard() {
                               </div>
                               {(stat as any).detail && (
                                 <div className="mt-1 text-xs text-slate-500 border-t border-slate-200 pt-1">
-                                  {(stat as any).detail}
+                                  {Array.isArray((stat as any).detail) ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {(stat as any).detail.map((item: any, idx: number) => (
+                                        <span key={idx} className={`${item.color} font-medium`}>
+                                          {item.text}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    (stat as any).detail
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -601,7 +682,7 @@ export default function LandingDashboard() {
               </div>
 
               <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-lg p-3 border border-purple-200">
-                <div className="text-xs font-medium text-purple-700 mb-1">Unique Sites</div>
+                <div className="text-xs font-medium text-purple-700 mb-1">Total Sites</div>
                 {poLoading ? (
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-5 w-5 text-purple-600 animate-spin" />

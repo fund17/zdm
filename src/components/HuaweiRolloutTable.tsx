@@ -15,7 +15,7 @@ import {
   ColumnPinningState,
 } from '@tanstack/react-table'
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { Check, X, Edit2, XCircle, ChevronLeft, ChevronRight, Filter, Calendar, Download, Database, Search } from 'lucide-react'
+import { Check, X, Edit2, XCircle, ChevronLeft, ChevronRight, Filter, Calendar, Download, Database, Search, RefreshCcw } from 'lucide-react'
 import { SiteDetailModal } from './SiteDetailModal'
 
 interface ColumnConfig {
@@ -38,8 +38,11 @@ interface SimpleDataTableProps {
   selectedSheet?: string
   onExportDataReady?: (exportData: {
     columns: { name: string; displayName: string }[],
-    poStatusMap: Record<string, any>
+    poStatusMap: Record<string, any>,
+    includePOStatus?: boolean
   }) => void
+  onRefresh?: () => void
+  refreshing?: boolean
 }
 
 interface EditingState {
@@ -75,7 +78,9 @@ export function HuaweiRolloutTable({
   loading = false,
   error = null,
   selectedSheet = '',
-  onExportDataReady
+  onExportDataReady,
+  onRefresh,
+  refreshing = false
 }: SimpleDataTableProps) {
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>([])
   const [editingCell, setEditingCell] = useState<EditingState | null>(null)
@@ -97,6 +102,125 @@ export function HuaweiRolloutTable({
   const [poStatusMap, setPoStatusMap] = useState<Record<string, any>>({})
   const [poLoading, setPoLoading] = useState(false)
   const [poColumnVisible, setPoColumnVisible] = useState(false)
+  const [showPOStatus, setShowPOStatus] = useState(false)
+  
+  // Import Excel states
+  const [importing, setImporting] = useState(false)
+  const [importSuccess, setImportSuccess] = useState<{ updated: number; skipped: number } | null>(null)
+  const [backupData, setBackupData] = useState<Record<string, any>[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [localExporting, setLocalExporting] = useState(false)
+
+  // Helper: resolve value for a column from a row with robust matching
+  const resolveRowValue = (row: Record<string, any>, config: ColumnConfig) => {
+    if (!row || !config) return ''
+    let value = row[config.name]
+    if (value === undefined || value === null) {
+      value = row[config.displayName]
+    }
+    if ((value === undefined || value === null) && config) {
+      const matchingKey = Object.keys(row).find(
+        key => key.toLowerCase() === config.name.toLowerCase() ||
+               key.toLowerCase() === config.displayName.toLowerCase()
+      )
+      if (matchingKey) value = row[matchingKey]
+    }
+    if ((value === undefined || value === null) && config) {
+      const matchingKey = Object.keys(row).find(
+        key => key.replace(/\s+/g, '') === config.name.replace(/\s+/g, '') ||
+               key.replace(/\s+/g, '') === config.displayName.replace(/\s+/g, '')
+      )
+      if (matchingKey) value = row[matchingKey]
+    }
+    if ((value === undefined || value === null) && config) {
+      const matchingKey = Object.keys(row).find(
+        key => key.trim() === config.name.trim() ||
+               key.trim() === config.displayName.trim()
+      )
+      if (matchingKey) value = row[matchingKey]
+    }
+    return value === undefined || value === null ? '' : value
+  }
+
+  // Export filtered data to Excel (using local data, no server fetch)
+  const handleExport = async () => {
+    setLocalExporting(true)
+    try {
+      // Get filtered data from table (includes all filters: date, column, global search)
+      const filteredRows = table.getFilteredRowModel().rows.map(row => row.original)
+      
+      if (filteredRows.length === 0) {
+        alert('No data to export. Please adjust filters or date range.')
+        setLocalExporting(false)
+        return
+      }
+
+      // Get visible columns (excluding hidden ones) and ensure they exist in the data
+      const dataKeysMap = new Map<string, string>()
+      if (data && data.length > 0) {
+        Object.keys(data[0]).forEach(key => {
+          dataKeysMap.set(key, key)
+          dataKeysMap.set(key.toLowerCase(), key)
+          dataKeysMap.set(key.replace(/\s+/g, ''), key)
+          dataKeysMap.set(key.replace(/\s+/g, '').toLowerCase(), key)
+          dataKeysMap.set(key.trim(), key)
+        })
+      }
+      const visibleColumns = columnConfigs.filter(config => config.show && columnVisibility[config.name] !== false && (
+        dataKeysMap.has(config.name) || dataKeysMap.has(config.displayName) || dataKeysMap.has(config.name.toLowerCase()) || dataKeysMap.has(config.displayName.toLowerCase()) || dataKeysMap.has(config.name.replace(/\s+/g, ''))
+      ))
+      
+      // Add PO_Status if visible
+      const includePOStatus = showPOStatus && columnVisibility['PO_Status'] !== false
+
+      // Dynamically import XLSX
+      const XLSX = await import('xlsx')
+      
+      // Create worksheet data with proper headers and values
+      const headers = [
+        ...visibleColumns.map(config => config.displayName),
+        ...(includePOStatus ? ['PO Status'] : [])
+      ]
+      
+      const dataRows = filteredRows.map(row => {
+        const rowData = visibleColumns.map(config => {
+          const value = resolveRowValue(row, config)
+          return value === null || value === undefined ? '' : value
+        })
+        
+        // Add PO Status if visible
+        if (includePOStatus) {
+          const duid = row['DUID'] || row['duid']
+          const poKey = Object.keys(poStatusMap).find(k => k.toLowerCase() === (duid || '').toString().toLowerCase())
+          const status = poKey ? poStatusMap[poKey] : null
+          rowData.push(status?.display || 'No PO')
+        }
+        
+        return rowData
+      })
+      
+      const wsData = [headers, ...dataRows]
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Huawei Rollout')
+
+      // Generate filename with timestamp and sheet name
+      const timestamp = new Date().toISOString().split('T')[0]
+      const sheetName = selectedSheet || 'Data'
+      const filename = `${sheetName}_Filtered_${timestamp}.xlsx`
+
+      // Download file
+      XLSX.writeFile(wb, filename)
+      
+      console.log(`✅ Exported ${filteredRows.length} rows (filtered from ${data.length} total rows)`)
+    } catch (error) {
+      console.error('Export failed:', error)
+      alert('Failed to export data: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    } finally {
+      setLocalExporting(false)
+    }
+  }
   
   // Refs for virtualization
   const tableContainerRef = useRef<HTMLDivElement>(null)
@@ -214,27 +338,55 @@ export function HuaweiRolloutTable({
         const isInsideEditingCell = target.closest('[data-editing-cell]')
         
         if (!isInsideEditingCell) {
-          handleCellSave()
+          // Use setTimeout to avoid blocking the UI
+          setTimeout(() => handleCellSave(), 0)
         }
       }
     }
 
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    if (editingCell) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
   }, [editingCell, handleCellSave])
 
-  // Fetch PO status data only when column becomes visible
+  // Fetch PO status data only when manually triggered
   useEffect(() => {
-    if (!poColumnVisible) return
+    if (!showPOStatus || !poColumnVisible) return
 
     const fetchPOStatus = async () => {
       setPoLoading(true)
       try {
-        const response = await fetch('/api/sheets/po-status')
+        // Extract unique DUIDs from current table data
+        const uniqueDuids = Array.from(new Set(
+          data
+            .map(row => row['DUID'] || row['duid'])
+            .filter(Boolean)
+            .map(duid => duid.toString().trim())
+        ))
+        
+        console.log(`📊 Requesting PO status for ${uniqueDuids.length} DUIDs from table`)
+        
+        // Send DUIDs to API for filtered PO fetch
+        const response = await fetch('/api/sheets/po-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ duids: uniqueDuids })
+        })
+        
         if (!response.ok) throw new Error('Failed to fetch PO status')
         
         const result = await response.json()
+        
+        // Only store PO data for DUIDs that exist in table
         setPoStatusMap(result.data || {})
+        
+        console.log(`✅ Received PO status for ${Object.keys(result.data || {}).length} DUIDs`)
+        
+        // Log orphans if any (PO exists but not in table)
+        if (result.orphans && Object.keys(result.orphans).length > 0) {
+          console.log(`⚠️ Found ${Object.keys(result.orphans).length} orphaned PO entries (exist in PO but not in table)`)
+        }
       } catch (error) {
         console.error('Failed to load PO status:', error)
       } finally {
@@ -243,7 +395,7 @@ export function HuaweiRolloutTable({
     }
 
     fetchPOStatus()
-  }, [poColumnVisible])
+  }, [showPOStatus, poColumnVisible, data])
 
   // Fetch column configuration
   useEffect(() => {
@@ -266,12 +418,12 @@ export function HuaweiRolloutTable({
         configs.forEach(config => {
           initialVisibility[config.name] = config.show
         })
-        // PO_Status column starts as visible (but will lazy load data)
-        initialVisibility['PO_Status'] = true
+        // PO_Status column hidden by default (manual load required)
+        initialVisibility['PO_Status'] = false
         setColumnVisibility(initialVisibility)
         
-        // Trigger PO data fetch since column is visible by default
-        setPoColumnVisible(true)
+        // Don't trigger PO data fetch by default
+        setPoColumnVisible(false)
 
       } catch (error) {
         console.error('Failed to load column configuration:', error)
@@ -286,7 +438,20 @@ export function HuaweiRolloutTable({
     if (!duid || !poStatusMap || Object.keys(poStatusMap).length === 0) {
       return null
     }
-    return poStatusMap[duid.toString().trim()] || null
+    
+    // Try exact match first
+    const exactMatch = poStatusMap[duid.toString().trim()]
+    if (exactMatch) return exactMatch
+    
+    // Try case-insensitive match
+    const normalizedDuid = duid.toString().trim().toLowerCase()
+    for (const [key, value] of Object.entries(poStatusMap)) {
+      if (key.toLowerCase() === normalizedDuid) {
+        return value
+      }
+    }
+    
+    return null
   }, [poStatusMap])
 
   // Get status badge styling
@@ -644,7 +809,6 @@ export function HuaweiRolloutTable({
                     autoFocus
                     value={editingCell.value || ''}
                     onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                    onBlur={() => handleCellSave()}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') handleCellCancel()
                       if (e.key === 'Enter' && e.ctrlKey) handleCellSave()
@@ -658,7 +822,6 @@ export function HuaweiRolloutTable({
                     type={config.type === 'date' ? 'date' : 'text'}
                     value={editingCell.value || ''}
                     onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                    onBlur={() => handleCellSave()}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleCellSave()
                       if (e.key === 'Escape') handleCellCancel()
@@ -747,6 +910,10 @@ export function HuaweiRolloutTable({
       cell: ({ row }: { row: any }) => {
         const duid = row.original['DUID'] || row.original['duid']
         if (!duid) return <span className="text-xs text-gray-400">-</span>
+        
+        if (!showPOStatus) {
+          return <span className="text-xs text-gray-400">-</span>
+        }
         
         if (poLoading) {
           return (
@@ -884,16 +1051,30 @@ export function HuaweiRolloutTable({
   // Send export-ready data to parent (visible columns + PO status map)
   useEffect(() => {
     if (onExportDataReady && columnConfigs.length > 0) {
-      // Use columnVisibility state (table's current state) instead of config.show
+      // Use both config.show and columnVisibility state (table's current state)
+      // Also ensure the column exists in the data to prevent exporting empty columns
+      const dataKeysMap = new Map<string, string>()
+      if (data && data.length > 0) {
+        Object.keys(data[0]).forEach(key => {
+          dataKeysMap.set(key, key)
+          dataKeysMap.set(key.toLowerCase(), key)
+          dataKeysMap.set(key.replace(/\s+/g, ''), key)
+          dataKeysMap.set(key.replace(/\s+/g, '').toLowerCase(), key)
+          dataKeysMap.set(key.trim(), key)
+        })
+      }
       const visibleColumns = columnConfigs
-        .filter(config => columnVisibility[config.name] !== false)
+        .filter(config => config.show && columnVisibility[config.name] !== false && (
+          dataKeysMap.has(config.name) || dataKeysMap.has(config.displayName) || dataKeysMap.has(config.name.toLowerCase()) || dataKeysMap.has(config.displayName.toLowerCase()) || dataKeysMap.has(config.name.replace(/\s+/g, ''))
+        ))
         .map(config => ({
           name: config.name,
           displayName: config.displayName
         }))
       onExportDataReady({
         columns: visibleColumns,
-        poStatusMap: poStatusMap
+        poStatusMap: poStatusMap,
+        includePOStatus: showPOStatus && columnVisibility['PO_Status'] !== false
       })
     }
   }, [columnConfigs, columnVisibility, poStatusMap, onExportDataReady])
@@ -1214,7 +1395,376 @@ export function HuaweiRolloutTable({
   }
 
   const handleClearAllFilters = () => {
+    // Clear column filters
     setColumnFilters([])
+    
+    // Clear global search
+    setGlobalFilter('')
+    
+    // Clear active filter dropdown
+    setActiveFilterColumn(null)
+    setFilterDropdownPosition(null)
+  }
+
+  const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setImporting(true)
+    setImportSuccess(null)
+
+    try {
+      // Dynamically import XLSX
+      const XLSX = await import('xlsx')
+      
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        try {
+          const arrayBuffer = e.target?.result
+          const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+          const importedData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' }) as Record<string, any>[]
+
+          if (importedData.length === 0) {
+            alert('Excel file is empty')
+            setImporting(false)
+            return
+          }
+
+          // Backup current data before update
+          setBackupData([...data])
+
+          console.log('📊 IMPORT PROCESS STARTED')
+          console.log(`📋 Total rows in Google Sheets data: ${data.length}`)
+          console.log(`📁 Excel rows to import: ${importedData.length}`)
+
+          // Log first 5 DUIDs from Google Sheets for reference
+          console.log('🔍 Sample DUIDs from Google Sheets (first 5):')
+          data.slice(0, 5).forEach((row, idx) => {
+            const duid = row[rowIdColumn]?.toString()
+            console.log(`  ${idx + 1}. "${duid}" (type: ${typeof duid}, length: ${duid?.length})`)
+          })
+
+          // Create DUID lookup map from current data with multiple normalization strategies
+          // Map structure: normalized key -> { row, originalDuid }
+          const dataMap = new Map<string, { row: any; originalDuid: string }>()
+          data.forEach((row, idx) => {
+            const originalDuid = row[rowIdColumn]?.toString()
+            if (originalDuid) {
+              const duidTrimmed = originalDuid.trim()
+              const rowData = { row, originalDuid: duidTrimmed }
+              
+              // Store with multiple keys for flexible matching
+              dataMap.set(duidTrimmed, rowData)
+              dataMap.set(duidTrimmed.toUpperCase(), rowData)
+              dataMap.set(duidTrimmed.replace(/\s+/g, ''), rowData)
+              dataMap.set(duidTrimmed.replace(/\s+/g, '').toUpperCase(), rowData)
+              
+              // Log first few for debugging
+              if (idx < 3) {
+                console.log(`  ✓ Mapped DUID: "${duidTrimmed}"`)
+              }
+            }
+          })
+          
+          console.log(`✅ Created lookup map with ${dataMap.size} normalized keys`)
+          console.log(`📌 Google Sheets has ${data.filter(r => r[rowIdColumn]).length} rows with valid DUIDs`)
+          
+          let updatedCount = 0
+          let skippedCount = 0
+          const updates: Array<{ rowId: string; columnId: string; value: any; oldValue: any }> = []
+
+          // Process each row from Excel
+          console.log('\n🔄 Starting row-by-row processing...')
+          
+          for (let i = 0; i < importedData.length; i++) {
+            const excelRow = importedData[i]
+            const duidRaw = excelRow[rowIdColumn]?.toString()
+            
+            if (!duidRaw) {
+              console.log(`⚠️ Row ${i + 1}: No DUID found in Excel - SKIPPED`)
+              skippedCount++
+              continue
+            }
+
+            const duid = duidRaw.trim()
+            
+            // Log every row attempt for debugging
+            if (i < 5 || duid.includes('NUS-NB-PYA-0432')) {
+              console.log(`\n🔍 Row ${i + 1} - Processing DUID: "${duid}"`)
+              console.log(`  📝 Raw value: "${duidRaw}"`)
+              console.log(`  📏 Length: ${duid.length}`)
+              console.log(`  🔤 Type: ${typeof duid}`)
+            }
+            
+            // Try multiple matching strategies to find existing row
+            let matchedData = dataMap.get(duid) || 
+                             dataMap.get(duid.toUpperCase()) ||
+                             dataMap.get(duid.replace(/\s+/g, '')) ||
+                             dataMap.get(duid.replace(/\s+/g, '').toUpperCase())
+            
+            if (!matchedData) {
+              console.error(`❌ Row ${i + 1}: DUID='${duid}' NOT FOUND in Google Sheets data`)
+              console.log(`  🔍 Tried matching with:`)
+              console.log(`    - Exact: "${duid}"`)
+              console.log(`    - Uppercase: "${duid.toUpperCase()}"`)
+              console.log(`    - No spaces: "${duid.replace(/\s+/g, '')}"`)
+              console.log(`    - Uppercase no spaces: "${duid.replace(/\s+/g, '').toUpperCase()}"`)
+              
+              // Try to find similar DUIDs in Google Sheets
+              const similarDuids = data
+                .map(row => row[rowIdColumn]?.toString().trim())
+                .filter(sheetDuid => sheetDuid && sheetDuid.includes(duid.substring(0, 10)))
+                .slice(0, 3)
+              
+              if (similarDuids.length > 0) {
+                console.log(`  💡 Similar DUIDs found in Google Sheets:`)
+                similarDuids.forEach(similar => console.log(`    - "${similar}"`))
+              } else {
+                console.log(`  ⚠️ No similar DUIDs found in Google Sheets`)
+              }
+              
+              skippedCount++
+              continue
+            }
+
+            // Use the ORIGINAL DUID from Google Sheets (exact match for API)
+            const originalDuid = matchedData.originalDuid
+            const existingRow = matchedData.row
+            
+            if (i < 5 || duid.includes('NUS-NB-PYA-0432')) {
+              console.log(`  ✅ MATCH FOUND!`)
+              console.log(`  📍 Original DUID from GSheets: "${originalDuid}"`)
+              console.log(`  🎯 Will use this for API update`)
+            }
+            
+            if (!originalDuid || !existingRow) {
+              console.error(`❌ Row ${i + 1}: Invalid data structure for DUID='${duid}'`)
+              skippedCount++
+              continue
+            }
+
+            // Compare and update columns
+            let rowHasUpdates = false
+            const rowUpdates: string[] = []
+            
+            for (const columnConfig of columnConfigs) {
+              if (!columnConfig.editable) continue
+              if (columnConfig.name === rowIdColumn) continue
+
+              // Use exact column name from Excel (no normalization, no display name alias)
+              const excelValue = excelRow[columnConfig.name]
+              
+              // Log column check for first few rows
+              if (i < 3) {
+                console.log(`    🔍 Checking column "${columnConfig.name}":`, {
+                  excelValue: excelValue,
+                  excelHasValue: excelValue !== undefined && excelValue !== null && excelValue !== '',
+                  currentValue: existingRow[columnConfig.name]
+                })
+              }
+              
+              if (excelValue === undefined || excelValue === null || excelValue === '') continue
+
+              const currentValue = existingRow[columnConfig.name]
+              
+              // Special handling for date columns - only update if current value is empty
+              if (columnConfig.type === 'date') {
+                if (currentValue && currentValue !== '') {
+                  continue // Skip if date already has a value
+                }
+
+                // Parse and validate date format (DD-MMM-YYYY or similar)
+                let formattedDate = excelValue.toString()
+                
+                // If it's an Excel date number, convert it
+                if (typeof excelValue === 'number') {
+                  const date = XLSX.SSF.parse_date_code(excelValue)
+                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                  formattedDate = `${date.d.toString().padStart(2, '0')}-${monthNames[date.m - 1]}-${date.y}`
+                } else if (typeof excelValue === 'string') {
+                  // Try to parse and reformat to DD-MMM-YYYY
+                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                  const monthMap: Record<string, number> = {
+                    'jan': 0, 'january': 0,
+                    'feb': 1, 'february': 1,
+                    'mar': 2, 'march': 2,
+                    'apr': 3, 'april': 3,
+                    'may': 4,
+                    'jun': 5, 'june': 5,
+                    'jul': 6, 'july': 6,
+                    'aug': 7, 'august': 7,
+                    'sep': 8, 'september': 8,
+                    'oct': 9, 'october': 9,
+                    'nov': 10, 'november': 10,
+                    'dec': 11, 'december': 11
+                  }
+                  
+                  const dateParts = excelValue.split(/[\/-]/)
+                  if (dateParts.length === 3) {
+                    let day: number, month: number, year: number
+                    
+                    // Check if middle part is month name (DD/MMM/YYYY or DD-MMM-YYYY)
+                    const middlePart = dateParts[1].toLowerCase().trim()
+                    if (monthMap[middlePart] !== undefined) {
+                      day = parseInt(dateParts[0])
+                      month = monthMap[middlePart] + 1
+                      year = parseInt(dateParts[2])
+                    } else if (dateParts[0].length <= 2) {
+                      // Try DD-MM-YYYY or DD/MM/YYYY
+                      day = parseInt(dateParts[0])
+                      month = parseInt(dateParts[1])
+                      year = parseInt(dateParts[2])
+                    } else {
+                      // YYYY-MM-DD
+                      year = parseInt(dateParts[0])
+                      month = parseInt(dateParts[1])
+                      day = parseInt(dateParts[2])
+                    }
+                    
+                    if (!isNaN(day) && !isNaN(month) && !isNaN(year) && month >= 1 && month <= 12) {
+                      formattedDate = `${day.toString().padStart(2, '0')}-${monthNames[month - 1]}-${year}`
+                    }
+                  }
+                }
+
+                if (formattedDate !== currentValue) {
+                  updates.push({
+                    rowId: originalDuid,
+                    columnId: columnConfig.name,
+                    value: formattedDate,
+                    oldValue: currentValue
+                  })
+                  rowHasUpdates = true
+                }
+              } else {
+                // For non-date columns, update if values are different
+                const newValue = excelValue.toString()
+                if (newValue !== currentValue?.toString()) {
+                  updates.push({
+                    rowId: originalDuid,
+                    columnId: columnConfig.name,
+                    value: newValue,
+                    oldValue: currentValue
+                  })
+                  rowHasUpdates = true
+                  rowUpdates.push(`${columnConfig.name}: "${currentValue}" → "${newValue}"`)
+                  
+                  if (i < 3) {
+                    console.log(`      ✅ Will update: ${columnConfig.name}`)
+                  }
+                }
+              }
+            }
+
+            if (rowHasUpdates) {
+              updatedCount++
+              if (i < 3) {
+                console.log(`    📝 Row ${i + 1} updates:`, rowUpdates)
+              }
+            } else if (i < 3) {
+              console.log(`    ⏭️ Row ${i + 1}: No updates needed`)
+            }
+          }
+
+          // Apply all updates
+          console.log(`\n📤 APPLYING UPDATES TO GOOGLE SHEETS`)
+          console.log(`  ✅ Total updates to apply: ${updates.length}`)
+          console.log(`  📊 Rows with changes: ${updatedCount}`)
+          console.log(`  ⏭️ Rows skipped: ${skippedCount}`)
+          
+          if (updates.length > 0 && onUpdateData) {
+            for (let i = 0; i < updates.length; i++) {
+              const update = updates[i]
+              console.log(`\n🔄 Update ${i + 1}/${updates.length}:`)
+              console.log(`  🆔 DUID: "${update.rowId}"`)
+              console.log(`  📝 Column: ${update.columnId}`)
+              console.log(`  🔄 Old: "${update.oldValue}" → New: "${update.value}"`)
+              
+              try {
+                await onUpdateData(update.rowId, update.columnId, update.value, update.oldValue)
+                console.log(`  ✅ Update successful`)
+              } catch (error) {
+                console.error(`  ❌ Update failed:`, error)
+                throw error // Re-throw to stop processing
+              }
+            }
+          }
+
+          console.log(`\n✅ IMPORT COMPLETED SUCCESSFULLY`)
+          setImportSuccess({ updated: updatedCount, skipped: skippedCount })
+          
+          // Clear success message after 10 seconds
+          setTimeout(() => setImportSuccess(null), 10000)
+
+        } catch (error) {
+          console.error('Error processing Excel file:', error)
+          alert('Failed to process Excel file: ' + (error instanceof Error ? error.message : 'Unknown error'))
+        } finally {
+          setImporting(false)
+          if (fileInputRef.current) fileInputRef.current.value = ''
+        }
+      }
+
+      reader.onerror = () => {
+        alert('Failed to read file')
+        setImporting(false)
+      }
+
+      reader.readAsArrayBuffer(file)
+    } catch (error) {
+      console.error('Error importing Excel:', error)
+      alert('Failed to import Excel file')
+      setImporting(false)
+    }
+  }
+
+  const handleUndoImport = async () => {
+    if (backupData.length === 0) {
+      alert('No import to undo')
+      return
+    }
+
+    if (!confirm('Are you sure you want to undo the last import? This will restore the previous data.')) {
+      return
+    }
+
+    try {
+      setImporting(true)
+
+      // Restore each row from backup
+      if (onUpdateData) {
+        for (const backupRow of backupData) {
+          const duid = backupRow[rowIdColumn]?.toString().trim()
+          if (!duid) continue
+
+          const currentRow = data.find(row => row[rowIdColumn]?.toString().trim() === duid)
+          if (!currentRow) continue
+
+          // Restore each editable column
+          for (const columnConfig of columnConfigs) {
+            if (!columnConfig.editable) continue
+            if (columnConfig.name === rowIdColumn) continue
+
+            const backupValue = backupRow[columnConfig.name]
+            const currentValue = currentRow[columnConfig.name]
+
+            if (backupValue !== currentValue) {
+              await onUpdateData(duid, columnConfig.name, backupValue, currentValue)
+            }
+          }
+        }
+      }
+
+      setBackupData([])
+      setImportSuccess(null)
+      alert('Import successfully undone')
+    } catch (error) {
+      console.error('Error undoing import:', error)
+      alert('Failed to undo import: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    } finally {
+      setImporting(false)
+    }
   }
 
   const hasActiveFilters = columnFilters.length > 0
@@ -1275,56 +1825,29 @@ export function HuaweiRolloutTable({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Search and Date Range Filter */}
-      <div className="flex-none p-3 bg-white border-b border-gray-200">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-1">
-            {/* Global Search */}
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                value={globalFilter}
-                onChange={(e) => setGlobalFilter(e.target.value)}
-                placeholder="Search all columns..."
-                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              {globalFilter && (
-                <button
-                  onClick={() => setGlobalFilter('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Date Range */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Calendar className="h-4 w-4 text-gray-500" />
-              <span className="text-sm font-medium text-gray-700">Date:</span>
+      {/* Enhanced Filter Bar - Professional Design */}
+      <div className="flex-none bg-gradient-to-r from-slate-50 via-gray-50 to-slate-50 border-b border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between px-4 py-3 space-x-4">
+          {/* Left Section: Date Filter */}
+          <div className="flex items-center space-x-3">
+            {/* Custom Date Range */}
+            <div className="flex items-center space-x-2">
               <input
                 type="date"
                 value={dateFilter.startDate}
                 onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
-                className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="px-2 py-1.5 text-xs border border-gray-300 rounded bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors"
               />
-              <span className="text-gray-500">to</span>
+              <span className="text-xs text-gray-500 font-medium">to</span>
               <input
                 type="date"
                 value={dateFilter.endDate}
                 onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
-                className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="px-2 py-1.5 text-xs border border-gray-300 rounded bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors"
               />
-              <span className="text-xs text-gray-500">
-                ({filteredData.length} of {data.length} rows)
-              </span>
             </div>
-          </div>
-          
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2">
-            {/* Clear Date Filter */}
+
+            {/* Reset Date Button */}
             {(dateFilter.startDate !== (() => {
               const today = new Date()
               const oneMonthAgo = new Date(today)
@@ -1341,68 +1864,193 @@ export function HuaweiRolloutTable({
                     endDate: today.toISOString().split('T')[0]
                   })
                 }}
-                className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                 title="Reset date filter to last 30 days"
               >
-                <Calendar className="h-3.5 w-3.5 mr-1" />
                 Reset Date
               </button>
             )}
-            
-            {/* Clear All Column Filters */}
-            {hasActiveFilters && (
-              <button
-                onClick={handleClearAllFilters}
-                className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-                title="Clear all column filters"
-              >
-                <XCircle className="h-3.5 w-3.5 mr-1" />
-                Clear Filters
-              </button>
+
+            {/* Action Buttons: Import, Export, Refresh, Load PO Status */}
+            {(onExport || onRefresh) && (
+              <div className="flex items-center space-x-2 border-l border-gray-300 pl-3">
+                {/* Import Excel Button */}
+                <div className="relative">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleImportExcel}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={importing}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 border border-transparent rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Import Excel to update data (matches by DUID)"
+                  >
+                    {importing ? (
+                      <>
+                        <div className="animate-spin h-3.5 w-3.5 mr-1.5 border-2 border-white border-t-transparent rounded-full"></div>
+                        Importing...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        Import
+                      </>
+                    )}
+                  </button>
+                </div>
+                
+                <button
+                  onClick={handleExport}
+                  disabled={localExporting}
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Export filtered data to Excel (local data, no server fetch)"
+                >
+                  <Download className={`h-3.5 w-3.5 mr-1.5 ${localExporting ? 'animate-bounce' : ''}`} />
+                  {localExporting ? 'Exporting...' : 'Export'}
+                </button>
+                {onRefresh && (
+                  <button
+                    onClick={onRefresh}
+                    disabled={refreshing}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Refresh data from Google Sheets"
+                  >
+                    <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
+                    {refreshing ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                )}
+                {!showPOStatus ? (
+                  <button
+                    onClick={() => {
+                      setShowPOStatus(true)
+                      setPoColumnVisible(true)
+                      setColumnVisibility(prev => ({ ...prev, PO_Status: true }))
+                    }}
+                    disabled={poLoading}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-purple-600 border border-transparent rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Load PO Status column"
+                  >
+                    <Database className="h-3.5 w-3.5 mr-1.5" />
+                    Load PO Status
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setShowPOStatus(false)
+                      setColumnVisibility(prev => ({ ...prev, PO_Status: false }))
+                    }}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-200"
+                    title="Hide PO Status column"
+                  >
+                    <Database className="h-3.5 w-3.5 mr-1.5" />
+                    Hide PO Status
+                  </button>
+                )}
+                
+                {/* Undo Import Button */}
+                {backupData.length > 0 && (
+                  <button
+                    onClick={handleUndoImport}
+                    disabled={importing}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Undo last import and restore previous data"
+                  >
+                    <svg className="h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                    Undo Import
+                  </button>
+                )}
+              </div>
             )}
-            
-            {/* Export Button */}
-            {onExport && (
-              <button 
-                onClick={onExport}
-                disabled={exporting}
-                className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
-              >
-                <Download className={`h-3.5 w-3.5 mr-1.5 ${exporting ? 'animate-bounce' : ''}`} />
-                {exporting ? 'Exporting...' : 'Export'}
-              </button>
+
+            {/* Save/Cancel Buttons */}
+            {pendingChanges.size > 0 && (
+              <div className="flex items-center space-x-1 border-l border-gray-300 pl-3">
+                <button
+                  onClick={handleBatchSave}
+                  disabled={isSaving}
+                  className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white border border-green-600 rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3 h-3" />
+                      <span>Save ({pendingChanges.size})</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleCancelAll}
+                  disabled={isSaving}
+                  className="px-3 py-1.5 text-xs font-medium bg-gray-600 text-white border border-gray-600 rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-all duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Cancel</span>
+                </button>
+              </div>
             )}
+          </div>
+
+          {/* Right Section: Search & Controls */}
+          <div className="flex items-center space-x-4">
+            {/* Search */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                placeholder="Search all columns..."
+                value={globalFilter ?? ''}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+                className="px-3 py-1.5 text-xs border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors w-80"
+              />
+              {(globalFilter || hasActiveFilters) && (
+                <button
+                  onClick={handleClearAllFilters}
+                  className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 flex items-center space-x-2 shadow-sm"
+                  title="Clear all filters"
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                  <span>Clear</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Action Bar */}
-      {pendingChanges.size > 0 && (
-        <div className="flex-none p-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-600">
-              {pendingChanges.size} unsaved change{pendingChanges.size !== 1 ? 's' : ''}
-            </span>
-            <button
-              onClick={handleBatchSave}
-              disabled={isSaving}
-              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-            >
-              <Check className="h-3 w-3" />
-              {isSaving ? 'Saving...' : 'Save All'}
-            </button>
-            <button
-              onClick={handleCancelAll}
-              disabled={isSaving}
-              className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 flex items-center gap-1"
-            >
-              <X className="h-3 w-3" />
-              Cancel
-            </button>
-            {saveError && (
-              <span className="text-xs text-red-600">{saveError}</span>
-            )}
-          </div>
+      {/* Action Bar - Messages */}
+      {pendingChanges.size > 0 && saveError && (
+        <div className="flex-none p-2 bg-gray-50 border-b border-gray-200 flex items-center justify-center gap-2">
+          <span className="text-xs text-red-600">{saveError}</span>
+        </div>
+      )}
+      
+      {/* Import Success Message */}
+      {importSuccess && (
+        <div className="flex-none p-2 bg-emerald-50 border-b border-emerald-200 flex items-center justify-center gap-2">
+          <svg className="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-xs text-emerald-700 font-medium">
+            Import successful! Updated: {importSuccess.updated} rows, Skipped: {importSuccess.skipped} rows
+          </span>
+          <button
+            onClick={() => setImportSuccess(null)}
+            className="text-emerald-600 hover:text-emerald-800"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
       )}
 

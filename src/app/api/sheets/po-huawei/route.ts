@@ -32,16 +32,39 @@ export async function GET(request: NextRequest) {
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
         private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
       },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+      scopes: [
+        'https://www.googleapis.com/auth/spreadsheets.readonly',
+        'https://www.googleapis.com/auth/drive.readonly',
+        'https://www.googleapis.com/auth/drive.metadata.readonly'
+      ],
     })
 
     const sheets = google.sheets({ version: 'v4', auth })
+    const drive = google.drive({ version: 'v3', auth })
 
     // Fetch data from all sheets across all spreadsheets
     const allData = []
     const allSheetNames: string[] = []
+    let latestModifiedTime: Date | null = null
     
     for (const spreadsheetId of spreadsheetIds) {
+      // Get metadata for last modified time
+      try {
+        const fileMetadata = await drive.files.get({
+          fileId: spreadsheetId,
+          fields: 'modifiedTime'
+        })
+        
+        if (fileMetadata.data.modifiedTime) {
+          const modifiedTime = new Date(fileMetadata.data.modifiedTime)
+          if (!latestModifiedTime || modifiedTime > latestModifiedTime) {
+            latestModifiedTime = modifiedTime
+          }
+        }
+      } catch (metaError) {
+        console.error(`Error fetching metadata for ${spreadsheetId}:`, metaError)
+      }
+      
       // Get sheet names for this spreadsheet
       const spreadsheet = await sheets.spreadsheets.get({
         spreadsheetId,
@@ -91,6 +114,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Format lastUpdated to Indonesian locale
+    let lastUpdated: string | undefined
+    if (latestModifiedTime) {
+      lastUpdated = latestModifiedTime.toLocaleString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -98,6 +133,7 @@ export async function GET(request: NextRequest) {
         sheets: allSheetNames,
         spreadsheets: spreadsheetIds.length,
         count: allData.length,
+        lastUpdated,
       },
       { status: 200 }
     )

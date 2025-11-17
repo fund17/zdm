@@ -197,6 +197,104 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
   // Batch editing states
   const [changedCells, setChangedCells] = useState<Map<string, { rowId: string, columnId: string, oldValue: any, newValue: any }>>(new Map())
   const [isSaving, setIsSaving] = useState(false)
+
+  // Export filtered data to Excel (using local data, no server fetch)
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      // Get filtered data from table (includes all filters: date, column, global search)
+      const filteredRows = table.getFilteredRowModel().rows.map(row => row.original)
+      
+      if (filteredRows.length === 0) {
+        alert('No data to export. Please adjust filters or date range.')
+        setExporting(false)
+        return
+      }
+
+      // Get visible columns only (config.show is already applied in visibleColumnConfigs)
+      // Also ensure the column exists in the data to avoid exporting empty columns
+      const dataKeysMap = new Map<string, string>()
+      if (data && data.length > 0) {
+        Object.keys(data[0]).forEach(key => {
+          dataKeysMap.set(key, key)
+          dataKeysMap.set(key.toLowerCase(), key)
+          dataKeysMap.set(key.replace(/\s+/g, ''), key)
+          dataKeysMap.set(key.replace(/\s+/g, '').toLowerCase(), key)
+          dataKeysMap.set(key.trim(), key)
+        })
+      }
+      const visibleColumns = visibleColumnConfigs.filter(config => (
+        dataKeysMap.has(config.name) || dataKeysMap.has(config.displayName) || dataKeysMap.has(config.name.toLowerCase()) || dataKeysMap.has(config.displayName.toLowerCase()) || dataKeysMap.has(config.name.replace(/\s+/g, ''))
+      ))
+
+      // Helper: robust resolver to find the actual key in row for given config
+      const resolveRowValue = (row: Record<string, any>, config: ColumnConfig) => {
+        if (!row || !config) return ''
+        let value = row[config.name]
+        if (value === undefined || value === null) {
+          value = row[config.displayName]
+        }
+        if ((value === undefined || value === null) && config) {
+          const matchingKey = Object.keys(row).find(
+            key => key.toLowerCase() === config.name.toLowerCase() ||
+                   key.toLowerCase() === config.displayName.toLowerCase()
+          )
+          if (matchingKey) value = row[matchingKey]
+        }
+        if ((value === undefined || value === null) && config) {
+          const matchingKey = Object.keys(row).find(
+            key => key.replace(/\s+/g, '') === config.name.replace(/\s+/g, '') ||
+                   key.replace(/\s+/g, '') === config.displayName.replace(/\s+/g, '')
+          )
+          if (matchingKey) value = row[matchingKey]
+        }
+        if ((value === undefined || value === null) && config) {
+          const matchingKey = Object.keys(row).find(
+            key => key.trim() === config.name.trim() ||
+                   key.trim() === config.displayName.trim()
+          )
+          if (matchingKey) value = row[matchingKey]
+        }
+        return value === undefined || value === null ? '' : value
+      }
+
+      // Dynamically import XLSX
+      const XLSX = await import('xlsx')
+      
+      // Create worksheet data with proper headers and values
+      const wsData = [
+        // Headers
+        visibleColumns.map(config => config.displayName),
+        // Data rows
+        ...filteredRows.map(row => 
+          visibleColumns.map(config => {
+            const value = resolveRowValue(row, config)
+            // Handle null/undefined
+            if (value === null || value === undefined) return ''
+            return value
+          })
+        )
+      ]
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Daily Plan')
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0]
+      const filename = `DailyPlan_Filtered_${timestamp}.xlsx`
+
+      // Download file
+      XLSX.writeFile(wb, filename)
+      
+      console.log(`✅ Exported ${filteredRows.length} rows (filtered from ${data.length} total rows)`)
+    } catch (error) {
+      console.error('Export failed:', error)
+      alert('Failed to export data: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    } finally {
+      setExporting(false)
+    }
+  }
   
   const [dateFilter, setDateFilter] = useState<DateFilter>(() => {
     // Use parent's initialDateFilter if provided
@@ -1332,24 +1430,15 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                     Import
                   </button>
                 )}
-                {onExport && (
-                  <button
-                    onClick={async () => {
-                      setExporting(true)
-                      try {
-                        await onExport()
-                      } finally {
-                        setExporting(false)
-                      }
-                    }}
-                    disabled={exporting}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Export filtered data to Excel"
-                  >
-                    <Download className={`h-3.5 w-3.5 mr-1.5 ${exporting ? 'animate-bounce' : ''}`} />
-                    {exporting ? 'Exporting...' : 'Export'}
-                  </button>
-                )}
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Export filtered data to Excel (local data, no server fetch)"
+                >
+                  <Download className={`h-3.5 w-3.5 mr-1.5 ${exporting ? 'animate-bounce' : ''}`} />
+                  {exporting ? 'Exporting...' : 'Export'}
+                </button>
                 {onRefresh && (
                   <button
                     onClick={async () => {
@@ -1414,15 +1503,15 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                 placeholder="Search all columns..."
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors w-80"
+                className="px-3 py-1.5 text-xs border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors w-80"
               />
               {(globalFilter || columnFilters.length > 0) && (
                 <button
                   onClick={handleClearAllFilters}
-                  className="px-3 py-2 text-sm font-medium bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 flex items-center space-x-2 shadow-sm"
+                  className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 flex items-center space-x-2 shadow-sm"
                   title="Clear all filters"
                 >
-                  <XCircle className="h-4 w-4" />
+                  <XCircle className="h-3.5 w-3.5" />
                   <span>Clear</span>
                 </button>
               )}

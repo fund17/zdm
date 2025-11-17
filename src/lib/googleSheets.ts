@@ -14,7 +14,9 @@ export const getGoogleSheetsAuth = () => {
     credentials,
     scopes: [
       'https://www.googleapis.com/auth/spreadsheets.readonly',
-      'https://www.googleapis.com/auth/spreadsheets'
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/drive.metadata.readonly'
     ],
   })
 
@@ -29,6 +31,27 @@ export const getSheetsClient = async () => {
 
 export interface SheetData {
   [key: string]: string | number
+}
+
+export const getSheetMetadata = async (
+  spreadsheetId: string
+): Promise<{ modifiedTime?: string }> => {
+  try {
+    const auth = getGoogleSheetsAuth()
+    const drive = google.drive({ version: 'v3', auth })
+    
+    const response = await drive.files.get({
+      fileId: spreadsheetId,
+      fields: 'modifiedTime'
+    })
+    
+    return {
+      modifiedTime: response.data.modifiedTime || undefined
+    }
+  } catch (error) {
+    console.error('Error fetching sheet metadata:', error)
+    return {}
+  }
 }
 
 export const getSheetData = async (

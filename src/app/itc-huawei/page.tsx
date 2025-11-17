@@ -29,7 +29,8 @@ export default function ItcHuaweiPage() {
   const [toastMessage, setToastMessage] = useState('')
   const [exportData, setExportData] = useState<{
     columns: { name: string; displayName: string }[],
-    poStatusMap: Record<string, any>
+    poStatusMap: Record<string, any>,
+    includePOStatus?: boolean
   } | null>(null)
 
   const fetchData = useCallback(async (sheetName?: string) => {
@@ -112,7 +113,8 @@ export default function ItcHuaweiPage() {
           columnId, 
           value, 
           oldValue,
-          rowIdentifierColumn: 'DUID'
+          rowIdentifierColumn: 'DUID',
+          sheetName: selectedSheet
         }),
       })
 
@@ -160,9 +162,41 @@ export default function ItcHuaweiPage() {
 
       // Use LOCAL data from table (no server fetch)
       const { columns: visibleColumns, poStatusMap } = exportData
+
+      // Helper: robust resolver to find the actual key in row for given column config
+      const resolveRowValue = (row: Record<string, any>, col: { name: string; displayName: string }) => {
+        if (!row || !col) return ''
+        let value = row[col.name]
+        if (value === undefined || value === null) {
+          value = row[col.displayName]
+        }
+        if (value === undefined || value === null) {
+          const matchingKey = Object.keys(row).find(
+            key => key.toLowerCase() === col.name.toLowerCase() ||
+                   key.toLowerCase() === col.displayName.toLowerCase()
+          )
+          if (matchingKey) value = row[matchingKey]
+        }
+        if (value === undefined || value === null) {
+          const matchingKey = Object.keys(row).find(
+            key => key.replace(/\s+/g, '') === col.name.replace(/\s+/g, '') ||
+                   key.replace(/\s+/g, '') === col.displayName.replace(/\s+/g, '')
+          )
+          if (matchingKey) value = row[matchingKey]
+        }
+        if (value === undefined || value === null) {
+          const matchingKey = Object.keys(row).find(
+            key => key.trim() === col.name.trim() ||
+                   key.trim() === col.displayName.trim()
+          )
+          if (matchingKey) value = row[matchingKey]
+        }
+        return value === undefined || value === null ? '' : value
+      }
       
       // Prepare data for XLSX (optimized - build array directly)
-      const headers = [...visibleColumns.map((col) => col.displayName), 'PO Status']
+      const includePOStatus = exportData.includePOStatus ?? false
+      const headers = [...visibleColumns.map((col) => col.displayName), ...(includePOStatus ? ['PO Status'] : [])]
       
       // Build data array (faster than creating objects)
       const excelData = [headers]
@@ -175,16 +209,18 @@ export default function ItcHuaweiPage() {
         // Add visible column values
         for (let j = 0; j < visibleColumns.length; j++) {
           const col = visibleColumns[j]
-          const value = row[col.name] || row[col.displayName]
+          const value = resolveRowValue(row, col)
           rowData.push(value !== null && value !== undefined ? value : '')
         }
         
-        // Add PO Status
+        // Add PO Status (case-insensitive lookup) if visible
         const duid = row['DUID'] || row['duid']
-        if (duid && poStatusMap[duid]) {
-          rowData.push(`${poStatusMap[duid].percentage}%`)
+        if (includePOStatus && duid) {
+          const poKey = Object.keys(poStatusMap || {}).find(k => k.toLowerCase() === duid.toString().toLowerCase())
+          const status = poKey ? poStatusMap[poKey] : null
+          rowData.push(status?.percentage !== undefined ? `${status.percentage}%` : '-')
         } else {
-          rowData.push('-')
+          if (includePOStatus) rowData.push('-')
         }
         
         excelData.push(rowData)
@@ -283,15 +319,6 @@ export default function ItcHuaweiPage() {
               Manage ITC HUAWEI rollout data from Google Sheets
             </p>
           </div>
-          
-          <button 
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-          >
-            <RefreshCcw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
         </div>
 
         {/* Project Tabs */}
@@ -330,6 +357,8 @@ export default function ItcHuaweiPage() {
             error={error}
             selectedSheet={selectedSheet}
             onExportDataReady={setExportData}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
           />
         </div>
       </div>

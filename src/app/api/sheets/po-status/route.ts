@@ -146,12 +146,24 @@ export async function GET(request: NextRequest) {
 
     const allData = await fetchAllPOData()
 
-    // If specific DUIDs requested, filter
+    // If specific DUIDs requested, filter with case-insensitive matching
     if (duids.length > 0) {
       const filtered: Record<string, any> = {}
-      duids.forEach(duid => {
-        if (allData[duid]) {
-          filtered[duid] = allData[duid]
+      duids.forEach(requestedDuid => {
+        const normalizedRequested = requestedDuid.trim().toLowerCase()
+        
+        // Try exact match first
+        if (allData[requestedDuid]) {
+          filtered[requestedDuid] = allData[requestedDuid]
+          return
+        }
+        
+        // Try case-insensitive match
+        for (const [poDuid, poData] of Object.entries(allData)) {
+          if (poDuid.toLowerCase() === normalizedRequested) {
+            filtered[requestedDuid] = poData // Keep original requested key
+            return
+          }
         }
       })
       return NextResponse.json({ success: true, data: filtered }, { status: 200 })
@@ -159,6 +171,78 @@ export async function GET(request: NextRequest) {
 
     // Return all
     return NextResponse.json({ success: true, data: allData }, { status: 200 })
+  } catch (error) {
+    console.error('Error fetching PO status:', error)
+    return NextResponse.json(
+      { success: false, message: 'Failed to fetch PO status', error: String(error) },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const requestedDuids = body.duids || []
+
+    if (!Array.isArray(requestedDuids) || requestedDuids.length === 0) {
+      return NextResponse.json(
+        { success: false, message: 'duids array is required' },
+        { status: 400 }
+      )
+    }
+
+    const allData = await fetchAllPOData()
+
+    // Filter PO data - only return what's requested
+    const matched: Record<string, any> = {}
+    const orphans: Record<string, any> = {}
+    
+    // Create normalized lookup map for requested DUIDs
+    const requestedSet = new Set(requestedDuids.map(d => d.toString().trim().toLowerCase()))
+    
+    // Find matches
+    for (const requestedDuid of requestedDuids) {
+      const normalizedRequested = requestedDuid.toString().trim().toLowerCase()
+      
+      // Try exact match first
+      if (allData[requestedDuid]) {
+        matched[requestedDuid] = allData[requestedDuid]
+        continue
+      }
+      
+      // Try case-insensitive match
+      let found = false
+      for (const [poDuid, poData] of Object.entries(allData)) {
+        if (poDuid.toLowerCase() === normalizedRequested) {
+          matched[requestedDuid] = poData // Use requested key format
+          found = true
+          break
+        }
+      }
+    }
+    
+    // Find orphans (PO exists but not requested by table)
+    for (const [poDuid, poData] of Object.entries(allData)) {
+      const normalizedPoDuid = poDuid.toLowerCase()
+      if (!requestedSet.has(normalizedPoDuid)) {
+        orphans[poDuid] = poData
+      }
+    }
+    
+    console.log(`📊 PO Status API: Matched ${Object.keys(matched).length}/${requestedDuids.length}, Orphans: ${Object.keys(orphans).length}`)
+
+    return NextResponse.json({ 
+      success: true, 
+      data: matched,
+      orphans: orphans, // Return orphans for debugging/monitoring
+      stats: {
+        requested: requestedDuids.length,
+        matched: Object.keys(matched).length,
+        orphaned: Object.keys(orphans).length,
+        total: Object.keys(allData).length
+      }
+    }, { status: 200 })
   } catch (error) {
     console.error('Error fetching PO status:', error)
     return NextResponse.json(

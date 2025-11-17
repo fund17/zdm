@@ -387,7 +387,7 @@ export default function DailyPlanPage() {
     return (
       <div className="flex items-center justify-center h-96">
         <LoadingSpinner />
-        <span className="ml-2 text-sm text-gray-600">Loading daily plan data from Google Sheets...</span>
+        <span className="ml-2 text-sm text-gray-600">Loading data...</span>
       </div>
     )
   }
@@ -424,7 +424,7 @@ export default function DailyPlanPage() {
               Daily Plan Management
             </h1>
             <p className="mt-0.5 text-xs text-gray-500">
-              Manage and view your daily planning data from Google Sheets
+              Manage and view your daily planning
             </p>
             
             {/* Status Summary Cards */}

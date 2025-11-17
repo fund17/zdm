@@ -1382,20 +1382,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
           <div className="flex items-center space-x-3">
             {/* Quick Presets */}
             <div className="flex space-x-1">
-              <button
-                onClick={() => {
-                  const today = new Date()
-                  const todayStr = today.toISOString().split('T')[0]
-                  setDateFilter({ startDate: todayStr, endDate: todayStr })
-                  if (onDateFilterChange) {
-                    onDateFilterChange({ startDate: todayStr, endDate: todayStr })
-                  }
-                }}
-                className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
-                title="Filter to today's records"
-              >
-                Today
-              </button>
+              {/* Today preset removed as requested */}
             </div>
 
             {/* Custom Date Range */}
@@ -1854,6 +1841,27 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                     className="px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-blue-50 rounded border border-gray-200 hover:border-blue-300 transition-colors"
                   >
                     Yesterday
+                  </button>
+                  <button
+                    onClick={() => {
+                      const tomorrow = new Date()
+                      tomorrow.setDate(tomorrow.getDate() + 1)
+                      tomorrow.setHours(0, 0, 0, 0)
+
+                      const allDates = getUniqueColumnValues(activeFilterColumn)
+                      const matchingDate = allDates.find(dateStr => {
+                        const parsedDate = new Date(dateStr)
+                        parsedDate.setHours(0, 0, 0, 0)
+                        return parsedDate.getTime() === tomorrow.getTime()
+                      })
+
+                      if (matchingDate) {
+                        handleColumnFilter(activeFilterColumn, 'toggleValue', matchingDate)
+                      }
+                    }}
+                    className="px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-blue-50 rounded border border-gray-200 hover:border-blue-300 transition-colors"
+                  >
+                    Tomorrow
                   </button>
                   <button
                     onClick={() => {

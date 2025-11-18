@@ -430,7 +430,7 @@ export default function DailyPlanPage() {
             
             {/* Status Summary Cards */}
             {filteredData.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className="mt-2 flex flex-wrap gap-1.5 max-h-[56px] overflow-hidden">
                 {/* Status Group */}
                 {statusSummary.statuses.slice(0, 6).map(([status, count]) => {
                   // Define status colors with specific matching for your status values

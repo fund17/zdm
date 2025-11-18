@@ -43,6 +43,8 @@ interface SimpleDataTableProps {
   }) => void
   onRefresh?: () => void
   refreshing?: boolean
+  onImport?: () => void
+  importedCells?: Set<string> // Set of "duid-columnId" for highlighting imported cells
 }
 
 interface EditingState {
@@ -77,10 +79,12 @@ export function HuaweiRolloutTable({
   exporting = false,
   loading = false,
   error = null,
+  onImport,
   selectedSheet = '',
   onExportDataReady,
   onRefresh,
-  refreshing = false
+  refreshing = false,
+  importedCells = new Set()
 }: SimpleDataTableProps) {
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>([])
   const [editingCell, setEditingCell] = useState<EditingState | null>(null)
@@ -676,6 +680,11 @@ export function HuaweiRolloutTable({
           const changeKey = `${rowId}-${columnId}`
           const hasChanges = changedCells.has(changeKey)
           
+          // Check imported with multiple key formats (with/without spaces)
+          const isImported = importedCells.has(changeKey) || 
+                            importedCells.has(`${rowId}-${config.displayName}`) ||
+                            importedCells.has(`${rowId}-${columnId.replace(/\s+/g, '')})`)
+          
           // Fallback: try to get value if getValue() returns empty but data exists
           if (!cellValue && cellValue !== 0) {
             // Try exact match with config.name
@@ -744,10 +753,20 @@ export function HuaweiRolloutTable({
               const day = dateValue.getDate().toString().padStart(2, '0')
               const month = dateValue.toLocaleDateString('en-US', { month: 'short' })
               const year = dateValue.getFullYear()
+              
+              const cellClasses = `flex items-center gap-1 text-xs px-1 py-0.5 rounded ${
+                hasChanges 
+                  ? 'bg-orange-50 border border-orange-200' 
+                  : isImported
+                  ? 'bg-emerald-50 border border-emerald-200'
+                  : ''
+              }`
+              
               return (
-                <div className="flex items-center gap-1 text-xs">
+                <div className={cellClasses}>
                   {hasChanges && <div className="w-1 h-1 bg-orange-500 rounded-full" />}
-                  <span className={hasChanges ? 'text-orange-700 font-medium' : ''}>
+                  {!hasChanges && isImported && <div className="w-1 h-1 bg-emerald-500 rounded-full" />}
+                  <span className={hasChanges ? 'text-orange-700 font-medium' : isImported ? 'text-emerald-700 font-medium' : ''}>
                     {`${day}-${month}-${year}`}
                   </span>
                 </div>
@@ -780,6 +799,8 @@ export function HuaweiRolloutTable({
             const cellClasses = `group flex items-center justify-between cursor-pointer px-1 py-0.5 rounded transition-colors text-xs ${
               hasChanges 
                 ? 'bg-orange-50 border border-orange-200 hover:bg-orange-100' 
+                : isImported
+                ? 'bg-emerald-50 border border-emerald-200 hover:bg-emerald-100'
                 : 'hover:bg-gray-50'
             }`
             
@@ -787,11 +808,12 @@ export function HuaweiRolloutTable({
               <div 
                 className={cellClasses}
                 onDoubleClick={() => handleCellEdit(row.original, columnId, displayValue)}
-                title={hasChanges ? "Modified - not saved yet. Double-click to edit." : "Double-click to edit"}
+                title={hasChanges ? "Modified - not saved yet. Double-click to edit." : isImported ? "Just imported from Excel" : "Double-click to edit"}
               >
                 <div className="flex-1 min-w-0 flex items-center gap-1">
                   {hasChanges && <div className="w-1.5 h-1.5 bg-orange-500 rounded-full flex-shrink-0" />}
-                  <span className={hasChanges ? 'text-orange-700 font-medium' : ''}>
+                  {!hasChanges && isImported && <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full flex-shrink-0" />}
+                  <span className={hasChanges ? 'text-orange-700 font-medium' : isImported ? 'text-emerald-700 font-medium' : ''}>
                     {displayValue?.toString() || ''}
                   </span>
                 </div>
@@ -861,9 +883,17 @@ export function HuaweiRolloutTable({
           // Apply badge to status columns (but not for PO_Status which is handled separately)
           if (isSiteStatusColumn && displayValue && displayValue.toString().trim() && config.name !== 'PO_Status') {
             const badge = getStatusBadge(displayValue.toString())
+            const cellClasses = `flex items-center gap-1 px-1 py-0.5 rounded ${
+              hasChanges 
+                ? 'bg-orange-50 border border-orange-200' 
+                : isImported
+                ? 'bg-emerald-50 border border-emerald-200'
+                : ''
+            }`
             return (
-              <div className="flex items-center gap-1">
+              <div className={cellClasses}>
                 {hasChanges && <div className="w-1 h-1 bg-orange-500 rounded-full" />}
+                {!hasChanges && isImported && <div className="w-1 h-1 bg-emerald-500 rounded-full" />}
                 <span 
                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${badge.bg} ${badge.text} ${badge.border}`}
                 >
@@ -874,10 +904,20 @@ export function HuaweiRolloutTable({
             )
           }
           
+          // Default cell rendering
+          const defaultCellClasses = `flex items-center gap-1 text-xs px-1 py-0.5 rounded ${
+            hasChanges 
+              ? 'bg-orange-50 border border-orange-200' 
+              : isImported
+              ? 'bg-emerald-50 border border-emerald-200'
+              : ''
+          }`
+          
           return (
-            <div className="flex items-center gap-1 text-xs">
+            <div className={defaultCellClasses}>
               {hasChanges && <div className="w-1 h-1 bg-orange-500 rounded-full" />}
-              <span className={hasChanges ? 'text-orange-700 font-medium' : ''}>
+              {!hasChanges && isImported && <div className="w-1 h-1 bg-emerald-500 rounded-full" />}
+              <span className={hasChanges ? 'text-orange-700 font-medium' : isImported ? 'text-emerald-700 font-medium' : ''}>
                 {displayValue?.toString() || ''}
               </span>
             </div>
@@ -1428,15 +1468,16 @@ export function HuaweiRolloutTable({
           // Backup current data before update
           setBackupData([...data])
 
-          // debug logs removed
-          // debug logs removed
-          // debug logs removed
+          console.log('📋 Excel file loaded:')
+          console.log(`  - Total rows: ${importedData.length}`)
+          console.log(`  - First row keys: ${Object.keys(importedData[0] || {}).join(', ')}`)
+          console.log(`  - Editable columns from settings: ${columnConfigs.filter(c => c.editable).map(c => `${c.displayName} (${c.name})`).join(', ')}`)
 
           // Log first 5 DUIDs from Google Sheets for reference
-          // debug logs removed
+          console.log('🔍 First 5 DUIDs in current data:')
           data.slice(0, 5).forEach((row, idx) => {
             const duid = row[rowIdColumn]?.toString()
-            // debug logs removed
+            console.log(`  ${idx + 1}. ${duid}`)
           })
 
           // Create DUID lookup map from current data with multiple normalization strategies
@@ -1466,17 +1507,16 @@ export function HuaweiRolloutTable({
           
           let updatedCount = 0
           let skippedCount = 0
-          const updates: Array<{ rowId: string; columnId: string; value: any; oldValue: any }> = []
+          // Group updates by row: Map<duid, { columns: Map<columnId, {value, oldValue}> }>
+          const rowUpdates = new Map<string, Map<string, { value: any; oldValue: any }>>()
 
           // Process each row from Excel
-          // debug logs removed
           
           for (let i = 0; i < importedData.length; i++) {
             const excelRow = importedData[i]
             const duidRaw = excelRow[rowIdColumn]?.toString()
             
             if (!duidRaw) {
-              // debug logs removed
               skippedCount++
               continue
             }
@@ -1540,18 +1580,37 @@ export function HuaweiRolloutTable({
 
             // Compare and update columns
             let rowHasUpdates = false
-            const rowUpdates: string[] = []
+            const rowChangesList: string[] = [] // For logging
             
             for (const columnConfig of columnConfigs) {
               if (!columnConfig.editable) continue
               if (columnConfig.name === rowIdColumn) continue
 
-              // Use exact column name from Excel (no normalization, no display name alias)
-              const excelValue = excelRow[columnConfig.name]
+              // Try multiple matching strategies for column name
+              // 1. Try exact match with config.name (no spaces: "TSSRClosed")
+              // 2. Try with displayName (with spaces: "TSSR Closed")
+              // 3. Try case-insensitive match
+              let excelValue = excelRow[columnConfig.name] || 
+                              excelRow[columnConfig.displayName]
+              
+              // If still not found, try finding the key in excelRow that matches
+              if (excelValue === undefined || excelValue === null) {
+                const matchingKey = Object.keys(excelRow).find(key => 
+                  key === columnConfig.name ||
+                  key === columnConfig.displayName ||
+                  key.replace(/\s+/g, '') === columnConfig.name ||
+                  key.replace(/\s+/g, '') === columnConfig.displayName ||
+                  key.toLowerCase() === columnConfig.name.toLowerCase() ||
+                  key.toLowerCase() === columnConfig.displayName.toLowerCase()
+                )
+                if (matchingKey) {
+                  excelValue = excelRow[matchingKey]
+                }
+              }
               
               // Log column check for first few rows
               if (i < 3) {
-                // debug logs removed
+                console.log(`  📝 Column "${columnConfig.displayName}" (${columnConfig.name}): Excel value = "${excelValue}"`)
               }
               
               if (excelValue === undefined || excelValue === null || excelValue === '') continue
@@ -1619,29 +1678,34 @@ export function HuaweiRolloutTable({
                 }
 
                 if (formattedDate !== currentValue) {
-                  updates.push({
-                    rowId: originalDuid,
-                    columnId: columnConfig.name,
+                  // Add to row updates map
+                  if (!rowUpdates.has(originalDuid)) {
+                    rowUpdates.set(originalDuid, new Map())
+                  }
+                  rowUpdates.get(originalDuid)!.set(columnConfig.name, {
                     value: formattedDate,
                     oldValue: currentValue
                   })
                   rowHasUpdates = true
+                  rowChangesList.push(`${columnConfig.displayName}: "${currentValue}" → "${formattedDate}"`)
                 }
               } else {
                 // For non-date columns, update if values are different
                 const newValue = excelValue.toString()
                 if (newValue !== currentValue?.toString()) {
-                  updates.push({
-                    rowId: originalDuid,
-                    columnId: columnConfig.name,
+                  // Add to row updates map
+                  if (!rowUpdates.has(originalDuid)) {
+                    rowUpdates.set(originalDuid, new Map())
+                  }
+                  rowUpdates.get(originalDuid)!.set(columnConfig.name, {
                     value: newValue,
                     oldValue: currentValue
                   })
                   rowHasUpdates = true
-                  rowUpdates.push(`${columnConfig.name}: "${currentValue}" → "${newValue}"`)
+                  rowChangesList.push(`${columnConfig.displayName}: "${currentValue}" → "${newValue}"`)
                   
                   if (i < 3) {
-                    // debug logs removed
+                    console.log(`    ✏️ Will update: ${columnConfig.displayName}`)
                   }
                 }
               }
@@ -1650,38 +1714,77 @@ export function HuaweiRolloutTable({
             if (rowHasUpdates) {
               updatedCount++
               if (i < 3) {
-                // debug logs removed
+                console.log(`  ✅ Row ${i + 1} (${duid}): ${rowChangesList.length} updates: ${rowChangesList.join(', ')}`)
               }
             } else if (i < 3) {
-              // debug logs removed
+              console.log(`  ⏭️ Row ${i + 1} (${duid}): No changes detected`)
             }
           }
 
-          // Apply all updates
-          // debug logs removed
-          // debug logs removed
-          // debug logs removed
-          // debug logs removed
+          // Apply all cell updates using SINGLE batch API call
+          const totalUpdates = Array.from(rowUpdates.values()).reduce((sum, cols) => sum + cols.size, 0)
+          console.log(`\n📤 Preparing single batch update: ${rowUpdates.size} rows with ${totalUpdates} total cell changes...`)
           
-          if (updates.length > 0 && onUpdateData) {
-            for (let i = 0; i < updates.length; i++) {
-              const update = updates[i]
-              // debug logs removed
-              // debug logs removed
-              // debug logs removed
-              // debug logs removed
+          // Breakdown by column
+          const updatesByColumn = new Map<string, number>()
+          rowUpdates.forEach((columns) => {
+            columns.forEach((_, colId) => {
+              updatesByColumn.set(colId, (updatesByColumn.get(colId) || 0) + 1)
+            })
+          })
+          console.log(`   Breakdown by column:`)
+          updatesByColumn.forEach((count, col) => {
+            const config = columnConfigs.find(c => c.name === col)
+            console.log(`   - ${config?.displayName || col}: ${count} rows`)
+          })
+          
+          if (rowUpdates.size > 0) {
+            // Convert rowUpdates Map to array of cell updates for single API call
+            const cellUpdates: Array<{
+              duid: string;
+              columnId: string;
+              value: any;
+              oldValue: any;
+            }> = []
+            
+            rowUpdates.forEach((columns, duid) => {
+              columns.forEach((data, colId) => {
+                cellUpdates.push({
+                  duid,
+                  columnId: colId,
+                  value: data.value,
+                  oldValue: data.oldValue
+                })
+              })
+            })
+            
+            console.log(`🚀 Sending SINGLE batch update API call for ${cellUpdates.length} cells...`)
+            
+            try {
+              // Call batch update API ONCE with all changes
+              const response = await fetch('/api/sheets/itc-huawei/batch-update', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  cellUpdates,
+                  rowIdentifierColumn: rowIdColumn,
+                  sheetName: selectedSheet
+                })
+              })
               
-              try {
-                await onUpdateData(update.rowId, update.columnId, update.value, update.oldValue)
-                // debug logs removed
-              } catch (error) {
-                console.error(`  ❌ Update failed:`, error)
-                throw error // Re-throw to stop processing
+              if (!response.ok) {
+                const error = await response.json()
+                throw new Error(error.error || 'Batch update failed')
               }
+              
+              const result = await response.json()
+              console.log(`✅ Batch update completed: ${result.updatedCells} cells updated in ${result.updateTime}ms`)
+            } catch (error) {
+              console.error(`❌ Batch update failed:`, error)
+              throw error
             }
           }
 
-          // debug logs removed
           setImportSuccess({ updated: updatedCount, skipped: skippedCount })
           
           // Clear success message after 10 seconds
@@ -1852,38 +1955,21 @@ export function HuaweiRolloutTable({
             )}
 
             {/* Action Buttons: Import, Export, Refresh, Load PO Status */}
-            {(onExport || onRefresh) && (
+            {(onExport || onRefresh || onImport) && (
               <div className="flex items-center space-x-2 border-l border-gray-300 pl-3">
                 {/* Import Excel Button */}
-                <div className="relative">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={handleImportExcel}
-                    className="hidden"
-                  />
+                {onImport && (
                   <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={importing}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-600 rounded-md hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                    onClick={onImport}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-600 rounded-md hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors duration-200 shadow-sm"
                     title="Import Excel to update data (matches by DUID)"
                   >
-                    {importing ? (
-                      <>
-                        <div className="animate-spin h-3.5 w-3.5 mr-1.5 border-2 border-white border-t-transparent rounded-full"></div>
-                        Importing...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                        </svg>
-                        Import
-                      </>
-                    )}
+                    <svg className="h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Import
                   </button>
-                </div>
+                )}
                 
                 <button
                   onClick={handleExport}

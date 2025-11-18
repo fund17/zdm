@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { HuaweiRolloutTable } from '@/components/HuaweiRolloutTable'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
-import { RefreshCcw, Download, Database } from 'lucide-react'
+import { RefreshCcw, Download, Database, Upload, X, CheckCircle, AlertCircle } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
 interface SheetData {
@@ -13,6 +13,18 @@ interface SheetData {
 interface SheetListItem {
   sheetName: string
   title: string
+}
+
+interface ImportPreview {
+  cellsWillUpdate: number
+  cellsWillSkip: number
+  skipReasons: {
+    duidColumn: number
+    dateColumnsProtected: number
+    invalidDateFormat: number
+  }
+  totalRows: number
+  totalCells: number
 }
 
 export default function ItcHuaweiPage() {
@@ -33,6 +45,14 @@ export default function ItcHuaweiPage() {
     poStatusMap: Record<string, any>,
     includePOStatus?: boolean
   } | null>(null)
+  
+  // Import Excel state
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
+  const [analyzingFile, setAnalyzingFile] = useState(false)
+  const [importedCells, setImportedCells] = useState<Set<string>>(new Set()) // Track imported cells: "DUID-columnId"
 
   const fetchData = useCallback(async (sheetName?: string, options?: { showFullLoading?: boolean }) => {
     try {
@@ -279,6 +299,246 @@ export default function ItcHuaweiPage() {
     }, 3000)
   }
 
+  // Validate and convert date format to DD-MMM-YYYY
+  const validateAndConvertDate = (value: any): string | null => {
+    if (!value) return null
+    
+    const dateStr = value.toString().trim()
+    if (!dateStr) return null
+    
+    // Check if already in DD-MMM-YYYY format (e.g., "05-Jan-2024" or "05/Jan/2024")
+    const ddMmmYyyyPattern = /^\d{1,2}[-\/](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[-\/]\d{4}$/i
+    if (ddMmmYyyyPattern.test(dateStr)) {
+      // Normalize separator to dash
+      return dateStr.replace(/\//g, '-')
+    }
+    
+    // If it's Excel serial number, convert it
+    if (typeof value === 'number' && value > 0 && value < 100000) {
+      const date = new Date((value - 25569) * 86400 * 1000)
+      const day = String(date.getDate()).padStart(2, '0')
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      const month = months[date.getMonth()]
+      const year = date.getFullYear()
+      return `${day}-${month}-${year}`
+    }
+    
+    // Reject other formats (like dd/mm/yy or mm/dd/yy - ambiguous!)
+    return null
+  }
+
+  // Handle file selection and analyze
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setImportFile(file)
+    setImportPreview(null)
+    setAnalyzingFile(true)
+    
+    try {
+      // Read and analyze Excel file
+      const arrayBuffer = await file.arrayBuffer()
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+      const sheetName = workbook.SheetNames[0]
+      const worksheet = workbook.Sheets[sheetName]
+      let jsonData: any[] = XLSX.utils.sheet_to_json(worksheet)
+      
+      if (jsonData.length === 0) {
+        setImportPreview({
+          cellsWillUpdate: 0,
+          cellsWillSkip: 0,
+          skipReasons: { duidColumn: 0, dateColumnsProtected: 0, invalidDateFormat: 0 },
+          totalRows: 0,
+          totalCells: 0
+        })
+        setAnalyzingFile(false)
+        return
+      }
+
+      // Get date column names (flexible matching)
+      const dateColumnNames = ['Survey', 'MOS', 'Installation', 'Integration', 'ATP Approved', 'ATP CME', 'TSSR Closed', 'BPUJL', 'Inbound']
+      
+      // Convert date formats in jsonData
+      jsonData = jsonData.map(row => {
+        const newRow: any = {}
+        for (const [key, value] of Object.entries(row)) {
+          const isDateColumn = dateColumnNames.some(dateCol => 
+            key.toLowerCase().includes(dateCol.toLowerCase()) ||
+            dateCol.toLowerCase().includes(key.toLowerCase())
+          )
+          
+          if (isDateColumn && value) {
+            const convertedDate = validateAndConvertDate(value)
+            newRow[key] = convertedDate || value
+          } else {
+            newRow[key] = value
+          }
+        }
+        return newRow
+      })
+
+      // Analyze data based on PER-CELL rules
+      let cellsWillUpdate = 0
+      let duidColumnCount = 0
+      let dateColumnsProtected = 0
+      let invalidDateFormat = 0
+      let totalCells = 0
+      
+      for (const excelRow of jsonData) {
+        const duid = excelRow['DUID'] || excelRow['duid']
+        
+        // Find existing row in current data
+        const existingRow = data.find(row => row.DUID === duid || row.duid === duid)
+        
+        // Count cells in this row
+        const cellsInRow = Object.keys(excelRow).length
+        totalCells += cellsInRow
+        
+        // Analyze each cell
+        for (const [excelKey, excelValue] of Object.entries(excelRow)) {
+          // Rule 1: DUID column cannot be updated (always skip)
+          if (excelKey.toLowerCase() === 'duid') {
+            duidColumnCount++
+            continue
+          }
+          
+          // Check if this is a date column
+          const isDateColumn = dateColumnNames.some(dateCol => 
+            excelKey.toLowerCase().includes(dateCol.toLowerCase()) ||
+            dateCol.toLowerCase().includes(excelKey.toLowerCase())
+          )
+          
+          // Rule 2: Date column - validate format
+          if (isDateColumn && excelValue) {
+            const convertedDate = validateAndConvertDate(excelValue)
+            if (!convertedDate) {
+              invalidDateFormat++
+              continue // Skip invalid date format
+            }
+          }
+          
+          // Rule 3: Date column with existing value is protected
+          if (isDateColumn && existingRow) {
+            const existingValue = existingRow[excelKey]
+            if (existingValue && existingValue !== '' && existingValue !== null) {
+              dateColumnsProtected++
+              continue // Skip this cell only, not entire row
+            }
+          }
+          
+          // Rule 4: All other cells can be updated if value is different
+          if (!existingRow) {
+            // New row - all cells (except DUID) will be added
+            cellsWillUpdate++
+          } else {
+            // Existing row - check if value is different
+            const existingValue = existingRow[excelKey]
+            if (excelValue !== existingValue && excelValue !== null && excelValue !== undefined && excelValue !== '') {
+              cellsWillUpdate++
+            }
+          }
+        }
+      }
+      
+      setImportPreview({
+        cellsWillUpdate,
+        cellsWillSkip: duidColumnCount + dateColumnsProtected + invalidDateFormat,
+        skipReasons: {
+          duidColumn: duidColumnCount,
+          dateColumnsProtected,
+          invalidDateFormat
+        },
+        totalRows: jsonData.length,
+        totalCells
+      })
+      
+    } catch (error) {
+      console.error('File analysis error:', error)
+      displayToast('Failed to analyze file', 'error')
+    } finally {
+      setAnalyzingFile(false)
+    }
+  }
+
+  // Handle import execution
+  const handleImportExcel = async () => {
+    if (!importFile || !selectedSheet) {
+      displayToast('Please select a file and project first', 'error')
+      return
+    }
+    
+    setImporting(true)
+    
+    try {
+      // Read Excel file
+      const arrayBuffer = await importFile.arrayBuffer()
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+      const sheetName = workbook.SheetNames[0]
+      const worksheet = workbook.Sheets[sheetName]
+      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet)
+      
+      if (jsonData.length === 0) {
+        displayToast('No data found in Excel file', 'error')
+        setImporting(false)
+        return
+      }
+
+      // Send to batch update API with rules
+      const response = await fetch('/api/sheets/itc-huawei/update', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sheetName: selectedSheet,
+          updates: jsonData, // Send all rows, API will apply rules
+          bulkImport: true
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to import data')
+      }
+
+      const result = await response.json()
+      
+      // Track which cells were imported for highlighting
+      const importedCellsSet = new Set<string>()
+      if (result.importedCells && Array.isArray(result.importedCells)) {
+        result.importedCells.forEach((cell: { duid: string; column: string }) => {
+          importedCellsSet.add(`${cell.duid}-${cell.column}`)
+        })
+      }
+      setImportedCells(importedCellsSet)
+      
+      // Auto-clear highlight after 10 seconds
+      setTimeout(() => {
+        setImportedCells(new Set())
+      }, 10000)
+      
+      // Close modal
+      setImportModalOpen(false)
+      setImportFile(null)
+      setImportPreview(null)
+      
+      // Show success toast
+      displayToast(`✅ Successfully imported ${result.updatedCount || importPreview?.cellsWillUpdate || 0} cells!`, 'success')
+      
+      // Refresh data
+      setTableRefreshing(true)
+      await fetchData(selectedSheet, { showFullLoading: false })
+      setTableRefreshing(false)
+      
+    } catch (error) {
+      console.error('Import error:', error)
+      displayToast(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <div className="h-full flex flex-col pb-2">
       {/* Toast Notification */}
@@ -370,9 +630,162 @@ export default function ItcHuaweiPage() {
             onExportDataReady={setExportData}
             onRefresh={handleRefresh}
             refreshing={refreshing}
+            onImport={() => setImportModalOpen(true)}
+            importedCells={importedCells}
           />
         </div>
       </div>
+
+      {/* Import Excel Modal */}
+      {importModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <Upload className="h-5 w-5 mr-2 text-emerald-600" />
+                Import Excel File
+              </h3>
+              <button
+                onClick={() => {
+                  setImportModalOpen(false)
+                  setImportFile(null)
+                  setImportPreview(null)
+                }}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5">
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-3">
+                  Upload an Excel file to import/update data.
+                </p>
+                
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <p className="text-xs font-medium text-blue-900 mb-1">📋 Import Rules:</p>
+                  <ul className="text-xs text-blue-700 space-y-1 ml-4 list-disc">
+                    <li><strong>DUID cannot be updated</strong> - used for matching rows</li>
+                    <li><strong>Date format:</strong> Only DD-MMM-YYYY or DD/MMM/YYYY (e.g., 05-Jan-2024)</li>
+                    <li><strong>Date columns with existing values cannot be updated</strong> (Survey, MOS, Installation, etc.)</li>
+                    <li>All other columns can be overwritten with new values</li>
+                  </ul>
+                </div>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700 mb-2 block">Select Excel File</span>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-gray-600
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-lg file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-emerald-50 file:text-emerald-700
+                      hover:file:bg-emerald-100
+                      cursor-pointer"
+                  />
+                </label>
+
+                {importFile && (
+                  <div className="mt-3 flex items-center text-sm text-gray-600 bg-gray-50 rounded-lg p-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 mr-2" />
+                    <span className="truncate">{importFile.name}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Import Preview */}
+              {analyzingFile && (
+                <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <div className="flex items-center">
+                    <RefreshCcw className="h-4 w-4 text-blue-600 mr-2 animate-spin" />
+                    <p className="text-sm text-blue-700">Analyzing file...</p>
+                  </div>
+                </div>
+              )}
+
+              {importPreview && !analyzingFile && (
+                <div className="mb-4 space-y-2">
+                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-emerald-900">Cells to Update:</span>
+                      <span className="text-lg font-bold text-emerald-700">{importPreview.cellsWillUpdate}</span>
+                    </div>
+                    <p className="text-xs text-emerald-600 mt-1">
+                      Cells that will be created or updated
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-amber-900">Cells to Skip:</span>
+                      <span className="text-lg font-bold text-amber-700">{importPreview.cellsWillSkip}</span>
+                    </div>
+                    <div className="text-xs text-amber-600 mt-1 space-y-0.5">
+                      {importPreview.skipReasons.duidColumn > 0 && (
+                        <p>• {importPreview.skipReasons.duidColumn} cell(s) - DUID column protected</p>
+                      )}
+                      {importPreview.skipReasons.dateColumnsProtected > 0 && (
+                        <p>• {importPreview.skipReasons.dateColumnsProtected} cell(s) - date columns with existing values</p>
+                      )}
+                      {importPreview.skipReasons.invalidDateFormat > 0 && (
+                        <p>• {importPreview.skipReasons.invalidDateFormat} cell(s) - invalid date format (use DD-MMM-YYYY)</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-2 rounded-lg bg-gray-100 border border-gray-200">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-gray-700">Total Rows:</span>
+                      <span className="text-gray-600">{importPreview.totalRows}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs mt-1">
+                      <span className="font-medium text-gray-700">Total Cells:</span>
+                      <span className="text-gray-600">{importPreview.totalCells}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setImportModalOpen(false)
+                    setImportFile(null)
+                    setImportPreview(null)
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImportExcel}
+                  disabled={!importFile || importing || analyzingFile || !importPreview || importPreview.cellsWillUpdate === 0}
+                  className="px-4 py-2 text-sm font-semibold text-emerald-800 bg-emerald-50 border border-emerald-600 rounded-lg hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center shadow-sm"
+                >
+                  {importing ? (
+                    <>
+                      <RefreshCcw className="h-4 w-4 mr-2 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Import {importPreview ? `(${importPreview.cellsWillUpdate} cells)` : ''}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

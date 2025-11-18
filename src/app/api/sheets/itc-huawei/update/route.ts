@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetsClient } from '@/lib/googleSheets'
 
+// Date column names that should be protected if already filled
+const DATE_COLUMN_NAMES = ['Survey', 'MOS', 'Installation', 'Integration', 'ATP Approved', 'ATP CME', 'TSSR Closed', 'BPUJL', 'Inbound']
+
 interface SafeUpdateRequest {
   rowId: string | number
   columnId: string
@@ -8,10 +11,204 @@ interface SafeUpdateRequest {
   oldValue?: any
   rowIdentifierColumn?: string
   sheetName?: string
+  bulkImport?: boolean
+  updates?: any[] // Array of Excel rows for bulk import
+}
+
+// Handle bulk import with per-cell rules
+async function handleBulkImport(requestBody: SafeUpdateRequest) {
+  const { sheetName, updates } = requestBody
+  
+  if (!updates || updates.length === 0) {
+    return NextResponse.json({ error: 'No data to import' }, { status: 400 })
+  }
+
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID_HWROLLOUTITC
+  const targetSheetName = sheetName || process.env.GOOGLE_SHEET_NAME_HWROLLOUTITC || 'ITCHIOH'
+  
+  if (!spreadsheetId) {
+    return NextResponse.json({ error: 'Google Sheet ID is not configured' }, { status: 500 })
+  }
+
+  console.log('📦 BULK IMPORT REQUEST:', {
+    sheetName: targetSheetName,
+    rowCount: updates.length,
+    timestamp: new Date().toISOString()
+  })
+
+  const sheets = await getSheetsClient()
+
+  // Get all data from Google Sheets
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${targetSheetName}!A:Z`,
+  })
+
+  const rows = response.data.values
+  if (!rows || rows.length === 0) {
+    return NextResponse.json({ error: 'No data found in sheet' }, { status: 404 })
+  }
+
+  const headers = rows[0] as string[]
+  const dataRows = rows.slice(1)
+
+  console.log(`📊 Sheet has ${headers.length} columns and ${dataRows.length} rows`)
+
+  // Find DUID column index
+  const duidColumnIndex = headers.findIndex(h => 
+    h === 'DUID' || 
+    h.toLowerCase() === 'duid' ||
+    h.replace(/\s+/g, '').toLowerCase() === 'duid'
+  )
+
+  if (duidColumnIndex === -1) {
+    return NextResponse.json({ error: 'DUID column not found in sheet' }, { status: 400 })
+  }
+
+  console.log(`🔍 DUID column found at index ${duidColumnIndex} (${headers[duidColumnIndex]})`)
+
+  // Prepare batch updates array
+  const batchUpdates: Array<{
+    range: string
+    values: any[][]
+  }> = []
+
+  let cellsUpdated = 0
+  let cellsSkipped = 0
+  const importedCellsList: Array<{ duid: string; column: string }> = []
+
+  // Process each Excel row
+  for (const excelRow of updates) {
+    const duid = excelRow['DUID'] || excelRow['duid']
+    
+    if (!duid) {
+      console.log('⚠️ Skipping row without DUID')
+      cellsSkipped += Object.keys(excelRow).length
+      continue
+    }
+
+    // Find existing row in Google Sheets by DUID
+    let actualRowIndex = -1
+    let existingRow: any[] | null = null
+
+    for (let i = 0; i < dataRows.length; i++) {
+      const sheetDuid = dataRows[i][duidColumnIndex]?.toString()
+      if (sheetDuid && sheetDuid === duid.toString()) {
+        actualRowIndex = i
+        existingRow = dataRows[i]
+        break
+      }
+    }
+
+    if (actualRowIndex === -1) {
+      console.log(`⚠️ DUID ${duid} not found in sheet - skipping row`)
+      cellsSkipped += Object.keys(excelRow).length
+      continue
+    }
+
+    // Process each cell in the Excel row
+    for (const [excelKey, excelValue] of Object.entries(excelRow)) {
+      // Rule 1: DUID column cannot be updated
+      if (excelKey.toLowerCase() === 'duid') {
+        cellsSkipped++
+        continue
+      }
+
+      // Find column index (flexible matching)
+      let targetColumnIndex = headers.findIndex(h => 
+        h === excelKey ||
+        h.replace(/\s+/g, '') === excelKey ||
+        h.replace(/\s+/g, '') === excelKey.replace(/\s+/g, '') ||
+        h.toLowerCase() === excelKey.toLowerCase()
+      )
+
+      if (targetColumnIndex === -1) {
+        console.log(`⚠️ Column not found: ${excelKey}`)
+        cellsSkipped++
+        continue
+      }
+
+      // Check if this is a date column
+      const isDateColumn = DATE_COLUMN_NAMES.some(dateCol => 
+        excelKey.toLowerCase().includes(dateCol.toLowerCase()) ||
+        dateCol.toLowerCase().includes(excelKey.toLowerCase())
+      )
+
+      // Rule 2: Date column with existing value is protected
+      if (isDateColumn && existingRow) {
+        const existingValue = existingRow[targetColumnIndex]
+        if (existingValue && existingValue !== '' && existingValue !== null) {
+          console.log(`🔒 Protected date column: ${excelKey} in DUID ${duid}`)
+          cellsSkipped++
+          continue // Skip this cell only
+        }
+      }
+
+      // Rule 3: Check if value is different
+      if (existingRow) {
+        const existingValue = existingRow[targetColumnIndex]
+        if (excelValue === existingValue || excelValue === null || excelValue === undefined || excelValue === '') {
+          cellsSkipped++
+          continue
+        }
+      }
+
+      // Add to batch updates
+      const sheetRowNumber = actualRowIndex + 2 // +1 for header, +1 for 1-based
+      const columnLetter = String.fromCharCode(65 + targetColumnIndex)
+      const cellRange = `${targetSheetName}!${columnLetter}${sheetRowNumber}`
+
+      batchUpdates.push({
+        range: cellRange,
+        values: [[excelValue]]
+      })
+      
+      // Track for highlighting - use ACTUAL column name from sheet header
+      const actualColumnName = headers[targetColumnIndex]
+      importedCellsList.push({
+        duid: duid.toString(),
+        column: actualColumnName // Use sheet header name, not Excel key
+      })
+      
+      cellsUpdated++
+    }
+  }
+
+  console.log(`📊 Batch update summary: ${cellsUpdated} cells to update, ${cellsSkipped} cells skipped`)
+
+  // Execute batch update if there are updates
+  if (batchUpdates.length > 0) {
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        valueInputOption: 'USER_ENTERED',
+        data: batchUpdates
+      }
+    })
+
+    console.log(`✅ Batch update completed: ${batchUpdates.length} cells updated`)
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: 'Bulk import completed',
+    updatedCount: cellsUpdated,
+    skippedCount: cellsSkipped,
+    totalRows: updates.length,
+    importedCells: importedCellsList
+  })
 }
 
 export async function PUT(request: NextRequest) {
   try {
+    const requestBody: SafeUpdateRequest = await request.json()
+    
+    // Check if this is a bulk import request
+    if (requestBody.bulkImport && requestBody.updates) {
+      return await handleBulkImport(requestBody)
+    }
+    
+    // Single cell update
     const { 
       rowId, 
       columnId, 
@@ -19,7 +216,7 @@ export async function PUT(request: NextRequest) {
       oldValue,
       rowIdentifierColumn = 'RowId',
       sheetName
-    }: SafeUpdateRequest = await request.json()
+    } = requestBody
     
     const timestamp = new Date().toISOString()
     
@@ -193,14 +390,36 @@ export async function PUT(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // Verify target column exists
-    const targetColumnIndex = headers.indexOf(columnId)
+    // Verify target column exists - try multiple matching strategies
+    let targetColumnIndex = headers.indexOf(columnId)
+    
+    // If exact match not found, try flexible matching
     if (targetColumnIndex === -1) {
+      // Try matching without spaces
+      targetColumnIndex = headers.findIndex(h => 
+        h.replace(/\s+/g, '') === columnId ||
+        h.replace(/\s+/g, '') === columnId.replace(/\s+/g, '')
+      )
+      
+      // Try case-insensitive match
+      if (targetColumnIndex === -1) {
+        targetColumnIndex = headers.findIndex(h => 
+          h.toLowerCase() === columnId.toLowerCase() ||
+          h.replace(/\s+/g, '').toLowerCase() === columnId.replace(/\s+/g, '').toLowerCase()
+        )
+      }
+    }
+    
+    if (targetColumnIndex === -1) {
+      console.error(`❌ Column '${columnId}' not found in headers`)
+      console.error(`Available headers: ${headers.join(', ')}`)
       return NextResponse.json({ 
         error: `Column '${columnId}' not found`,
         availableColumns: headers
       }, { status: 400 })
     }
+    
+    console.log(`✅ Column found: "${columnId}" -> "${headers[targetColumnIndex]}" (index: ${targetColumnIndex})`)
 
     // Get current value for verification
     const currentValue = rowData[targetColumnIndex]

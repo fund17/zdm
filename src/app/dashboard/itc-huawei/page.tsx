@@ -36,6 +36,11 @@ export default function ItcHuaweiDashboard() {
   const [selectedProject, setSelectedProject] = useState<string>('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [modalData, setModalData] = useState<{ title: string; sites: any[]; allSites: any[] }>({ title: '', sites: [], allSites: [] })
+  const [poRemainingMap, setPoRemainingMap] = useState<Record<string, number>>({})
+  const [poRemainingSurveyMap, setPoRemainingSurveyMap] = useState<Record<string, number>>({})
+  const [poRemainingDismantleMap, setPoRemainingDismantleMap] = useState<Record<string, number>>({})
+  const [poRemainingATPMap, setPoRemainingATPMap] = useState<Record<string, number>>({})
+  const [poRemainingPLNMap, setPoRemainingPLNMap] = useState<Record<string, number>>({})
 
   const fetchAllData = async () => {
     try {
@@ -64,11 +69,196 @@ export default function ItcHuaweiDashboard() {
       )
       
       setAllData(combined)
+      
+      // Load PO Huawei data from cache and create Site ID → PO Remaining % map
+      loadPOData()
+      
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadPOData = async () => {
+    try {
+      const cacheKey = 'po_huawei_full_data_cache'
+      const cachedData = localStorage.getItem(cacheKey)
+      
+      let poData: any[] = []
+      
+      if (!cachedData) {
+        console.warn('No PO cache found, fetching from API...')
+        
+        // Fetch PO data from API
+        const response = await fetch('/api/sheets/po-huawei')
+        console.log('📡 API Response status:', response.status)
+        
+        const result = await response.json()
+        console.log('📡 API Result:', { success: result.success, dataLength: result.data?.length, message: result.message })
+        
+        if (result.success && result.data) {
+          poData = result.data
+          console.log(`📥 Fetched PO data: ${poData.length} rows`)
+          console.log('Sample PO row:', poData[0])
+          
+          // Save to cache for future use
+          try {
+            const compressedData = JSON.stringify(poData)
+            localStorage.setItem(cacheKey, compressedData)
+            localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString())
+            console.log('💾 PO data cached')
+          } catch (e) {
+            console.warn('Failed to cache PO data:', e)
+          }
+        } else {
+          console.error('Failed to fetch PO data from API:', result)
+          return
+        }
+      } else {
+        poData = JSON.parse(cachedData)
+        console.log(`🔍 Loading PO data from cache: ${poData.length} rows`)
+      }
+      
+      // Create Site ID → PO Remaining % map
+      const sitePoMap: Record<string, { count: number; totalRemaining: number }> = {}
+      
+      // Separate maps for different SOW types
+      const sitePoMapSurvey: Record<string, { count: number; totalRemaining: number }> = {}
+      const sitePoMapDismantle: Record<string, { count: number; totalRemaining: number }> = {}
+      const sitePoMapATP: Record<string, { count: number; totalRemaining: number }> = {} // Not survey, not dismantle, not pln
+      const sitePoMapPLN: Record<string, { count: number; totalRemaining: number }> = {}
+      
+      poData.forEach((row: any) => {
+        // Try multiple site ID fields
+        const siteId = row['Site ID'] || row['Site ID PO'] || row['SiteID'] || row['Site']
+        if (!siteId) return
+        
+        // Multiple normalization attempts for matching
+        const normalizations = [
+          siteId.toString().toUpperCase().trim(), // Uppercase original
+          siteId.toString().toLowerCase().trim(), // Lowercase original
+          siteId.toString().toUpperCase().trim().replace(/\s+/g, ''), // No spaces uppercase
+          siteId.toString().toLowerCase().trim().replace(/\s+/g, ''), // No spaces lowercase
+        ]
+        
+        // Parse amounts - handle both string and number formats
+        const amountStr = row['Amount']?.toString().replace(/,/g, '').replace(/[^\d.-]/g, '') || '0'
+        const remainingStr = row['Remaining']?.toString().replace(/,/g, '').replace(/[^\d.-]/g, '') || '0'
+        
+        const amount = parseFloat(amountStr)
+        const remaining = parseFloat(remainingStr)
+        
+        // Remaining is already in currency, calculate percentage
+        // If remaining is already a percentage (0-100), use it directly
+        // Otherwise calculate: (remaining / amount) * 100
+        let remainingPercent = 0
+        
+        if (remaining > 0 && remaining <= 1) {
+          // Already a decimal percentage (0.2 = 20%), convert to percentage
+          remainingPercent = remaining * 100
+        } else if (remaining > 1 && remaining <= 100) {
+          // Already a percentage (20 = 20%)
+          remainingPercent = remaining
+        } else if (amount > 0) {
+          // Currency amount, calculate percentage
+          remainingPercent = (remaining / amount) * 100
+        }
+        
+        // Check SOW field for survey, dismantle, and pln
+        const sow = row['SOW']?.toString().toLowerCase() || ''
+        const isSurvey = sow.includes('survey')
+        const isDismantle = sow.includes('dismantle')
+        const isPLN = sow.includes('pln')
+        const isATP = !isSurvey && !isDismantle && !isPLN // ATP = not survey, not dismantle, not pln
+        
+        // Store for all normalization variants
+        normalizations.forEach(normalizedId => {
+          if (!sitePoMap[normalizedId]) {
+            sitePoMap[normalizedId] = { count: 0, totalRemaining: 0 }
+          }
+          sitePoMap[normalizedId].count++
+          sitePoMap[normalizedId].totalRemaining += remainingPercent
+          
+          // Store in survey map if SOW contains "survey"
+          if (isSurvey) {
+            if (!sitePoMapSurvey[normalizedId]) {
+              sitePoMapSurvey[normalizedId] = { count: 0, totalRemaining: 0 }
+            }
+            sitePoMapSurvey[normalizedId].count++
+            sitePoMapSurvey[normalizedId].totalRemaining += remainingPercent
+          }
+          
+          // Store in dismantle map if SOW contains "dismantle"
+          if (isDismantle) {
+            if (!sitePoMapDismantle[normalizedId]) {
+              sitePoMapDismantle[normalizedId] = { count: 0, totalRemaining: 0 }
+            }
+            sitePoMapDismantle[normalizedId].count++
+            sitePoMapDismantle[normalizedId].totalRemaining += remainingPercent
+          }
+          
+          // Store in PLN map if SOW contains "pln"
+          if (isPLN) {
+            if (!sitePoMapPLN[normalizedId]) {
+              sitePoMapPLN[normalizedId] = { count: 0, totalRemaining: 0 }
+            }
+            sitePoMapPLN[normalizedId].count++
+            sitePoMapPLN[normalizedId].totalRemaining += remainingPercent
+          }
+          
+          // Store in ATP map if SOW does NOT contain "survey", "dismantle", or "pln"
+          if (isATP) {
+            if (!sitePoMapATP[normalizedId]) {
+              sitePoMapATP[normalizedId] = { count: 0, totalRemaining: 0 }
+            }
+            sitePoMapATP[normalizedId].count++
+            sitePoMapATP[normalizedId].totalRemaining += remainingPercent
+          }
+        })
+      })
+      
+      // Calculate averages and create final maps
+      const finalMap: Record<string, number> = {}
+      Object.entries(sitePoMap).forEach(([siteId, data]) => {
+        finalMap[siteId] = data.totalRemaining / data.count
+      })
+      
+      const finalMapSurvey: Record<string, number> = {}
+      Object.entries(sitePoMapSurvey).forEach(([siteId, data]) => {
+        finalMapSurvey[siteId] = data.totalRemaining / data.count
+      })
+      
+      const finalMapDismantle: Record<string, number> = {}
+      Object.entries(sitePoMapDismantle).forEach(([siteId, data]) => {
+        finalMapDismantle[siteId] = data.totalRemaining / data.count
+      })
+      
+      const finalMapATP: Record<string, number> = {}
+      Object.entries(sitePoMapATP).forEach(([siteId, data]) => {
+        finalMapATP[siteId] = data.totalRemaining / data.count
+      })
+      
+      const finalMapPLN: Record<string, number> = {}
+      Object.entries(sitePoMapPLN).forEach(([siteId, data]) => {
+        finalMapPLN[siteId] = data.totalRemaining / data.count
+      })
+      
+      console.log(`✅ PO map created: ${Object.keys(finalMap).length} unique site IDs`)
+      console.log(`✅ PO map (Survey only): ${Object.keys(finalMapSurvey).length} unique site IDs`)
+      console.log(`✅ PO map (Dismantle only): ${Object.keys(finalMapDismantle).length} unique site IDs`)
+      console.log(`✅ PO map (ATP only): ${Object.keys(finalMapATP).length} unique site IDs`)
+      console.log(`✅ PO map (PLN only): ${Object.keys(finalMapPLN).length} unique site IDs`)
+      console.log('Sample PO data:', Object.entries(finalMap).slice(0, 3))
+      
+      setPoRemainingMap(finalMap)
+      setPoRemainingSurveyMap(finalMapSurvey)
+      setPoRemainingDismantleMap(finalMapDismantle)
+      setPoRemainingATPMap(finalMapATP)
+      setPoRemainingPLNMap(finalMapPLN)
+    } catch (err) {
+      console.error('Failed to load PO data:', err)
     }
   }
 
@@ -254,6 +444,45 @@ export default function ItcHuaweiDashboard() {
     return uniqueProjects.sort()
   }, [allData])
 
+  // Helper function to get PO remaining % for a site
+  const getPORemaining = useCallback((duid: string, sowType: 'all' | 'survey' | 'dismantle' | 'atp' | 'pln' = 'all'): number | null => {
+    if (!duid) return null
+    
+    let mapToUse: Record<string, number>
+    switch (sowType) {
+      case 'survey':
+        mapToUse = poRemainingSurveyMap
+        break
+      case 'dismantle':
+        mapToUse = poRemainingDismantleMap
+        break
+      case 'atp':
+        mapToUse = poRemainingATPMap
+        break
+      case 'pln':
+        mapToUse = poRemainingPLNMap
+        break
+      default:
+        mapToUse = poRemainingMap
+    }
+    
+    // Try multiple normalization strategies to find a match
+    const normalizations = [
+      duid.toString().toUpperCase().trim(),
+      duid.toString().toLowerCase().trim(),
+      duid.toString().toUpperCase().trim().replace(/\s+/g, ''),
+      duid.toString().toLowerCase().trim().replace(/\s+/g, ''),
+    ]
+    
+    for (const normalized of normalizations) {
+      if (mapToUse[normalized] !== undefined) {
+        return mapToUse[normalized]
+      }
+    }
+    
+    return null
+  }, [poRemainingMap, poRemainingSurveyMap, poRemainingDismantleMap, poRemainingATPMap, poRemainingPLNMap])
+
   // Calculate metrics from data
   const metrics = useMemo(() => {
     if (filteredData.length === 0) return null
@@ -380,6 +609,136 @@ export default function ItcHuaweiDashboard() {
       if (getFilteredValue(row['ATP CME'])) atpCME++
     })
 
+    // Calculate average PO remaining % for ATP Approved sites
+    const atpApprovedSites = filteredData.filter(row => 
+      getFilteredValue(row['ATP Approved'] || row['ATPApproved'])
+    )
+    
+    console.log(`📊 ATP Approved sites: ${atpApprovedSites.length}`)
+    
+    let totalPoRemaining = 0
+    let sitesWithPOData = 0
+    const unmatchedSites: string[] = []
+    const matchedSamples: Array<{ duid: string; remaining: number }> = []
+    
+    atpApprovedSites.forEach(row => {
+      // ITC Huawei uses DUID column, which maps to Site ID in PO data
+      const duid = row['DUID']
+      
+      if (!duid) {
+        return
+      }
+      
+      const poRemaining = getPORemaining(duid, 'atp') // ATP = not survey, not dismantle
+      
+      if (poRemaining !== null && poRemaining !== undefined) {
+        totalPoRemaining += poRemaining
+        sitesWithPOData++
+        
+        // Collect samples for debugging
+        if (matchedSamples.length < 5) {
+          matchedSamples.push({ duid, remaining: poRemaining })
+        }
+      } else {
+        unmatchedSites.push(duid)
+      }
+    })
+    
+    console.log(`✅ Sites with PO data: ${sitesWithPOData} / ${atpApprovedSites.length}`)
+    console.log('💰 Sample matched sites with PO remaining:', matchedSamples)
+    console.log(`📊 Total PO remaining sum: ${totalPoRemaining.toFixed(2)}`)
+    
+    if (unmatchedSites.length > 0) {
+      console.log('⚠️ Unmatched sites (first 5):', unmatchedSites.slice(0, 5))
+    }
+    
+    const avgPoRemainingPercent = sitesWithPOData > 0 
+      ? (totalPoRemaining / sitesWithPOData).toFixed(1)
+      : null
+    
+    console.log(`💵 Average PO Remaining (ATP): ${avgPoRemainingPercent}%`)
+
+    // Calculate average PO remaining % for TSSR Closed sites (Survey SOW only)
+    const tssrClosedSites = filteredData.filter(row => 
+      getFilteredValue(row['TSSR Closed'] || row['TSSRClosed'])
+    )
+    
+    let totalPoRemainingSurvey = 0
+    let sitesWithPODataSurvey = 0
+    
+    tssrClosedSites.forEach(row => {
+      const duid = row['DUID']
+      
+      if (!duid) return
+      
+      const poRemaining = getPORemaining(duid, 'survey')
+      
+      if (poRemaining !== null && poRemaining !== undefined) {
+        totalPoRemainingSurvey += poRemaining
+        sitesWithPODataSurvey++
+      }
+    })
+    
+    const avgPoRemainingSurveyPercent = sitesWithPODataSurvey > 0 
+      ? (totalPoRemainingSurvey / sitesWithPODataSurvey).toFixed(1)
+      : null
+    
+    console.log(`💵 Average PO Remaining (Survey): ${avgPoRemainingSurveyPercent}% (${sitesWithPODataSurvey} sites)`)
+
+    // Calculate average PO remaining % for Inbound sites (Dismantle SOW only)
+    const inboundSites = filteredData.filter(row => 
+      getFilteredValue(row['Inbound'])
+    )
+    
+    let totalPoRemainingDismantle = 0
+    let sitesWithPODataDismantle = 0
+    
+    inboundSites.forEach(row => {
+      const duid = row['DUID']
+      
+      if (!duid) return
+      
+      const poRemaining = getPORemaining(duid, 'dismantle')
+      
+      if (poRemaining !== null && poRemaining !== undefined) {
+        totalPoRemainingDismantle += poRemaining
+        sitesWithPODataDismantle++
+      }
+    })
+    
+    const avgPoRemainingDismantlePercent = sitesWithPODataDismantle > 0 
+      ? (totalPoRemainingDismantle / sitesWithPODataDismantle).toFixed(1)
+      : null
+    
+    console.log(`💵 Average PO Remaining (Dismantle): ${avgPoRemainingDismantlePercent}% (${sitesWithPODataDismantle} sites)`)
+
+    // Calculate average PO remaining % for ATP PLN sites (PLN SOW only)
+    const atpPLNSites = filteredData.filter(row => 
+      getFilteredValue(row['ATP PLN'])
+    )
+    
+    let totalPoRemainingPLN = 0
+    let sitesWithPODataPLN = 0
+    
+    atpPLNSites.forEach(row => {
+      const duid = row['DUID']
+      
+      if (!duid) return
+      
+      const poRemaining = getPORemaining(duid, 'pln')
+      
+      if (poRemaining !== null && poRemaining !== undefined) {
+        totalPoRemainingPLN += poRemaining
+        sitesWithPODataPLN++
+      }
+    })
+    
+    const avgPoRemainingPlnPercent = sitesWithPODataPLN > 0 
+      ? (totalPoRemainingPLN / sitesWithPODataPLN).toFixed(1)
+      : null
+    
+    console.log(`💵 Average PO Remaining (PLN): ${avgPoRemainingPlnPercent}% (${sitesWithPODataPLN} sites)`)
+
     return {
       totalSites,
       siteStatusCounts,
@@ -432,8 +791,18 @@ export default function ItcHuaweiDashboard() {
       atpPLNProgress: plnConnected > 0 ? ((atpPLN / plnConnected) * 100).toFixed(1) : '0',
       bpujlProgress: totalSites > 0 ? ((bpujl / totalSites) * 100).toFixed(1) : '0',
       atpCMEProgress: cmeStart > 0 ? ((atpCME / cmeStart) * 100).toFixed(1) : '0',
+      
+      // PO Remaining data
+      avgPoRemainingPercent,
+      sitesWithPOData,
+      avgPoRemainingSurveyPercent,
+      sitesWithPODataSurvey,
+      avgPoRemainingDismantlePercent,
+      sitesWithPODataDismantle,
+      avgPoRemainingPlnPercent,
+      sitesWithPODataPLN,
     }
-  }, [filteredData, periodFilter, getFilteredValue])
+  }, [filteredData, periodFilter, getFilteredValue, getPORemaining])
 
   // Smart Analytics - Bottleneck Detection & Performance Analysis
   const analytics = useMemo(() => {
@@ -726,7 +1095,19 @@ export default function ItcHuaweiDashboard() {
                         <p className="text-[10px] text-slate-500 font-medium">Implementation Invoice</p>
                       </div>
                     </div>
-                    <div className="px-2 py-1 bg-blue-600 text-white rounded text-[10px] font-semibold">BILLABLE</div>
+                    {loading || !metrics.avgPoRemainingPercent && Object.keys(poRemainingMap).length === 0 ? (
+                      <div className="px-2 py-1 bg-blue-400 text-white rounded text-[10px] font-semibold animate-pulse">
+                        Loading...
+                      </div>
+                    ) : metrics.avgPoRemainingPercent ? (
+                      <div className="px-2 py-1 bg-blue-600 text-white rounded text-[10px] font-semibold">
+                        PO Remaining {metrics.avgPoRemainingPercent}%
+                      </div>
+                    ) : (
+                      <div className="px-2 py-1 bg-slate-400 text-white rounded text-[10px] font-semibold">
+                        NO PO DATA
+                      </div>
+                    )}
                   </div>
                   
                   <div className="mb-3">
@@ -812,7 +1193,19 @@ export default function ItcHuaweiDashboard() {
                         </p>
                       </div>
                     </div>
-                    <div className="px-2 py-1 bg-purple-600 text-white rounded text-[10px] font-semibold">BILLABLE</div>
+                    {!metrics.hasCMEColumns && (loading || (!metrics.avgPoRemainingDismantlePercent && Object.keys(poRemainingDismantleMap).length === 0)) ? (
+                      <div className="px-2 py-1 bg-purple-400 text-white rounded text-[10px] font-semibold animate-pulse">
+                        Loading...
+                      </div>
+                    ) : !metrics.hasCMEColumns && metrics.avgPoRemainingDismantlePercent ? (
+                      <div className="px-2 py-1 bg-purple-600 text-white rounded text-[10px] font-semibold">
+                        PO Remaining {metrics.avgPoRemainingDismantlePercent}%
+                      </div>
+                    ) : !metrics.hasCMEColumns ? (
+                      <div className="px-2 py-1 bg-slate-400 text-white rounded text-[10px] font-semibold">
+                        NO PO DATA
+                      </div>
+                    ) : null}
                   </div>
                   
                   <div className="mb-3">
@@ -894,7 +1287,27 @@ export default function ItcHuaweiDashboard() {
                         </p>
                       </div>
                     </div>
-                    <div className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-semibold">BILLABLE</div>
+                    {loading || (!metrics.hasCMEColumns && !metrics.avgPoRemainingSurveyPercent && Object.keys(poRemainingSurveyMap).length === 0) || (metrics.hasCMEColumns && !metrics.avgPoRemainingPlnPercent && Object.keys(poRemainingPLNMap).length === 0) ? (
+                      <div className="px-2 py-1 bg-emerald-400 text-white rounded text-[10px] font-semibold animate-pulse">
+                        Loading...
+                      </div>
+                    ) : !metrics.hasCMEColumns && metrics.avgPoRemainingSurveyPercent ? (
+                      <div className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-semibold">
+                        PO Remaining {metrics.avgPoRemainingSurveyPercent}%
+                      </div>
+                    ) : !metrics.hasCMEColumns ? (
+                      <div className="px-2 py-1 bg-slate-400 text-white rounded text-[10px] font-semibold">
+                        NO PO DATA
+                      </div>
+                    ) : metrics.hasCMEColumns && metrics.avgPoRemainingPlnPercent ? (
+                      <div className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-semibold">
+                        PO Remaining {metrics.avgPoRemainingPlnPercent}%
+                      </div>
+                    ) : metrics.hasCMEColumns ? (
+                      <div className="px-2 py-1 bg-slate-400 text-white rounded text-[10px] font-semibold">
+                        NO PO DATA
+                      </div>
+                    ) : null}
                   </div>
                   
                   <div className="mb-3">

@@ -1342,22 +1342,22 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
 
   // Update parent with table filtered data (including search filter)
   useEffect(() => {
-    if (onFilteredDataChange && table) {
-      const tableFilteredData = table.getFilteredRowModel().rows.map(row => row.original)
-      onFilteredDataChange(tableFilteredData)
-    }
-  }, [table, onFilteredDataChange])
+    if (!onFilteredDataChange || !table) return
 
-  if (configLoading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <Settings className="h-8 w-8 mx-auto text-blue-600 animate-spin mb-2" />
-          <p className="text-gray-600">Loading column configuration...</p>
-        </div>
-      </div>
-    )
-  }
+    // Generate table filtered rows (respecting TanStack global/column filters)
+    const tableFilteredData = table.getFilteredRowModel().rows.map(row => row.original)
+    onFilteredDataChange(tableFilteredData)
+  }, [
+    onFilteredDataChange,
+    table,
+    // Re-run when the actual data used by the table changes or when table filters change
+    filteredData,
+    table?.getState().globalFilter,
+    JSON.stringify(table?.getState().columnFilters),
+  ])
+
+  // If configuration is loading, don't short-circuit rendering (show table overlay instead)
+  // NOTE: We intentionally removed the early return so the table still renders and shows an overlay.
 
   if (configError) {
     return (
@@ -1380,13 +1380,10 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
         <div className="flex items-center justify-between px-4 py-3 space-x-4">
           {/* Left Section: Date Filter */}
           <div className="flex items-center space-x-3">
-            {/* Quick Presets */}
-            <div className="flex space-x-1">
-              {/* Today preset removed as requested */}
-            </div>
+            {/* Quick Presets removed - now the date range aligns to the left */}
 
             {/* Custom Date Range */}
-            <div className="flex items-center space-x-2 border-l border-gray-300 pl-3">
+            <div className="flex items-center space-x-2">
               <input
                 type="date"
                 value={dateFilter.startDate}
@@ -1404,7 +1401,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
 
             {/* Action Buttons: Import, Export, Refresh */}
             {(onImport || onExport || onRefresh) && (
-              <div className="flex items-center space-x-2 border-l border-gray-300 pl-3">
+              <div className="flex items-center space-x-2">
                 {onImport && (
                   <button
                     onClick={onImport}
@@ -1432,7 +1429,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
 
             {/* Save/Cancel Buttons */}
             {changedCells.size > 0 && (
-              <div className="flex items-center space-x-1 border-l border-gray-300 pl-3">
+              <div className="flex items-center space-x-1">
                 <button
                   onClick={handleBatchSave}
                   disabled={isSaving}
@@ -1509,8 +1506,8 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
 
       {/* Table */}
       <div className="flex-1 overflow-auto relative">
-        {/* Loading Overlay for Table Body */}
-        {loading && (
+        {/* Loading Overlay for Table Body (also show when config is loading) */}
+        {(loading || configLoading) && (
           <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-40 flex items-center justify-center">
             <div className="text-center">
               <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent mb-2"></div>

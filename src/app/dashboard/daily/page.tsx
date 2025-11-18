@@ -25,6 +25,23 @@ interface DashboardStats {
   topTeams: { team: string; count: number; completionRate: number }[]
 }
 
+// Activity color palette - soft backgrounds with strong text
+const ACTIVITY_COLORS = [
+  { bg: 'from-blue-50 to-cyan-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800', hover: 'hover:border-blue-300 hover:shadow-blue-200' },
+  { bg: 'from-purple-50 to-pink-50', border: 'border-purple-200', text: 'text-purple-700', badge: 'bg-purple-100 text-purple-800', hover: 'hover:border-purple-300 hover:shadow-purple-200' },
+  { bg: 'from-emerald-50 to-green-50', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-800', hover: 'hover:border-emerald-300 hover:shadow-emerald-200' },
+  { bg: 'from-amber-50 to-orange-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-800', hover: 'hover:border-amber-300 hover:shadow-amber-200' },
+  { bg: 'from-rose-50 to-red-50', border: 'border-rose-200', text: 'text-rose-700', badge: 'bg-rose-100 text-rose-800', hover: 'hover:border-rose-300 hover:shadow-rose-200' },
+  { bg: 'from-teal-50 to-cyan-50', border: 'border-teal-200', text: 'text-teal-700', badge: 'bg-teal-100 text-teal-800', hover: 'hover:border-teal-300 hover:shadow-teal-200' },
+  { bg: 'from-indigo-50 to-blue-50', border: 'border-indigo-200', text: 'text-indigo-700', badge: 'bg-indigo-100 text-indigo-800', hover: 'hover:border-indigo-300 hover:shadow-indigo-200' },
+  { bg: 'from-fuchsia-50 to-pink-50', border: 'border-fuchsia-200', text: 'text-fuchsia-700', badge: 'bg-fuchsia-100 text-fuchsia-800', hover: 'hover:border-fuchsia-300 hover:shadow-fuchsia-200' },
+]
+
+const getActivityColor = (activityName: string, index: number) => {
+  const hash = activityName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  return ACTIVITY_COLORS[(hash + index) % ACTIVITY_COLORS.length]
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     totalRecords: 0,
@@ -491,80 +508,92 @@ export default function Dashboard() {
       title: "Total Tasks",
       value: stats.todayTasks,
       icon: Calendar,
-      color: 'bg-gradient-to-br from-blue-500 to-indigo-600',
+      color: 'bg-gradient-to-br from-blue-50 to-cyan-50',
+      iconBg: 'bg-gradient-to-br from-blue-500 to-blue-600',
       change: loading ? '...' : `${stats.todayTasks} tasks`,
       description: selectedDateCategory === 'Today' ? 'Scheduled for today' : selectedDateCategory === 'Yesterday' ? 'Scheduled for yesterday' : selectedDateCategory === 'Tomorrow' ? 'Scheduled for tomorrow' : selectedDateCategory === 'All' ? 'All scheduled tasks' : selectedDateCategory === 'This Year' ? 'Scheduled for this year' : `Scheduled for ${selectedDateCategory.toLowerCase()}`,
       showDetail: true,
       siteList: stats.todaySites,
       flipTitle: selectedDateCategory === 'Today' ? '📍 Today\'s Sites' : selectedDateCategory === 'Yesterday' ? '📍 Yesterday\'s Sites' : selectedDateCategory === 'Tomorrow' ? '📍 Tomorrow\'s Sites' : selectedDateCategory === 'All' ? '📍 All Sites' : selectedDateCategory === 'This Year' ? '📍 This Year\'s Sites' : `📍 ${selectedDateCategory} Sites`,
-      flipColor: 'from-blue-50 to-indigo-50',
-      flipBorder: 'border-blue-200'
+      flipColor: 'from-blue-50 to-cyan-50',
+      flipBorder: 'border-blue-200',
+      textColor: 'text-blue-700'
     },
     {
       title: 'Teams Working',
       value: stats.todayTeamsWorking,
       icon: Users,
-      color: 'bg-gradient-to-br from-purple-500 to-violet-600',
+      color: 'bg-gradient-to-br from-purple-50 to-pink-50',
+      iconBg: 'bg-gradient-to-br from-purple-500 to-purple-600',
       change: loading ? '...' : `${stats.todayTeamsWorking} teams active`,
       description: selectedDateCategory === 'Today' ? 'Teams working today' : selectedDateCategory === 'Yesterday' ? 'Teams working yesterday' : selectedDateCategory === 'Tomorrow' ? 'Teams working tomorrow' : selectedDateCategory === 'All' ? 'All teams' : selectedDateCategory === 'This Year' ? 'Teams working this year' : `Teams working in ${selectedDateCategory.toLowerCase()}`,
       showDetail: true,
       siteList: stats.workingTeams,
       flipTitle: '👥 Working Teams',
-      flipColor: 'from-purple-50 to-violet-50',
+      flipColor: 'from-purple-50 to-pink-50',
       flipBorder: 'border-purple-200',
+      textColor: 'text-purple-700',
       idleList: stats.idleTeams
     },
     {
       title: 'Completed',
       value: stats.todayCompleted,
       icon: CheckCircle2,
-      color: 'bg-gradient-to-br from-emerald-500 to-green-600',
+      color: 'bg-gradient-to-br from-emerald-50 to-green-50',
+      iconBg: 'bg-gradient-to-br from-emerald-500 to-emerald-600',
       change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayCompleted / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
       description: selectedDateCategory === 'Today' ? 'Tasks completed today' : selectedDateCategory === 'Yesterday' ? 'Tasks completed yesterday' : selectedDateCategory === 'Tomorrow' ? 'Tasks completed tomorrow' : selectedDateCategory === 'All' ? 'All completed tasks' : selectedDateCategory === 'This Year' ? 'Tasks completed this year' : 'Tasks completed',
       showDetail: true,
       siteList: stats.completedSites,
       flipTitle: '✅ Completed Sites',
       flipColor: 'from-emerald-50 to-green-50',
-      flipBorder: 'border-emerald-200'
+      flipBorder: 'border-emerald-200',
+      textColor: 'text-emerald-700'
     },
     {
       title: 'In Progress',
       value: stats.todayInProgress,
       icon: Clock,
-      color: 'bg-gradient-to-br from-amber-500 to-orange-600',
+      color: 'bg-gradient-to-br from-amber-50 to-orange-50',
+      iconBg: 'bg-gradient-to-br from-amber-500 to-amber-600',
       change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayInProgress / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
       description: selectedDateCategory === 'Today' ? 'Tasks in progress today' : selectedDateCategory === 'Yesterday' ? 'Tasks in progress yesterday' : selectedDateCategory === 'Tomorrow' ? 'Tasks in progress tomorrow' : selectedDateCategory === 'All' ? 'All tasks in progress' : selectedDateCategory === 'This Year' ? 'Tasks in progress this year' : 'Tasks in progress',
       showDetail: true,
       siteList: stats.inProgressSites,
       flipTitle: '⏳ In Progress Sites',
       flipColor: 'from-amber-50 to-orange-50',
-      flipBorder: 'border-amber-200'
+      flipBorder: 'border-amber-200',
+      textColor: 'text-amber-700'
     },
     {
       title: 'Pending',
       value: stats.todayPending,
       icon: AlertCircle,
-      color: 'bg-gradient-to-br from-rose-500 to-red-600',
+      color: 'bg-gradient-to-br from-red-50 to-red-100',
+      iconBg: 'bg-gradient-to-br from-red-600 to-red-700',
       change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayPending / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
       description: selectedDateCategory === 'Today' ? 'Tasks pending today' : selectedDateCategory === 'Yesterday' ? 'Tasks pending yesterday' : selectedDateCategory === 'Tomorrow' ? 'Tasks pending tomorrow' : selectedDateCategory === 'All' ? 'All pending tasks' : selectedDateCategory === 'This Year' ? 'Tasks pending this year' : 'Tasks pending',
       showDetail: true,
       siteList: stats.pendingSites,
       flipTitle: '⚠️ Pending Sites',
-      flipColor: 'from-rose-50 to-pink-50',
-      flipBorder: 'border-rose-200'
+      flipColor: 'from-red-50 to-red-100',
+      flipBorder: 'border-red-300',
+      textColor: 'text-red-700'
     },
     {
       title: 'Failed',
       value: stats.todayFailed,
       icon: XCircle,
-      color: 'bg-gradient-to-br from-red-600 to-red-700',
+      color: 'bg-gradient-to-br from-slate-100 to-gray-100',
+      iconBg: 'bg-gradient-to-br from-slate-600 to-slate-800',
       change: loading ? '...' : stats.todayTasks > 0 ? `${((stats.todayFailed / stats.todayTasks) * 100).toFixed(1)}%` : '0%',
       description: selectedDateCategory === 'Today' ? 'Tasks failed today' : selectedDateCategory === 'Yesterday' ? 'Tasks failed yesterday' : selectedDateCategory === 'Tomorrow' ? 'Tasks failed tomorrow' : selectedDateCategory === 'All' ? 'All failed tasks' : selectedDateCategory === 'This Year' ? 'Tasks failed this year' : 'Tasks failed',
       showDetail: true,
       siteList: stats.failedSites,
       flipTitle: '❌ Failed Sites',
-      flipColor: 'from-red-50 to-red-100',
-      flipBorder: 'border-red-300'
+      flipColor: 'from-slate-100 to-gray-100',
+      flipBorder: 'border-slate-400',
+      textColor: 'text-slate-800'
     },
   ]
 
@@ -609,12 +638,12 @@ export default function Dashboard() {
           <div className="sticky top-0 z-10 bg-white border-b border-slate-200/60 shadow-sm">
             <div className="p-3">
               <div className="bg-gradient-to-br from-white via-blue-50/30 to-white rounded-xl shadow-sm border-2 border-slate-100 hover:border-blue-200 transition-all">
-            <div className="px-3 py-1.5 border-b border-slate-100 bg-white/50 backdrop-blur-sm">
+            <div className="px-3 py-2 border-b-2 border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50">
               <div className="flex items-center gap-2">
-                <div className="p-1 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-sm">
-                  <Filter className="h-3 w-3 text-white" />
+                <div className="p-1.5 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-sm">
+                  <Filter className="h-3.5 w-3.5 text-white" />
                 </div>
-                <h3 className="text-xs font-medium text-slate-800">Filters</h3>
+                <h3 className="text-xs font-semibold text-blue-700">Filters</h3>
               </div>
             </div>
             <div className="p-2">
@@ -737,32 +766,32 @@ export default function Dashboard() {
             return (
               <div 
                 key={index} 
-                className="bg-white overflow-hidden shadow-sm rounded-xl border border-slate-200/60 hover:shadow-md transition-all duration-300 cursor-pointer"
+                className={`${(card as any).color} overflow-hidden shadow-sm rounded-xl border-2 ${(card as any).flipBorder} hover:shadow-md transition-all duration-300 cursor-pointer`}
                 onClick={() => hasDetail && setZoomedStatsCard(index)}
               >
                 <div className="p-4 h-[120px] flex flex-col">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <div className={`w-12 h-12 ${card.color} rounded-xl flex items-center justify-center shadow-md`}>
+                      <div className={`w-12 h-12 ${(card as any).iconBg} rounded-xl flex items-center justify-center shadow-md`}>
                         <IconComponent className="h-6 w-6 text-white" />
                       </div>
                     </div>
                     <div className="ml-4 w-0 flex-1">
                       <dl>
-                        <dt className="text-xs font-medium text-slate-600 uppercase tracking-wider truncate">{card.title}</dt>
+                        <dt className={`text-xs font-medium ${(card as any).textColor} uppercase tracking-wider truncate`}>{card.title}</dt>
                         <dd className="flex items-baseline mt-1">
-                          <div className="text-2xl font-semibold text-slate-900">
+                          <div className={`text-2xl font-semibold ${(card as any).textColor}`}>
                             {loading ? '...' : card.value}
                           </div>
                         </dd>
-                        <dd className="text-xs text-slate-500 mt-1 font-medium">{card.change}</dd>
+                        <dd className={`text-xs ${(card as any).textColor} mt-1 font-medium opacity-75`}>{card.change}</dd>
                       </dl>
                     </div>
                   </div>
                   {/* Click hint */}
                   {hasDetail && (
-                    <div className="mt-auto pt-2.5 border-t border-slate-200">
-                      <div className="text-[10px] font-medium text-blue-600 flex items-center justify-center gap-1.5">
+                    <div className={`mt-auto pt-2.5 border-t-2 ${(card as any).flipBorder}`}>
+                      <div className={`text-[10px] font-medium ${(card as any).textColor} flex items-center justify-center gap-1.5`}>
                         <Maximize2 className="h-3 w-3" />
                         {card.title === 'Teams Working' 
                           ? `${card.siteList.length} Working • ${(card as any).idleList?.length || 0} Idle`
@@ -783,14 +812,14 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {/* Today's Activities - Compact */}
               <div className="bg-white shadow-sm rounded-xl border border-slate-200/60 flex flex-col overflow-hidden max-h-[50vh]">
-            <div className="px-4 py-2 border-b border-slate-200 flex-none">
-              <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <div className="p-1 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
-                  <Activity className="h-3 w-3 text-white" />
+            <div className="px-4 py-3 border-b-2 border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 flex-none">
+              <h3 className="text-sm font-semibold text-blue-700 flex items-center gap-2">
+                <div className="p-1.5 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-sm">
+                  <Activity className="h-3.5 w-3.5 text-white" />
                 </div>
                 {selectedDateCategory === 'Today' ? "Today's Activities" : selectedDateCategory === 'Yesterday' ? "Yesterday's Activities" : selectedDateCategory === 'Tomorrow' ? "Tomorrow's Activities" : selectedDateCategory === 'All' ? "All Activities" : selectedDateCategory === 'This Year' ? "This Year's Activities" : `${selectedDateCategory} Activities`}
               </h3>
-              <p className="mt-0.5 text-[10px] text-slate-500">
+              <p className="mt-0.5 text-[10px] text-blue-600 font-medium">
                 Activity breakdown for {selectedDateCategory === 'All' ? 'all time' : selectedDateCategory.toLowerCase()}
               </p>
             </div>
@@ -809,11 +838,12 @@ export default function Dashboard() {
                   {stats.todayActivityBreakdown.slice(0, 10).map((item, index) => {
                     const completionRate = item.count > 0 ? (item.completed / item.count) * 100 : 0
                     const isFlipped = flippedActivityCards[index] || false
+                    const activityColor = getActivityColor(item.activity, index)
 
                     return (
                       <div
                         key={index}
-                        className="relative h-[130px]"
+                        className="relative h-[110px]"
                         style={{ perspective: '1000px' }}
                       >
                         <div
@@ -822,62 +852,64 @@ export default function Dashboard() {
                         >
                           {/* Front Card */}
                           <div
-                            className="absolute inset-0 rounded-xl p-3 bg-white hover:shadow-lg transition-all border-2 border-slate-100 hover:border-blue-200 cursor-pointer group"
+                            className={`absolute inset-0 rounded-xl p-3 bg-white hover:shadow-lg transition-all border-2 ${activityColor.border} ${activityColor.hover} shadow-sm cursor-pointer group`}
                             style={{ backfaceVisibility: 'hidden' }}
                             onClick={() => setFlippedActivityCards(prev => ({ ...prev, [index]: true }))}
                           >
                             <div className="h-full flex flex-col">
                               {/* Header */}
-                              <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-start justify-between mb-1">
                                 <div className="flex-1 min-w-0">
-                                  <h4 className="text-xs font-medium text-slate-800 truncate mb-1.5 group-hover:text-blue-600 transition-colors">
-                                    {item.activity}
-                                  </h4>
-                                  <div className="flex items-center gap-1.5 text-[10px] flex-wrap">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${activityColor.badge}`}>
+                                      {item.activity}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1 text-[9px] flex-wrap">
                                     <div className="flex items-center gap-0.5">
-                                      <span className="text-emerald-600 font-medium">Completed:</span>
-                                      <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded font-semibold">{item.completed}</span>
+                                      <span className="text-emerald-600 font-semibold">Completed:</span>
+                                      <span className="px-1 py-0.5 bg-emerald-50 text-emerald-700 rounded font-bold">{item.completed}</span>
                                     </div>
                                     <div className="flex items-center gap-0.5">
-                                      <span className="text-amber-600 font-medium">In Progress:</span>
-                                      <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-semibold">{item.inProgress}</span>
+                                      <span className="text-amber-600 font-semibold">In Progress:</span>
+                                      <span className="px-1 py-0.5 bg-amber-50 text-amber-700 rounded font-bold">{item.inProgress}</span>
                                     </div>
                                     <div className="flex items-center gap-0.5">
-                                      <span className="text-rose-600 font-medium">Pending:</span>
-                                      <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 rounded font-semibold">{item.pending}</span>
+                                      <span className="text-rose-600 font-semibold">Pending:</span>
+                                      <span className="px-1 py-0.5 bg-rose-50 text-rose-700 rounded font-bold">{item.pending}</span>
                                     </div>
                                   </div>
                                 </div>
-                                <div className="ml-2 text-center">
-                                  <div className="text-2xl font-semibold text-slate-900 leading-none">{item.count}</div>
-                                  <div className="text-[8px] text-slate-500 font-normal mt-0.5">TASKS</div>
+                                <div className="ml-1 text-center">
+                                  <div className="text-lg font-semibold text-slate-900 leading-none">{item.count}</div>
+                                  <div className="text-[7px] text-slate-500 font-normal mt-0.5">TASKS</div>
                                 </div>
                               </div>
 
                               {/* Progress Section */}
                               <div className="mt-auto">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="text-[9px] font-medium text-slate-600">COMPLETION</span>
-                                  <span className="text-xs font-medium text-emerald-600">{completionRate.toFixed(0)}%</span>
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <span className="text-[8px] font-medium text-slate-600">COMPLETION</span>
+                                  <span className="text-xs font-bold text-emerald-600">{completionRate.toFixed(0)}%</span>
                                 </div>
-                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                                   <div
-                                    className="bg-gradient-to-r from-emerald-400 via-emerald-500 to-green-600 h-2 rounded-full transition-all duration-500 shadow-sm"
+                                    className="bg-gradient-to-r from-emerald-400 via-emerald-500 to-green-600 h-1.5 rounded-full transition-all duration-500 shadow-sm"
                                     style={{ width: `${completionRate}%` }}
                                   />
                                 </div>
                               </div>
 
                               {/* Flip Hint */}
-                              <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="text-[9px] text-blue-500 font-medium bg-blue-50 px-1.5 py-0.5 rounded">📊</div>
+                              <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="text-[8px] text-blue-500 font-medium bg-blue-50 px-1 py-0.5 rounded">📊</div>
                               </div>
                             </div>
                           </div>
 
                           {/* Back Card (Details) */}
                           <div
-                            className="absolute inset-0 rounded-xl bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-50 p-4 overflow-y-auto cursor-pointer border-2 border-blue-200 shadow-lg"
+                            className={`absolute inset-0 rounded-xl bg-gradient-to-br ${activityColor.bg} p-4 overflow-y-auto cursor-pointer border-2 ${activityColor.border} shadow-lg`}
                             style={{
                               backfaceVisibility: 'hidden',
                               transform: 'rotateY(180deg)'
@@ -885,17 +917,17 @@ export default function Dashboard() {
                             onClick={() => setFlippedActivityCards(prev => ({ ...prev, [index]: false }))}
                           >
                             {/* Header */}
-                            <div className="flex items-center justify-between mb-3 pb-2 border-b-2 border-blue-200">
-                              <h5 className="text-sm font-medium text-slate-800">📊 {item.activity}</h5>
+                            <div className={`flex items-center justify-between mb-3 pb-2 border-b-2 ${activityColor.border}`}>
+                              <h5 className={`text-sm font-medium ${activityColor.text}`}>📊 {item.activity}</h5>
                               <div className="flex items-center gap-1">
                                 <button
-                                  className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-100 rounded-md transition-colors"
+                                  className={`p-1.5 rounded-md transition-colors border ${activityColor.badge}`}
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     setZoomedActivityCard(index)
                                   }}
                                 >
-                                  <Maximize2 className="h-3.5 w-3.5 text-blue-700" />
+                                  <Maximize2 className={`h-3.5 w-3.5 ${activityColor.text}`} />
                                 </button>
                                 <button
                                   className="p-1.5 bg-gray-50 hover:bg-gray-100 text-gray-800 border border-gray-200 rounded-md transition-colors"
@@ -964,21 +996,21 @@ export default function Dashboard() {
 
               {/* Team Performance Analysis - Compact */}
               <div className="bg-white shadow-sm rounded-xl border border-slate-200/60 flex flex-col overflow-hidden max-h-[50vh]">
-            <div className="px-4 py-2 border-b border-slate-200 flex-none">
-              <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <div className="p-1 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg">
-                  <Users className="h-3 w-3 text-white" />
+            <div className="px-4 py-3 border-b-2 border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50 flex-none">
+              <h3 className="text-sm font-semibold text-emerald-700 flex items-center gap-2">
+                <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg shadow-sm">
+                  <Users className="h-3.5 w-3.5 text-white" />
                 </div>
                 {selectedDateCategory === 'Today' ? "Today's Team Performance" : selectedDateCategory === 'Yesterday' ? "Yesterday's Team Performance" : selectedDateCategory === 'Tomorrow' ? "Tomorrow's Team Performance" : selectedDateCategory === 'All' ? "All Team Performance" : selectedDateCategory === 'This Year' ? "This Year's Team Performance" : `${selectedDateCategory} Team Performance`}
               </h3>
-              <p className="mt-0.5 text-[10px] text-slate-500">
+              <p className="mt-0.5 text-[10px] text-emerald-600 font-medium">
                 Team performance for {selectedDateCategory === 'All' ? 'all time' : selectedDateCategory.toLowerCase()}
               </p>
             </div>
             <div className="p-3 flex-1 overflow-y-auto">
               {loading ? (
                 <div className="text-center py-8">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
                   <p className="mt-2 text-sm text-slate-500">Loading data...</p>
                 </div>
               ) : stats.todayTeamBreakdown.length === 0 ? (
@@ -994,7 +1026,7 @@ export default function Dashboard() {
                     return (
                       <div
                         key={index}
-                        className="relative h-[130px]"
+                        className="relative h-[110px]"
                         style={{ perspective: '1000px' }}
                       >
                         <div
@@ -1009,45 +1041,45 @@ export default function Dashboard() {
                           >
                             <div className="h-full flex flex-col">
                               {/* Header */}
-                              <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-start justify-between mb-1">
                                 <div className="flex-1 min-w-0">
-                                  <h4 className="text-xs font-medium text-slate-800 truncate mb-1.5 group-hover:text-emerald-600 transition-colors">
+                                  <h4 className="text-xs font-bold text-slate-800 truncate mb-1 group-hover:text-emerald-600 transition-colors">
                                     {team.team}
                                   </h4>
-                                  <div className="flex items-center gap-1.5 text-[10px] flex-wrap">
+                                  <div className="flex items-center gap-1 text-[9px] flex-wrap">
                                     <div className="flex items-center gap-0.5">
-                                      <span className="text-emerald-600 font-medium">Completed:</span>
-                                      <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded font-semibold">{team.completed}</span>
+                                      <span className="text-emerald-600 font-semibold">Completed:</span>
+                                      <span className="px-1 py-0.5 bg-emerald-50 text-emerald-700 rounded font-bold">{team.completed}</span>
                                     </div>
                                     <div className="flex items-center gap-0.5">
-                                      <span className="text-rose-600 font-medium">Pending:</span>
-                                      <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 rounded font-semibold">{team.pending}</span>
+                                      <span className="text-rose-600 font-semibold">Pending:</span>
+                                      <span className="px-1 py-0.5 bg-rose-50 text-rose-700 rounded font-bold">{team.pending}</span>
                                     </div>
                                   </div>
                                 </div>
-                                <div className="ml-2 text-center">
-                                  <div className="text-2xl font-semibold text-slate-900 leading-none">{team.count}</div>
-                                  <div className="text-[8px] text-slate-500 font-normal mt-0.5">TASKS</div>
+                                <div className="ml-1 text-center">
+                                  <div className="text-lg font-semibold text-slate-900 leading-none">{team.count}</div>
+                                  <div className="text-[7px] text-slate-500 font-normal mt-0.5">TASKS</div>
                                 </div>
                               </div>
 
                               {/* Progress Section */}
                               <div className="mt-auto">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="text-[9px] font-medium text-slate-600">COMPLETION</span>
-                                  <span className="text-xs font-medium text-emerald-600">{completionRate.toFixed(0)}%</span>
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <span className="text-[8px] font-medium text-slate-600">COMPLETION</span>
+                                  <span className="text-xs font-bold text-emerald-600">{completionRate.toFixed(0)}%</span>
                                 </div>
-                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                                   <div
-                                    className="bg-gradient-to-r from-emerald-400 via-emerald-500 to-green-600 h-2 rounded-full transition-all duration-500 shadow-sm"
+                                    className="bg-gradient-to-r from-emerald-400 via-emerald-500 to-green-600 h-1.5 rounded-full transition-all duration-500 shadow-sm"
                                     style={{ width: `${completionRate}%` }}
                                   />
                                 </div>
                               </div>
 
                               {/* Flip Hint */}
-                              <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="text-[9px] text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded">📍</div>
+                              <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="text-[8px] text-emerald-600 font-medium bg-emerald-50 px-1 py-0.5 rounded">📍</div>
                               </div>
                             </div>
                           </div>
@@ -1253,10 +1285,11 @@ export default function Dashboard() {
             {(() => {
               const card = dashboardCards[zoomedStatsCard]
               const isTeamsCard = card.title === 'Teams Working'
+              const cardColor = (card as any).iconBg || 'from-blue-500 to-indigo-600'
               return (
                 <>
                   {/* Modal Header */}
-                  <div className={`bg-gradient-to-r ${isTeamsCard ? 'from-purple-500 to-violet-600' : 'from-blue-500 to-indigo-600'} px-6 py-4 flex items-center justify-between`}>
+                  <div className={`bg-gradient-to-r ${cardColor} px-6 py-4 flex items-center justify-between`}>
                     <div>
                       <h3 className="text-xl font-semibold text-white">{isTeamsCard ? '👥 Team Status' : card.flipTitle}</h3>
                       <p className="text-sm text-purple-100 font-medium">

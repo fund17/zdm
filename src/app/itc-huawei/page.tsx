@@ -20,6 +20,7 @@ export default function ItcHuaweiPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [tableRefreshing, setTableRefreshing] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [filteredData, setFilteredData] = useState<any[]>([])
   const [sheetList, setSheetList] = useState<SheetListItem[]>([])
@@ -33,9 +34,9 @@ export default function ItcHuaweiPage() {
     includePOStatus?: boolean
   } | null>(null)
 
-  const fetchData = useCallback(async (sheetName?: string) => {
+  const fetchData = useCallback(async (sheetName?: string, options?: { showFullLoading?: boolean }) => {
     try {
-      setLoading(true)
+      if (options?.showFullLoading !== false) setLoading(true)
       
       const sheetToFetch = sheetName || selectedSheet
       const response = await fetch(`/api/sheets/itc-huawei?sheetName=${sheetToFetch}`)
@@ -51,7 +52,7 @@ export default function ItcHuaweiPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
-      setLoading(false)
+      if (options?.showFullLoading !== false) setLoading(false)
     }
   }, [selectedSheet])
 
@@ -97,7 +98,10 @@ export default function ItcHuaweiPage() {
       return
     }
     setRefreshing(true)
-    await fetchData(selectedSheet)
+    setTableRefreshing(true)
+    // Suppress full-page loading when refresh is triggered from the table
+    await fetchData(selectedSheet, { showFullLoading: false })
+    setTableRefreshing(false)
     setRefreshing(false)
   }
 
@@ -353,7 +357,7 @@ export default function ItcHuaweiPage() {
             onFilteredDataChange={setFilteredData}
             onExport={handleExport}
             exporting={exporting}
-            loading={loading}
+            loading={tableRefreshing}
             error={error}
             selectedSheet={selectedSheet}
             onExportDataReady={setExportData}

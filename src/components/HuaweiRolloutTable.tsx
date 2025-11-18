@@ -1769,9 +1769,8 @@ export function HuaweiRolloutTable({
 
   const hasActiveFilters = columnFilters.length > 0
 
-  if (columnConfigs.length === 0) {
-    return <div className="p-4 text-center text-gray-500">Loading table configuration...</div>
-  }
+  // Avoid early return if column configs haven't loaded yet. We'll render the table and rely on the
+  // table overlay to display a loading spinner instead of the full-page configuration message.
 
   // Empty state - no project selected
   if (!selectedSheet) {
@@ -1790,17 +1789,8 @@ export function HuaweiRolloutTable({
     )
   }
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent mb-4"></div>
-          <p className="text-sm text-gray-600">Loading data...</p>
-        </div>
-      </div>
-    )
-  }
+  // Loading state - render normally and rely on table overlay so the rest of the page remains visible.
+  // NOTE: Avoid full-screen return; the table overlay will indicate loading instead.
 
   // Error state
   if (error) {
@@ -2059,7 +2049,16 @@ export function HuaweiRolloutTable({
       )}
 
       {/* Table */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto relative">
+        {/* Table-level loading overlay: show when initial column config is not loaded or when table refresh is ongoing */}
+        {(loading || columnConfigs.length === 0) && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-40 flex items-center justify-center">
+            <div className="text-center">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent mb-4"></div>
+              <p className="text-sm text-gray-600 font-medium">Loading data...</p>
+            </div>
+          </div>
+        )}
         <table className="w-full text-xs">
           <thead className="bg-gray-50 sticky top-0 z-20">
             {table.getHeaderGroups().map(headerGroup => (

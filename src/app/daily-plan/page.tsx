@@ -34,9 +34,9 @@ export default function DailyPlanPage() {
   const [showSuccessNotification, setShowSuccessNotification] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
 
-  const fetchData = async (startDate?: string, endDate?: string) => {
+  const fetchData = async (startDate?: string, endDate?: string, options?: { showFullLoading?: boolean }) => {
     try {
-      setLoading(true)
+      if (options?.showFullLoading !== false) setLoading(true)
       
       // Build URL with date parameters
       const url = new URL('/api/sheets', window.location.origin)
@@ -58,7 +58,7 @@ export default function DailyPlanPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
-      setLoading(false)
+      if (options?.showFullLoading !== false) setLoading(false)
     }
   }
 
@@ -90,14 +90,15 @@ export default function DailyPlanPage() {
 
   const handleRefresh = async () => {
     setTableRefreshing(true)
-    await fetchData(dateFilter.startDate, dateFilter.endDate)
+    // Suppress full-page loading - just update table
+    await fetchData(dateFilter.startDate, dateFilter.endDate, { showFullLoading: false })
     setTableRefreshing(false)
   }
 
   const handleSaveComplete = async () => {
     // Refresh data after save without full page reload
     setTableRefreshing(true)
-    await fetchData(dateFilter.startDate, dateFilter.endDate)
+    await fetchData(dateFilter.startDate, dateFilter.endDate, { showFullLoading: false })
     setTableRefreshing(false)
   }
 
@@ -647,7 +648,7 @@ export default function DailyPlanPage() {
             loading={tableRefreshing} // Pass loading state for table body
             onImport={() => setImportModalOpen(true)} // Pass import trigger
             onRefresh={handleRefresh} // Pass refresh function
-            refreshing={refreshing} // Pass refresh state
+            refreshing={tableRefreshing} // Pass refresh state (table-specific only)
           />
         </div>
       </div>

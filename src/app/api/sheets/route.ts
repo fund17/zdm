@@ -18,26 +18,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('📊 FETCHING DAILY PLAN DATA:', {
-      spreadsheetId,
-      sheetName,
-      startDate,
-      endDate,
-      timestamp: new Date().toISOString()
-    })
+    // debug logs removed
 
     const [data, metadata] = await Promise.all([
       getSheetData(spreadsheetId, sheetName),
       getSheetMetadata(spreadsheetId)
     ])
     
-    console.log('📋 DAILY PLAN DATA STRUCTURE:', {
-      totalRows: data?.length || 0,
-      firstRowKeys: data && data.length > 0 ? Object.keys(data[0]) : [],
-      hasRowId: data && data.length > 0 ? 'RowId' in data[0] : false,
-      sampleRow: data && data.length > 0 ? data[0] : null,
-      lastModified: metadata.modifiedTime
-    })
+    // debug logs removed
 
     // Apply server-side date filtering
     let filteredData = data
@@ -78,13 +66,7 @@ export async function GET(request: NextRequest) {
         return rowDate >= start && rowDate <= end
       })
       
-      console.log('📅 SERVER-SIDE DATE FILTERING:', {
-        startDate,
-        endDate,
-        totalRows: data.length,
-        filteredRows: filteredData.length,
-        filterRatio: `${Math.round((filteredData.length / data.length) * 100)}%`
-      })
+      // debug logs removed
     }
     
     // Format lastUpdated to Indonesian locale

@@ -31,11 +31,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('📋 FETCHING ITC HUAWEI SETTINGS:', {
-      spreadsheetId,
-      settingSheetName,
-      timestamp: new Date().toISOString()
-    })
+    // Fetching ITC Huawei settings
 
     const settingsData = await getSheetData(spreadsheetId, settingSheetName)
 
@@ -46,12 +42,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('🔍 RAW SETTINGS DATA:', {
-      sheetName: settingSheetName,
-      rowCount: settingsData.length,
-      firstRow: settingsData[0],
-      allColumns: settingsData.length > 0 ? Object.keys(settingsData[0]) : []
-    })
+    // Raw settings data processed
 
     // Parse column configuration - using Column, Value, Editable, Show structure
     const columnConfigs: ColumnConfig[] = settingsData.map((row: any) => {
@@ -85,15 +76,9 @@ export async function GET(request: NextRequest) {
     const hiddenColumns = columnConfigs.filter(c => !c.show)
     const readOnlyColumns = columnConfigs.filter(c => !c.editable)
 
-    console.log('⚙️ ITC HUAWEI COLUMN CONFIG:', {
-      totalColumns: columnConfigs.length,
-      visibleColumns: visibleColumns.length,
-      editableColumns: editableColumns.length,
-      hiddenColumns: hiddenColumns.map(c => ({ name: c.name, display: c.displayName })),
-      readOnlyColumns: readOnlyColumns.map(c => ({ name: c.name, display: c.displayName }))
-    })
+    // Column configuration summarised
     
-    console.log('👁️ HIDDEN COLUMNS (Show=No):', hiddenColumns.map(c => c.displayName).join(', '))
+    // Hidden columns: apply as necessary
 
     return NextResponse.json({
       success: true,

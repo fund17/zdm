@@ -348,7 +348,14 @@ export default function ItcHuaweiPage() {
       </div>
 
       {/* Data Table */}
-      <div className="flex-1 bg-white shadow-sm rounded-lg border border-gray-200 flex flex-col overflow-hidden">
+      <div className="flex-1 bg-white shadow-sm rounded-lg border border-gray-200 flex flex-col overflow-hidden relative">
+        {/* Loading Overlay for Tab Switching */}
+        {loading && (
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center z-40 rounded-lg">
+            <LoadingSpinner />
+          </div>
+        )}
+        
         <div className="flex-1 overflow-hidden">
           <HuaweiRolloutTable 
             data={data} 

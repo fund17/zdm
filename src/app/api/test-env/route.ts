@@ -1,12 +1,7 @@
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-  console.log('🔍 ALL PROCESS ENV:', Object.keys(process.env).filter(key => key.includes('GOOGLE')))
-  console.log('🔍 SPECIFIC MENU VAR:', {
-    raw: process.env.GOOGLE_SHEET_ID_DAILYPLAN_SHEETMENU,
-    length: process.env.GOOGLE_SHEET_ID_DAILYPLAN_SHEETMENU?.length,
-    type: typeof process.env.GOOGLE_SHEET_ID_DAILYPLAN_SHEETMENU
-  })
+  // Environment test endpoint
   
   return NextResponse.json({
     success: true,

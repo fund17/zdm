@@ -18,24 +18,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('📊 FETCHING ITC HUAWEI DATA:', {
-      spreadsheetId,
-      sheetName,
-      envSheetName: process.env.GOOGLE_SHEET_NAME_HWROLLOUTITC,
-      timestamp: new Date().toISOString()
-    })
+    // debug logs removed
 
     const [data, metadata] = await Promise.all([
       getSheetData(spreadsheetId, sheetName),
       getSheetMetadata(spreadsheetId)
     ])
     
-    console.log('📋 ITC HUAWEI DATA:', {
-      totalRows: data?.length || 0,
-      firstRowKeys: data && data.length > 0 ? Object.keys(data[0]) : [],
-      hasRowId: data && data.length > 0 ? 'RowId' in data[0] : false,
-      lastModified: metadata.modifiedTime
-    })
+    // debug logs removed
 
     // Format lastUpdated to Indonesian locale
     let lastUpdated: string | undefined

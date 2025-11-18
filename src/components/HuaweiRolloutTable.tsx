@@ -213,7 +213,7 @@ export function HuaweiRolloutTable({
       // Download file
       XLSX.writeFile(wb, filename)
       
-      console.log(`✅ Exported ${filteredRows.length} rows (filtered from ${data.length} total rows)`)
+      // debug logs removed
     } catch (error) {
       console.error('Export failed:', error)
       alert('Failed to export data: ' + (error instanceof Error ? error.message : 'Unknown error'))
@@ -365,7 +365,7 @@ export function HuaweiRolloutTable({
             .map(duid => duid.toString().trim())
         ))
         
-        console.log(`📊 Requesting PO status for ${uniqueDuids.length} DUIDs from table`)
+        // debug logs removed
         
         // Send DUIDs to API for filtered PO fetch
         const response = await fetch('/api/sheets/po-status', {
@@ -381,11 +381,11 @@ export function HuaweiRolloutTable({
         // Only store PO data for DUIDs that exist in table
         setPoStatusMap(result.data || {})
         
-        console.log(`✅ Received PO status for ${Object.keys(result.data || {}).length} DUIDs`)
+        // debug logs removed
         
         // Log orphans if any (PO exists but not in table)
         if (result.orphans && Object.keys(result.orphans).length > 0) {
-          console.log(`⚠️ Found ${Object.keys(result.orphans).length} orphaned PO entries (exist in PO but not in table)`)
+          // debug logs removed
         }
       } catch (error) {
         console.error('Failed to load PO status:', error)
@@ -1037,13 +1037,7 @@ export function HuaweiRolloutTable({
     if (onFilteredDataChange) {
       // Get the FINAL filtered rows after ALL filters are applied (date + column + search)
       const allFilteredRows = table.getFilteredRowModel().rows.map(row => row.original)
-      console.log('📊 Filtered data updated:', {
-        dateFilteredRows: filteredData.length,
-        allFilteredRows: allFilteredRows.length,
-        hasColumnFilters: columnFilters.length > 0,
-        hasGlobalFilter: !!globalFilter,
-        difference: filteredData.length - allFilteredRows.length
-      })
+      
       onFilteredDataChange(allFilteredRows)
     }
   }, [table, columnFilters, globalFilter, sorting, filteredData.length, onFilteredDataChange])
@@ -1434,15 +1428,15 @@ export function HuaweiRolloutTable({
           // Backup current data before update
           setBackupData([...data])
 
-          console.log('📊 IMPORT PROCESS STARTED')
-          console.log(`📋 Total rows in Google Sheets data: ${data.length}`)
-          console.log(`📁 Excel rows to import: ${importedData.length}`)
+          // debug logs removed
+          // debug logs removed
+          // debug logs removed
 
           // Log first 5 DUIDs from Google Sheets for reference
-          console.log('🔍 Sample DUIDs from Google Sheets (first 5):')
+          // debug logs removed
           data.slice(0, 5).forEach((row, idx) => {
             const duid = row[rowIdColumn]?.toString()
-            console.log(`  ${idx + 1}. "${duid}" (type: ${typeof duid}, length: ${duid?.length})`)
+            // debug logs removed
           })
 
           // Create DUID lookup map from current data with multiple normalization strategies
@@ -1462,27 +1456,27 @@ export function HuaweiRolloutTable({
               
               // Log first few for debugging
               if (idx < 3) {
-                console.log(`  ✓ Mapped DUID: "${duidTrimmed}"`)
+                // debug logs removed
               }
             }
           })
           
-          console.log(`✅ Created lookup map with ${dataMap.size} normalized keys`)
-          console.log(`📌 Google Sheets has ${data.filter(r => r[rowIdColumn]).length} rows with valid DUIDs`)
+          // debug logs removed
+          // debug logs removed
           
           let updatedCount = 0
           let skippedCount = 0
           const updates: Array<{ rowId: string; columnId: string; value: any; oldValue: any }> = []
 
           // Process each row from Excel
-          console.log('\n🔄 Starting row-by-row processing...')
+          // debug logs removed
           
           for (let i = 0; i < importedData.length; i++) {
             const excelRow = importedData[i]
             const duidRaw = excelRow[rowIdColumn]?.toString()
             
             if (!duidRaw) {
-              console.log(`⚠️ Row ${i + 1}: No DUID found in Excel - SKIPPED`)
+              // debug logs removed
               skippedCount++
               continue
             }
@@ -1491,10 +1485,10 @@ export function HuaweiRolloutTable({
             
             // Log every row attempt for debugging
             if (i < 5 || duid.includes('NUS-NB-PYA-0432')) {
-              console.log(`\n🔍 Row ${i + 1} - Processing DUID: "${duid}"`)
-              console.log(`  📝 Raw value: "${duidRaw}"`)
-              console.log(`  📏 Length: ${duid.length}`)
-              console.log(`  🔤 Type: ${typeof duid}`)
+              // debug logs removed
+              // debug logs removed
+              // debug logs removed
+              // debug logs removed
             }
             
             // Try multiple matching strategies to find existing row
@@ -1505,11 +1499,11 @@ export function HuaweiRolloutTable({
             
             if (!matchedData) {
               console.error(`❌ Row ${i + 1}: DUID='${duid}' NOT FOUND in Google Sheets data`)
-              console.log(`  🔍 Tried matching with:`)
-              console.log(`    - Exact: "${duid}"`)
-              console.log(`    - Uppercase: "${duid.toUpperCase()}"`)
-              console.log(`    - No spaces: "${duid.replace(/\s+/g, '')}"`)
-              console.log(`    - Uppercase no spaces: "${duid.replace(/\s+/g, '').toUpperCase()}"`)
+              // debug logs removed
+              // debug logs removed
+              // debug logs removed
+              // debug logs removed
+              // debug logs removed
               
               // Try to find similar DUIDs in Google Sheets
               const similarDuids = data
@@ -1518,10 +1512,10 @@ export function HuaweiRolloutTable({
                 .slice(0, 3)
               
               if (similarDuids.length > 0) {
-                console.log(`  💡 Similar DUIDs found in Google Sheets:`)
-                similarDuids.forEach(similar => console.log(`    - "${similar}"`))
+                // debug logs removed
+                // debug logs removed
               } else {
-                console.log(`  ⚠️ No similar DUIDs found in Google Sheets`)
+                // debug logs removed
               }
               
               skippedCount++
@@ -1533,9 +1527,9 @@ export function HuaweiRolloutTable({
             const existingRow = matchedData.row
             
             if (i < 5 || duid.includes('NUS-NB-PYA-0432')) {
-              console.log(`  ✅ MATCH FOUND!`)
-              console.log(`  📍 Original DUID from GSheets: "${originalDuid}"`)
-              console.log(`  🎯 Will use this for API update`)
+              // debug logs removed
+              // debug logs removed
+              // debug logs removed
             }
             
             if (!originalDuid || !existingRow) {
@@ -1557,11 +1551,7 @@ export function HuaweiRolloutTable({
               
               // Log column check for first few rows
               if (i < 3) {
-                console.log(`    🔍 Checking column "${columnConfig.name}":`, {
-                  excelValue: excelValue,
-                  excelHasValue: excelValue !== undefined && excelValue !== null && excelValue !== '',
-                  currentValue: existingRow[columnConfig.name]
-                })
+                // debug logs removed
               }
               
               if (excelValue === undefined || excelValue === null || excelValue === '') continue
@@ -1651,7 +1641,7 @@ export function HuaweiRolloutTable({
                   rowUpdates.push(`${columnConfig.name}: "${currentValue}" → "${newValue}"`)
                   
                   if (i < 3) {
-                    console.log(`      ✅ Will update: ${columnConfig.name}`)
+                    // debug logs removed
                   }
                 }
               }
@@ -1660,30 +1650,30 @@ export function HuaweiRolloutTable({
             if (rowHasUpdates) {
               updatedCount++
               if (i < 3) {
-                console.log(`    📝 Row ${i + 1} updates:`, rowUpdates)
+                // debug logs removed
               }
             } else if (i < 3) {
-              console.log(`    ⏭️ Row ${i + 1}: No updates needed`)
+              // debug logs removed
             }
           }
 
           // Apply all updates
-          console.log(`\n📤 APPLYING UPDATES TO GOOGLE SHEETS`)
-          console.log(`  ✅ Total updates to apply: ${updates.length}`)
-          console.log(`  📊 Rows with changes: ${updatedCount}`)
-          console.log(`  ⏭️ Rows skipped: ${skippedCount}`)
+          // debug logs removed
+          // debug logs removed
+          // debug logs removed
+          // debug logs removed
           
           if (updates.length > 0 && onUpdateData) {
             for (let i = 0; i < updates.length; i++) {
               const update = updates[i]
-              console.log(`\n🔄 Update ${i + 1}/${updates.length}:`)
-              console.log(`  🆔 DUID: "${update.rowId}"`)
-              console.log(`  📝 Column: ${update.columnId}`)
-              console.log(`  🔄 Old: "${update.oldValue}" → New: "${update.value}"`)
+              // debug logs removed
+              // debug logs removed
+              // debug logs removed
+              // debug logs removed
               
               try {
                 await onUpdateData(update.rowId, update.columnId, update.value, update.oldValue)
-                console.log(`  ✅ Update successful`)
+                // debug logs removed
               } catch (error) {
                 console.error(`  ❌ Update failed:`, error)
                 throw error // Re-throw to stop processing
@@ -1691,7 +1681,7 @@ export function HuaweiRolloutTable({
             }
           }
 
-          console.log(`\n✅ IMPORT COMPLETED SUCCESSFULLY`)
+          // debug logs removed
           setImportSuccess({ updated: updatedCount, skipped: skippedCount })
           
           // Clear success message after 10 seconds
@@ -2055,7 +2045,7 @@ export function HuaweiRolloutTable({
           <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-40 flex items-center justify-center">
             <div className="text-center">
               <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent mb-4"></div>
-              <p className="text-sm text-gray-600 font-medium">Loading data...</p>
+              <p className="text-sm text-gray-600 font-medium">Loading table configuration...</p>
             </div>
           </div>
         )}

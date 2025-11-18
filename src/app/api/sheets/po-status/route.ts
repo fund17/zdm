@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    console.log(`📊 PO Status API: Matched ${Object.keys(matched).length}/${requestedDuids.length}, Orphans: ${Object.keys(orphans).length}`)
+    // debug logs removed
 
     return NextResponse.json({ 
       success: true, 

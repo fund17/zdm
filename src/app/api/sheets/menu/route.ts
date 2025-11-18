@@ -16,11 +16,7 @@ async function getGoogleSheetsClient() {
 
 export async function GET() {
   try {
-    console.log('📋 FETCHING MENU DATA:', {
-      spreadsheetId: process.env.GOOGLE_SHEET_ID_DAILYPLAN,
-      menuSheetName: process.env.GOOGLE_SHEET_ID_DAILYPLAN_SHEETMENU,
-      timestamp: new Date().toISOString()
-    })
+    // debug logs removed
 
     const sheets = await getGoogleSheetsClient()
     const spreadsheetId = process.env.GOOGLE_SHEET_ID_DAILYPLAN
@@ -39,7 +35,7 @@ export async function GET() {
     const rows = response.data.values || []
     
     if (rows.length === 0) {
-      console.log('⚠️ No menu data found')
+      // debug logs removed
       return NextResponse.json({
         success: true,
         data: {},
@@ -51,12 +47,7 @@ export async function GET() {
     const headers = rows[0]
     const menuData: Record<string, string[]> = {}
 
-    console.log('🔍 RAW MENU DATA:', {
-      sheetName,
-      rowCount: rows.length,
-      columnHeaders: headers,
-      firstDataRow: rows[1] || null
-    })
+    // debug logs removed
 
     // Process each column to create dropdown lists
     headers.forEach((header, index) => {
@@ -76,13 +67,7 @@ export async function GET() {
       }
     })
 
-    console.log('📊 MENU DATA PROCESSED:', {
-      columnCount: Object.keys(menuData).length,
-      menuColumns: Object.keys(menuData),
-      sampleData: Object.fromEntries(
-        Object.entries(menuData).map(([key, values]) => [key, values.slice(0, 3)])
-      )
-    })
+    // debug logs removed
 
     return NextResponse.json({
       success: true,
@@ -98,7 +83,7 @@ export async function GET() {
 
   } catch (error) {
     console.error('❌ Error fetching menu data:', error)
-    console.log('⚠️ Using fallback menu data due to error')
+    // debug logs removed
     
     // Return fallback menu data instead of error - matching sheet Menu structure
     const fallbackMenuData = {

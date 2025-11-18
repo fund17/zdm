@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('🔍 DEBUG: Fetching data structure...')
+    // debug logs removed
     const data = await getSheetData(spreadsheetId, sheetName)
     
     const debug = {
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       firstFiveRows: data ? data.slice(0, 5) : []
     }
 
-    console.log('🔍 DEBUG RESULT:', debug)
+    // debug logs removed
     
     return NextResponse.json({
       success: true,

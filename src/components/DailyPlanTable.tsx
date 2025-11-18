@@ -287,7 +287,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       // Download file
       XLSX.writeFile(wb, filename)
       
-      console.log(`✅ Exported ${filteredRows.length} rows (filtered from ${data.length} total rows)`)
+      // debug logs removed
     } catch (error) {
       console.error('Export failed:', error)
       alert('Failed to export data: ' + (error instanceof Error ? error.message : 'Unknown error'))

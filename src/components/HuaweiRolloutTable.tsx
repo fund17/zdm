@@ -796,7 +796,7 @@ export function HuaweiRolloutTable({
           
           // Editable cell
           if (config.editable && !isEditing) {
-            const cellClasses = `group flex items-center justify-between cursor-pointer px-1 py-0.5 rounded transition-colors text-xs ${
+            const cellClasses = `group flex items-center justify-between px-1 py-0.5 rounded transition-colors text-xs ${
               hasChanges 
                 ? 'bg-orange-50 border border-orange-200 hover:bg-orange-100' 
                 : isImported
@@ -825,7 +825,7 @@ export function HuaweiRolloutTable({
           // Editing state
           if (isEditing) {
             return (
-              <div className="flex items-center gap-1 px-1 py-0.5" data-editing-cell>
+              <div className="w-full h-full" data-editing-cell style={{ padding: 0, margin: 0 }}>
                 {config.type === 'textarea' ? (
                   <textarea
                     autoFocus
@@ -835,7 +835,8 @@ export function HuaweiRolloutTable({
                       if (e.key === 'Escape') handleCellCancel()
                       if (e.key === 'Enter' && e.ctrlKey) handleCellSave()
                     }}
-                    className="w-full min-h-20 p-1 border-2 border-blue-500 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    className="w-full h-full px-2 py-1.5 border-2 border-blue-500 text-xs focus:outline-none focus:border-blue-600 bg-white"
+                    style={{ margin: 0, borderRadius: 0, minHeight: '100%' }}
                     rows={3}
                   />
                 ) : (
@@ -848,7 +849,8 @@ export function HuaweiRolloutTable({
                       if (e.key === 'Enter') handleCellSave()
                       if (e.key === 'Escape') handleCellCancel()
                     }}
-                    className="w-full p-1 border-2 border-blue-500 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    className="w-full h-full px-2 py-1.5 border-2 border-blue-500 text-xs focus:outline-none focus:border-blue-600 bg-white"
+                    style={{ margin: 0, borderRadius: 0 }}
                   />
                 )}
               </div>
@@ -1043,6 +1045,27 @@ export function HuaweiRolloutTable({
     })
   }, [data, dateFilter, columnConfigs])
 
+  // Custom global filter function for multi-term search (comma, newline, whitespace separated)
+  const globalFilterFn = useCallback((row: any, columnId: string, filterValue: string) => {
+    if (!filterValue) return true
+    
+    // Split by comma, newline, and whitespace - then filter empty strings
+    const searchTerms = filterValue
+      .split(/[,\n\r\s]+/)
+      .map(term => term.trim().toLowerCase())
+      .filter(term => term.length > 0)
+    
+    if (searchTerms.length === 0) return true
+    
+    // Check if ANY search term matches ANY value in the row
+    return searchTerms.some(term => {
+      return Object.values(row.original).some(value => {
+        if (value === null || value === undefined) return false
+        return String(value).toLowerCase().includes(term)
+      })
+    })
+  }, [])
+
   const table = useReactTable({
     data: filteredData,
     columns,
@@ -1061,6 +1084,7 @@ export function HuaweiRolloutTable({
     onColumnSizingChange: setColumnSizing,
     onColumnPinningChange: setColumnPinning,
     columnResizeMode: 'onChange',
+    globalFilterFn: globalFilterFn,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -2065,7 +2089,7 @@ export function HuaweiRolloutTable({
             <div className="flex items-center space-x-2">
               <input
                 type="text"
-                placeholder="Search all columns..."
+                placeholder="Search all columns"
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 className="px-3 py-1.5 text-xs border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors w-80"
@@ -2125,10 +2149,10 @@ export function HuaweiRolloutTable({
       )}
 
       {/* Table */}
-      <div className="flex-1 overflow-auto relative">
+      <div className="flex-1 overflow-auto relative" id="huawei-table-container">
         {/* Table-level loading overlay: show when initial column config is not loaded or when table refresh is ongoing */}
         {(loading || columnConfigs.length === 0) && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-40 flex items-center justify-center">
+          <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center" style={{ position: 'fixed' }}>
             <div className="text-center">
               <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent mb-4"></div>
               <p className="text-sm text-gray-600 font-medium">Loading table configuration...</p>

@@ -27,8 +27,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   // Check authentication status
   useEffect(() => {
     const checkAuth = async () => {
-      // Don't check auth on login page
-      if (pathname === '/login') {
+      // Public pages that don't require authentication
+      const publicPages = ['/login', '/register', '/verify', '/set-password']
+      
+      // Don't check auth on public pages
+      if (publicPages.includes(pathname)) {
         setLoading(false)
         return
       }
@@ -43,7 +46,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         } else {
           setIsAuthenticated(false)
           setUser(null)
-          // Redirect to login if not authenticated and not on login page
+          // Redirect to login if not authenticated and not on public page
           router.push('/login')
         }
       } catch (error) {

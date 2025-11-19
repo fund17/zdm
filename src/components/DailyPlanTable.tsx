@@ -132,7 +132,7 @@ const getActivityBadgeStyle = (activity: string) => {
 }
 
 export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFilteredDataChange, onDateFilterChange, statusFilter, activityFilter, initialDateFilter, showFilters = false, onExport, onSaveComplete, loading = false, onImport, onRefresh, refreshing = false }: DataTableProps) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'Date', desc: true }]) // Sort by Date descending (newest first)
+  const [sorting, setSorting] = useState<SortingState>([]) // Start with no sorting, will be set after columns load
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('dailyplan-columnFilters')
@@ -154,8 +154,8 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
   const [menuData, setMenuData] = useState<Record<string, string[]>>({}) // Add menu data state
   const [columnSizing, setColumnSizing] = useState({})
   const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({ 
-    left: ['Site ID'],
-    right: ['Status']
+    left: [],
+    right: []
   })
   const [activeFilterColumn, setActiveFilterColumn] = useState<string | null>(null)
   const [filterDropdownPosition, setFilterDropdownPosition] = useState<{ top: number; left: number } | null>(null)
@@ -435,6 +435,38 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
         
         setColumnConfigs(result.data.columns || [])
         
+        // Set default sorting to Date column if it exists
+        const dateColumn = result.data.columns?.find((col: ColumnConfig) => col.name === 'Date' || col.displayName === 'Date')
+        if (dateColumn && sorting.length === 0) {
+          setSorting([{ id: dateColumn.name, desc: true }])
+        }
+        
+        // Set default column pinning if not already set
+        if (columnPinning.left?.length === 0 && columnPinning.right?.length === 0) {
+          const leftPinnedCols: string[] = []
+          const rightPinnedCols: string[] = []
+          
+          // Pin Site ID column on the left if it exists
+          const siteIdCol = result.data.columns?.find((col: ColumnConfig) => 
+            col.name === 'Site ID' || col.displayName === 'Site ID'
+          )
+          if (siteIdCol) {
+            leftPinnedCols.push(siteIdCol.name)
+          }
+          
+          // Pin Status column on the right if it exists
+          const statusCol = result.data.columns?.find((col: ColumnConfig) => 
+            col.name === 'Status' || col.displayName === 'Status'
+          )
+          if (statusCol) {
+            rightPinnedCols.push(statusCol.name)
+          }
+          
+          if (leftPinnedCols.length > 0 || rightPinnedCols.length > 0) {
+            setColumnPinning({ left: leftPinnedCols, right: rightPinnedCols })
+          }
+        }
+        
       } catch (error) {
         setConfigError(error instanceof Error ? error.message : 'Failed to load settings')
         
@@ -489,6 +521,35 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
 
     fetchMenuData()
   }, [data, rowIdColumn])
+
+  // Validate and clean up filters/sorting when columnConfigs change
+  useEffect(() => {
+    if (columnConfigs.length > 0) {
+      const validColumnIds = columnConfigs.map(col => col.name)
+      
+      // Clean invalid column filters
+      if (columnFilters.length > 0) {
+        const validFilters = columnFilters.filter(filter => validColumnIds.includes(filter.id))
+        if (validFilters.length !== columnFilters.length) {
+          console.log('🧹 Cleaning invalid column filters:', columnFilters.filter(f => !validColumnIds.includes(f.id)))
+          setColumnFilters(validFilters)
+          // Also update localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('dailyplan-columnFilters', JSON.stringify(validFilters))
+          }
+        }
+      }
+      
+      // Clean invalid sorting
+      if (sorting.length > 0) {
+        const validSorting = sorting.filter(sort => validColumnIds.includes(sort.id))
+        if (validSorting.length !== sorting.length) {
+          console.log('🧹 Cleaning invalid sorting:', sorting.filter(s => !validColumnIds.includes(s.id)))
+          setSorting(validSorting)
+        }
+      }
+    }
+  }, [columnConfigs, columnFilters, sorting])
 
   // Update local data when props change and apply client-side date filtering
   useEffect(() => {
@@ -1024,13 +1085,15 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => 
         setEditingCell({ ...editState, value: e.target.value }),
       onKeyDown: handleKeyDown,
-      className: "flex-1 px-1 py-0.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-left",
+      className: "w-full h-full px-2 py-1.5 text-xs border-2 border-blue-500 focus:outline-none focus:border-blue-600 text-left bg-white",
       autoFocus: true,
       dir: "ltr" as const,
       style: { 
         direction: 'ltr' as const, 
         textAlign: 'left' as const,
-        unicodeBidi: 'bidi-override' as const 
+        unicodeBidi: 'bidi-override' as const,
+        margin: 0,
+        borderRadius: 0
       }
     }
 
@@ -1086,7 +1149,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
         return (
           <select
             {...commonProps}
-            className={`${commonProps.className} cursor-pointer`}
+            className={commonProps.className}
           >
             <option value="">-- Select {config.displayName} --</option>
             {menuOptions.map((option, index) => (
@@ -1185,9 +1248,9 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
         if (isEditing) {
           return (
             <div
-              className="flex items-center space-x-1 px-1 py-0.5 text-xs"
+              className="w-full h-full"
               dir="ltr"
-              style={{ direction: 'ltr', textAlign: 'left' }}
+              style={{ direction: 'ltr', textAlign: 'left', padding: 0, margin: 0 }}
               data-editing-cell
             >
               {renderEditInput(editingCell, config)}
@@ -1234,7 +1297,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
         // No row ID - show warning but still allow editing with fallback
         if (!rowId) {
           return (
-            <div className="group flex items-center justify-between cursor-pointer hover:bg-amber-50 px-1 py-0.5 rounded transition-colors min-h-[1rem] text-xs"
+            <div className="group flex items-center justify-between hover:bg-amber-50 px-1 py-0.5 rounded transition-colors min-h-[1rem] text-xs"
                  onDoubleClick={() => handleCellEdit(actualRowData, columnId, value)}
                  title="No RowId found - using fallback identifier. Double-click to edit.">
               <div className="flex items-center space-x-1">
@@ -1249,7 +1312,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
         }
 
         // Editable cell
-        const cellClasses = `group flex items-center justify-between cursor-pointer px-1 py-0.5 rounded transition-colors min-h-[1rem] text-xs ${
+        const cellClasses = `group flex items-center justify-between px-1 py-0.5 rounded transition-colors min-h-[1rem] text-xs ${
           hasChanges 
             ? 'bg-orange-50 border border-orange-200 hover:bg-orange-100' 
             : 'hover:bg-gray-50'
@@ -1312,6 +1375,41 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
     }))
   }, [filteredData, visibleColumnConfigs, editingCell, rowIdColumn, changedCells, getColumnFilterValue, handleCellEdit, handleCellSave, renderEditInput, handleCellCancel, renderCellContent])
 
+  // Custom global filter function for multi-term search (comma, newline, whitespace separated)
+  const globalFilterFn = useCallback((row: any, columnId: string, filterValue: string) => {
+    if (!filterValue) return true
+    
+    // Split by comma, newline, and whitespace - then filter empty strings
+    const searchTerms = filterValue
+      .split(/[,\n\r\s]+/)
+      .map(term => term.trim().toLowerCase())
+      .filter(term => term.length > 0)
+    
+    if (searchTerms.length === 0) return true
+    
+    // Check if ANY search term matches ANY value in the row
+    return searchTerms.some(term => {
+      return Object.values(row.original).some(value => {
+        if (value === null || value === undefined) return false
+        return String(value).toLowerCase().includes(term)
+      })
+    })
+  }, [])
+
+  // Validated sorting - only include columns that exist in current config
+  const validatedSorting = useMemo(() => {
+    if (columnConfigs.length === 0) return []
+    const validColumnIds = columnConfigs.map(col => col.name)
+    return sorting.filter(sort => validColumnIds.includes(sort.id))
+  }, [sorting, columnConfigs])
+
+  // Validated columnFilters - only include columns that exist in current config
+  const validatedColumnFilters = useMemo(() => {
+    if (columnConfigs.length === 0) return []
+    const validColumnIds = columnConfigs.map(col => col.name)
+    return columnFilters.filter(filter => validColumnIds.includes(filter.id))
+  }, [columnFilters, columnConfigs])
+
   const table = useReactTable({
     data: filteredData,
     columns,
@@ -1321,8 +1419,8 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       maxSize: 500,
     },
     state: {
-      sorting,
-      columnFilters,
+      sorting: validatedSorting,
+      columnFilters: validatedColumnFilters,
       globalFilter,
       columnSizing,
       columnPinning,
@@ -1334,6 +1432,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    globalFilterFn: globalFilterFn,
     initialState: { pagination: { pageSize: 20 } },
     enableColumnResizing: false,
     enablePinning: true,
@@ -1470,7 +1569,7 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
             <div className="flex items-center space-x-2">
               <input
                 type="text"
-                placeholder="Search all columns..."
+                placeholder="Search all columns"
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 className="px-3 py-1.5 text-xs border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors w-80"
@@ -1505,10 +1604,10 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto relative">
+      <div className="flex-1 overflow-auto relative" id="daily-plan-table-container">
         {/* Loading Overlay for Table Body (also show when config is loading) */}
         {(loading || configLoading) && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-40 flex items-center justify-center">
+          <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center" style={{ position: 'fixed' }}>
             <div className="text-center">
               <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent mb-2"></div>
               <p className="text-sm text-gray-600 font-medium">Refreshing data...</p>

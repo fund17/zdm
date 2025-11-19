@@ -53,6 +53,18 @@ export default function ItcHuaweiPage() {
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
   const [analyzingFile, setAnalyzingFile] = useState(false)
   const [importedCells, setImportedCells] = useState<Set<string>>(new Set()) // Track imported cells: "DUID-columnId"
+  
+  // Register DUID state
+  const [activeTab, setActiveTab] = useState<'import' | 'register'>('import')
+  const [registerFile, setRegisterFile] = useState<File | null>(null)
+  const [registering, setRegistering] = useState(false)
+  const [registerPreview, setRegisterPreview] = useState<{
+    validRows: any[]
+    duplicates: string[]
+    missingFields: number
+    totalRows: number
+  } | null>(null)
+  const [analyzingRegisterFile, setAnalyzingRegisterFile] = useState(false)
 
   const fetchData = useCallback(async (sheetName?: string, options?: { showFullLoading?: boolean }) => {
     try {
@@ -461,6 +473,152 @@ export default function ItcHuaweiPage() {
     }
   }
 
+  // Handle register file selection and analyze
+  const handleRegisterFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setRegisterFile(file)
+    setRegisterPreview(null)
+    setAnalyzingRegisterFile(true)
+    
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+      const sheetName = workbook.SheetNames[0]
+      const worksheet = workbook.Sheets[sheetName]
+      let jsonData: any[] = XLSX.utils.sheet_to_json(worksheet)
+      
+      // Validate max 20 rows
+      if (jsonData.length > 20) {
+        displayToast('Maximum 20 rows allowed for registration', 'error')
+        setAnalyzingRegisterFile(false)
+        return
+      }
+      
+      // Required fields
+      const requiredFields = ['DUID', 'DU Name', 'Region', 'Project Code']
+      
+      // Validate and check duplicates
+      const validRows: any[] = []
+      const duplicates: string[] = []
+      let missingFieldsCount = 0
+      
+      // Get existing DUIDs from current data
+      const existingDUIDs = new Set(data.map(row => row.DUID || row.duid))
+      
+      for (const row of jsonData) {
+        // Check required fields
+        const hasMissingFields = requiredFields.some(field => {
+          const value = row[field] || row[field.toLowerCase()] || row[field.replace(/\s+/g, '')]
+          return !value || value.toString().trim() === ''
+        })
+        
+        if (hasMissingFields) {
+          missingFieldsCount++
+          continue
+        }
+        
+        // Get DUID
+        const duid = row['DUID'] || row['duid'] || row['Duid']
+        
+        // Check for duplicates in existing data
+        if (existingDUIDs.has(duid)) {
+          duplicates.push(duid)
+          continue
+        }
+        
+        // Check for duplicates in current file
+        if (validRows.some(r => r.DUID === duid)) {
+          duplicates.push(duid)
+          continue
+        }
+        
+        validRows.push({
+          DUID: duid,
+          'DU Name': row['DU Name'] || row['DUName'] || row['du name'] || row['duname'],
+          Region: row['Region'] || row['region'],
+          'Project Code': row['Project Code'] || row['ProjectCode'] || row['project code'] || row['projectcode']
+        })
+      }
+      
+      const previewData = {
+        validRows,
+        duplicates,
+        missingFields: missingFieldsCount,
+        totalRows: jsonData.length
+      }
+      
+      console.log('📊 Register Preview:', previewData)
+      console.log('Valid rows:', validRows.length)
+      console.log('Duplicates:', duplicates.length, duplicates)
+      console.log('Missing fields:', missingFieldsCount)
+      
+      setRegisterPreview(previewData)
+      
+    } catch (error) {
+      console.error('Register file analysis error:', error)
+      displayToast('Failed to analyze file', 'error')
+    } finally {
+      setAnalyzingRegisterFile(false)
+    }
+  }
+
+  // Handle register execution
+  const handleRegisterDUID = async () => {
+    if (!registerFile || !selectedSheet || !registerPreview || registerPreview.validRows.length === 0) {
+      displayToast('No valid rows to register', 'error')
+      return
+    }
+    
+    if (registerPreview.duplicates.length > 0) {
+      displayToast(`Cannot register: ${registerPreview.duplicates.length} duplicate DUID(s) found`, 'error')
+      return
+    }
+    
+    setRegistering(true)
+    
+    try {
+      const response = await fetch('/api/sheets/itc-huawei/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sheetName: selectedSheet,
+          rows: registerPreview.validRows
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to register DUIDs')
+      }
+
+      const result = await response.json()
+      
+      // Close modal
+      setImportModalOpen(false)
+      setRegisterFile(null)
+      setRegisterPreview(null)
+      setActiveTab('import')
+      
+      // Show success toast
+      displayToast(`✅ Successfully registered ${result.count || registerPreview.validRows.length} DUID(s)!`, 'success')
+      
+      // Refresh data
+      setTableRefreshing(true)
+      await fetchData(selectedSheet, { showFullLoading: false })
+      setTableRefreshing(false)
+      
+    } catch (error) {
+      console.error('Register error:', error)
+      displayToast(`Register failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
+    } finally {
+      setRegistering(false)
+    }
+  }
+
   // Handle import execution
   const handleImportExcel = async () => {
     if (!importFile || !selectedSheet) {
@@ -639,18 +797,21 @@ export default function ItcHuaweiPage() {
       {/* Import Excel Modal */}
       {importModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-5 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                 <Upload className="h-5 w-5 mr-2 text-emerald-600" />
-                Import Excel File
+                {activeTab === 'import' ? 'Import Excel File' : 'Register New DUID'}
               </h3>
               <button
                 onClick={() => {
                   setImportModalOpen(false)
                   setImportFile(null)
                   setImportPreview(null)
+                  setRegisterFile(null)
+                  setRegisterPreview(null)
+                  setActiveTab('import')
                 }}
                 className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
               >
@@ -658,8 +819,35 @@ export default function ItcHuaweiPage() {
               </button>
             </div>
 
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('import')}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'import'
+                    ? 'text-emerald-700 border-b-2 border-emerald-600 bg-emerald-50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                📊 Import Data
+              </button>
+              <button
+                onClick={() => setActiveTab('register')}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'register'
+                    ? 'text-blue-700 border-b-2 border-blue-600 bg-blue-50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                ➕ Register DUID
+              </button>
+            </div>
+
             {/* Modal Body */}
             <div className="p-5">
+              {activeTab === 'import' ? (
+                /* Import Tab Content */
+                <>
               <div className="mb-4">
                 <p className="text-sm text-gray-600 mb-3">
                   Upload an Excel file to import/update data.
@@ -782,6 +970,173 @@ export default function ItcHuaweiPage() {
                   )}
                 </button>
               </div>
+              </>
+              ) : (
+                /* Register Tab Content */
+                <>
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-3">
+                  Register new DUID entries (maximum 20 rows).
+                </p>
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <p className="text-xs font-medium text-blue-900 mb-1">📋 Required Fields:</p>
+                  <ul className="text-xs text-blue-700 space-y-1 ml-4 list-disc">
+                    <li><strong>DUID</strong> - Unique identifier (cannot be duplicate)</li>
+                    <li><strong>DU Name</strong> - Site name</li>
+                    <li><strong>Region</strong> - Project region</li>
+                    <li><strong>Project Code</strong> - From ISDP</li>
+                  </ul>
+                  <p className="text-xs text-blue-700 mt-2">⚠️ Maximum 20 rows per registration</p>
+                </div>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700 mb-2 block">Select Excel File</span>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleRegisterFileChange}
+                    className="block w-full text-sm text-gray-600
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-lg file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-blue-50 file:text-blue-700
+                      hover:file:bg-blue-100
+                      cursor-pointer"
+                  />
+                </label>
+
+                {registerFile && (
+                  <div className="mt-3 flex items-center text-sm text-gray-600 bg-gray-50 rounded-lg p-2">
+                    <CheckCircle className="h-4 w-4 text-blue-600 mr-2" />
+                    <span className="truncate">{registerFile.name}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Register Preview */}
+              {analyzingRegisterFile && (
+                <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <div className="flex items-center">
+                    <RefreshCcw className="h-4 w-4 text-blue-600 mr-2 animate-spin" />
+                    <p className="text-sm text-blue-700">Analyzing file...</p>
+                  </div>
+                </div>
+              )}
+
+              {registerPreview && !analyzingRegisterFile && (
+                <div className="mb-4 space-y-2">
+                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-emerald-900">Valid Rows:</span>
+                      <span className="text-lg font-bold text-emerald-700">{registerPreview.validRows.length}</span>
+                    </div>
+                    <p className="text-xs text-emerald-600 mt-1">
+                      Rows ready to be registered
+                    </p>
+                  </div>
+
+                  {/* Preview Table for Valid Rows */}
+                  {registerPreview.validRows.length > 0 && (
+                    <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+                      <table className="min-w-full divide-y divide-gray-200 text-xs">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">DUID</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">DU Name</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">Region</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">Project Code</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {registerPreview.validRows.map((row, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-3 py-2 whitespace-nowrap text-gray-900 font-medium">{row.DUID}</td>
+                              <td className="px-3 py-2 whitespace-nowrap text-gray-700">{row['DU Name']}</td>
+                              <td className="px-3 py-2 whitespace-nowrap text-gray-700">{row.Region}</td>
+                              <td className="px-3 py-2 whitespace-nowrap text-gray-700">{row['Project Code']}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {(registerPreview.duplicates.length > 0 || registerPreview.missingFields > 0) && (
+                    <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-red-900">Issues Found:</span>
+                        <span className="text-lg font-bold text-red-700">
+                          {registerPreview.duplicates.length + registerPreview.missingFields}
+                        </span>
+                      </div>
+                      <div className="text-xs text-red-600 space-y-0.5">
+                        {registerPreview.duplicates.length > 0 && (
+                          <div>
+                            <p className="font-semibold">• Duplicate DUIDs ({registerPreview.duplicates.length}):</p>
+                            <div className="ml-4 mt-1 max-h-20 overflow-y-auto bg-red-100 rounded p-2">
+                              {registerPreview.duplicates.map((duid, idx) => (
+                                <div key={idx} className="text-red-800">- {duid}</div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {registerPreview.missingFields > 0 && (
+                          <p>• {registerPreview.missingFields} row(s) with missing required fields</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-2 rounded-lg bg-gray-100 border border-gray-200">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-gray-700">Total Rows in File:</span>
+                      <span className="text-gray-600">{registerPreview.totalRows}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setImportModalOpen(false)
+                    setRegisterFile(null)
+                    setRegisterPreview(null)
+                    setActiveTab('import')
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRegisterDUID}
+                  disabled={
+                    !registerFile || 
+                    registering || 
+                    analyzingRegisterFile || 
+                    !registerPreview || 
+                    registerPreview.validRows.length === 0 ||
+                    (registerPreview.duplicates && registerPreview.duplicates.length > 0)
+                  }
+                  className="px-4 py-2 text-sm font-semibold text-blue-800 bg-blue-50 border border-blue-600 rounded-lg hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center shadow-sm"
+                >
+                  {registering ? (
+                    <>
+                      <RefreshCcw className="h-4 w-4 mr-2 animate-spin" />
+                      Registering...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Register {registerPreview ? `(${registerPreview.validRows.length} rows)` : ''}
+                    </>
+                  )}
+                </button>
+              </div>
+              </>
+              )}
             </div>
           </div>
         </div>

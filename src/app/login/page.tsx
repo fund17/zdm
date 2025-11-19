@@ -104,7 +104,7 @@ function LoginForm() {
             </ul>
           </div>
           <div className="mt-auto pt-6 text-xs text-white/80">
-            Need help? Contact <a href="mailto:support@zmg.co.id" className="underline">support@zmg.co.id</a>
+            Need help? Contact <a href="mailto:adminbalom@zmg.co.id" className="underline">adminbalom@zmg.co.id</a>
           </div>
         </div>
         {/* Card / Form */}
@@ -207,6 +207,16 @@ function LoginForm() {
               {/* Social SSO and OR divider removed */}
 
               </form>
+
+              {/* Register Link */}
+              <div className="mt-6 text-center">
+                <p className="text-sm text-slate-600">
+                  Don&apos;t have an account?{' '}
+                  <a href="/register" className="font-bold text-blue-600 hover:text-blue-700 hover:underline">
+                    Register now
+                  </a>
+                </p>
+              </div>
               </div>
 
         {/* Footer */}

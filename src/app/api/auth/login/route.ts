@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { google } from 'googleapis'
+import { getUserByEmail } from '@/lib/googleSheets'
+import bcrypt from 'bcryptjs'
+import { getSheetsClient } from '@/lib/googleSheets'
+import { sendLoginAlertEmail } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,91 +15,93 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Initialize Google Sheets API
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    })
+    // Get user from Google Sheets using new structure
+    const user = await getUserByEmail(email)
 
-    const sheets = google.sheets({ version: 'v4', auth })
-    const spreadsheetId = process.env.GOOGLE_SHEET_ID_USER
-    const sheetName = process.env.GOOGLE_SHEET_NAME_USER || 'new_user'
-
-    // Fetch user data from Google Sheets
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: `${sheetName}!A:G`, // name, email, pass, region, usertype, status, last_login
-    })
-
-    const rows = response.data.values
-
-    if (!rows || rows.length === 0) {
-      return NextResponse.json(
-        { success: false, message: 'No user data found' },
-        { status: 404 }
-      )
-    }
-
-    // Find user (skip header row)
-    const userRow = rows.slice(1).find((row) => row[1] === email)
-
-    if (!userRow) {
+    if (!user) {
       return NextResponse.json(
         { success: false, message: 'Invalid email or password' },
         { status: 401 }
       )
     }
 
-    const [name, userEmail, userPass, region, usertype, status] = userRow
-
-    // Check if user is active
-    if (status !== 'active') {
+    // Check if user is verified and active
+    if (user.IsVerified !== 'yes') {
       return NextResponse.json(
-        { success: false, message: 'Account is not active' },
+        { success: false, message: 'Please verify your email first' },
         { status: 403 }
       )
     }
 
-    // Verify password (plain text comparison - consider hashing in production)
-    if (userPass !== password) {
+    if (user.IsActive !== 'yes') {
+      return NextResponse.json(
+        { success: false, message: 'Account is not active. Please contact administrator.' },
+        { status: 403 }
+      )
+    }
+
+    // Verify password (bcrypt comparison)
+    const passwordMatch = await bcrypt.compare(password, user.Password)
+    
+    if (!passwordMatch) {
       return NextResponse.json(
         { success: false, message: 'Invalid email or password' },
         { status: 401 }
       )
     }
 
-    // Update last_login timestamp
-    const rowIndex = rows.findIndex((row) => row[1] === email)
-    if (rowIndex > 0) {
-      try {
+    // Update last login timestamp
+    try {
+      const spreadsheetId = process.env.GOOGLE_SHEET_ID_USER
+      const sheetName = process.env.GOOGLE_SHEET_NAME_USER || 'users'
+      const sheets = await getSheetsClient()
+      
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${sheetName}!A:Z`,
+      })
+
+      const rows = response.data.values || []
+      if (rows.length === 0) return
+      
+      const headers = rows[0] as string[]
+      const emailIndex = headers.findIndex(h => h === 'Email')
+      const loginIndex = headers.findIndex(h => h === 'Login')
+      
+      if (emailIndex === -1 || loginIndex === -1) {
+        console.error('Required columns not found in sheet')
+        return
+      }
+
+      const rowIndex = rows.findIndex((row: any[]) => 
+        row[emailIndex]?.toLowerCase() === email.toLowerCase()
+      )
+      
+      if (rowIndex > 0) {
+        const columnLetter = String.fromCharCode(65 + loginIndex) // Convert index to column letter (A, B, C, etc)
         await sheets.spreadsheets.values.update({
           spreadsheetId,
-          range: `${sheetName}!G${rowIndex + 1}`,
-          valueInputOption: 'USER_ENTERED',
+          range: `${sheetName}!${columnLetter}${rowIndex + 1}`,
+          valueInputOption: 'RAW',
           requestBody: {
-            values: [[new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })]],
+            values: [[new Date().toISOString()]],
           },
         })
-      } catch (error) {
-        console.error('Error updating last_login:', error)
-        // Don't fail login if update fails
       }
+    } catch (error) {
+      console.error('Error updating last_login:', error)
+      // Don't fail login if update fails
     }
 
-    // Create user session data
+    // Create response with new schema
     const userData = {
-      name,
-      email: userEmail,
-      region,
-      usertype,
-      status,
+      name: user.Name,
+      email: user.Email,
+      region: user.Region || '',
+      usertype: user.Role || 'user',
     }
 
-    // Create response with user data
-    const response_json = NextResponse.json(
+    const response = NextResponse.json(
       {
         success: true,
         message: 'Login successful',
@@ -105,16 +110,27 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     )
 
-    // Set cookie for session (valid for 7 days)
-    response_json.cookies.set('user_session', JSON.stringify(userData), {
+    // Set cookie for session management
+    response.cookies.set('user_session', JSON.stringify(userData), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: '/',
+      maxAge: 60 * 60 * 24 * 7, // 1 week
+      path: '/'
     })
 
-    return response_json
+    // Send login alert email (non-blocking)
+    const ipAddress = request.headers.get('x-forwarded-for') || 
+                      request.headers.get('x-real-ip') || 
+                      'Unknown'
+    const userAgent = request.headers.get('user-agent') || 'Unknown'
+    
+    // Send email asynchronously without blocking response
+    sendLoginAlertEmail(user.Email, user.Name, ipAddress, userAgent).catch(err => {
+      console.error('Failed to send login alert email:', err)
+    })
+
+    return response
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json(

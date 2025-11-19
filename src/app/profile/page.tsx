@@ -4,8 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   User, Lock, Mail, MapPin, Briefcase, Eye, EyeOff, CheckCircle, AlertCircle,
-  Settings, Shield, Bell, Activity, Edit3, Save, X, Camera, Calendar,
-  Clock, Globe, Phone, Building
+  Shield, Bell, Edit3, Save, Calendar, Clock, Phone, Building
 } from 'lucide-react'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 
@@ -21,7 +20,7 @@ interface UserData {
   lastLogin?: string
 }
 
-type TabType = 'overview' | 'security' | 'preferences' | 'activity'
+type TabType = 'overview' | 'security'
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -48,20 +47,14 @@ export default function ProfilePage() {
     department: ''
   })
 
-  // Preferences states
-  const [preferences, setPreferences] = useState({
-    emailNotifications: true,
-    pushNotifications: false,
-    darkMode: false,
-    language: 'en',
-    timezone: 'Asia/Jakarta'
-  })
+  // Login alerts preference
+  const [loginAlerts, setLoginAlerts] = useState(true)
 
   useEffect(() => {
-    // Fetch user session
-    const fetchUserSession = async () => {
+    // Fetch user profile with full details
+    const fetchUserProfile = async () => {
       try {
-        const response = await fetch('/api/auth/session')
+        const response = await fetch('/api/auth/profile')
         const data = await response.json()
 
         if (data.success && data.user) {
@@ -71,18 +64,22 @@ export default function ProfilePage() {
             phone: data.user.phone || '',
             department: data.user.department || ''
           })
+          // Set login alerts preference if available
+          if (data.user.loginAlerts !== undefined) {
+            setLoginAlerts(data.user.loginAlerts)
+          }
         } else {
           router.push('/login')
         }
       } catch (error) {
-        console.error('Failed to fetch user session:', error)
+        console.error('Failed to fetch user profile:', error)
         router.push('/login')
       } finally {
         setLoading(false)
       }
     }
 
-    fetchUserSession()
+    fetchUserProfile()
   }, [router])
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -102,8 +99,14 @@ export default function ProfilePage() {
       return
     }
 
-    if (newPassword.length < 6) {
-      setMessage('New password must be at least 6 characters')
+    if (newPassword.length < 8) {
+      setMessage('New password must be at least 8 characters')
+      setMessageType('error')
+      return
+    }
+
+    if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      setMessage('Password must contain both letters and numbers')
       setMessageType('error')
       return
     }
@@ -171,15 +174,9 @@ export default function ProfilePage() {
     }
   }
 
-  const handlePreferenceChange = (key: string, value: any) => {
-    setPreferences(prev => ({ ...prev, [key]: value }))
-  }
-
   const tabs = [
     { id: 'overview' as TabType, label: 'Overview', icon: User },
     { id: 'security' as TabType, label: 'Security', icon: Shield },
-    { id: 'preferences' as TabType, label: 'Preferences', icon: Settings },
-    { id: 'activity' as TabType, label: 'Activity', icon: Activity },
   ]
 
   if (loading) {
@@ -422,12 +419,14 @@ export default function ProfilePage() {
 
                   <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
                     <div className="flex items-center">
-                      <div className="p-3 bg-purple-100 rounded-lg">
-                        <Shield className="h-6 w-6 text-purple-600" />
+                      <div className={`p-3 rounded-lg ${user.status === 'Active' ? 'bg-green-100' : 'bg-red-100'}`}>
+                        <Shield className={`h-6 w-6 ${user.status === 'Active' ? 'text-green-600' : 'text-red-600'}`} />
                       </div>
                       <div className="ml-4">
                         <p className="text-sm font-medium text-gray-600">Account Status</p>
-                        <p className="text-lg font-bold text-green-600">{user.status}</p>
+                        <p className={`text-lg font-bold ${user.status === 'Active' ? 'text-green-600' : 'text-red-600'}`}>
+                          {user.status}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -543,7 +542,7 @@ export default function ProfilePage() {
 
                     <div className="flex items-center justify-between pt-4">
                       <div className="text-sm text-gray-600">
-                        Password must be at least 6 characters long
+                        Password must be at least 8 characters with letters and numbers
                       </div>
                       <button
                         type="submit"
@@ -570,7 +569,7 @@ export default function ProfilePage() {
                 <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
                   <div className="flex items-center mb-6">
                     <div className="p-3 bg-yellow-100 rounded-lg">
-                      <Shield className="h-6 w-6 text-yellow-600" />
+                      <Bell className="h-6 w-6 text-yellow-600" />
                     </div>
                     <div className="ml-4">
                       <h3 className="text-xl font-bold text-gray-900">Security Settings</h3>
@@ -581,80 +580,28 @@ export default function ProfilePage() {
                   <div className="space-y-6">
                     <div className="flex items-center justify-between p-4 border border-gray-200 rounded-xl">
                       <div>
-                        <h4 className="font-medium text-gray-900">Two-Factor Authentication</h4>
-                        <p className="text-sm text-gray-600">Add an extra layer of security to your account</p>
-                      </div>
-                      <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-                        Enable
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 border border-gray-200 rounded-xl">
-                      <div>
                         <h4 className="font-medium text-gray-900">Login Alerts</h4>
-                        <p className="text-sm text-gray-600">Get notified when someone logs into your account</p>
-                      </div>
-                      <div className="flex items-center">
-                        <input type="checkbox" className="form-checkbox h-5 w-5 text-blue-600" defaultChecked />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 border border-gray-200 rounded-xl">
-                      <div>
-                        <h4 className="font-medium text-gray-900">Active Sessions</h4>
-                        <p className="text-sm text-gray-600">Manage devices that are logged into your account</p>
-                      </div>
-                      <button className="px-4 py-2 text-blue-600 hover:text-blue-700 transition-colors">
-                        View All
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Preferences Tab */}
-            {activeTab === 'preferences' && (
-              <div className="space-y-6">
-                {/* Notifications */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-                  <div className="flex items-center mb-6">
-                    <div className="p-3 bg-blue-100 rounded-lg">
-                      <Bell className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div className="ml-4">
-                      <h3 className="text-xl font-bold text-gray-900">Notifications</h3>
-                      <p className="text-gray-600">Choose how you want to be notified</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 border border-gray-200 rounded-xl">
-                      <div>
-                        <h4 className="font-medium text-gray-900">Email Notifications</h4>
-                        <p className="text-sm text-gray-600">Receive notifications via email</p>
+                        <p className="text-sm text-gray-600">Get notified via email when someone logs into your account</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={preferences.emailNotifications}
-                          onChange={(e) => handlePreferenceChange('emailNotifications', e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 border border-gray-200 rounded-xl">
-                      <div>
-                        <h4 className="font-medium text-gray-900">Push Notifications</h4>
-                        <p className="text-sm text-gray-600">Receive push notifications in your browser</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={preferences.pushNotifications}
-                          onChange={(e) => handlePreferenceChange('pushNotifications', e.target.checked)}
+                          checked={loginAlerts}
+                          onChange={async (e) => {
+                            const newValue = e.target.checked
+                            setLoginAlerts(newValue)
+                            
+                            // Save preference (optional - for future use)
+                            try {
+                              await fetch('/api/auth/preferences', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ loginAlerts: newValue }),
+                              })
+                            } catch (error) {
+                              console.error('Failed to save preference:', error)
+                            }
+                          }}
                           className="sr-only peer"
                         />
                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -662,128 +609,10 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 </div>
-
-                {/* Appearance */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-                  <div className="flex items-center mb-6">
-                    <div className="p-3 bg-purple-100 rounded-lg">
-                      <Settings className="h-6 w-6 text-purple-600" />
-                    </div>
-                    <div className="ml-4">
-                      <h3 className="text-xl font-bold text-gray-900">Appearance</h3>
-                      <p className="text-gray-600">Customize how the application looks</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 border border-gray-200 rounded-xl">
-                      <div>
-                        <h4 className="font-medium text-gray-900">Dark Mode</h4>
-                        <p className="text-sm text-gray-600">Switch to dark theme</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={preferences.darkMode}
-                          onChange={(e) => handlePreferenceChange('darkMode', e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-
-                    <div className="p-4 border border-gray-200 rounded-xl">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
-                      <select
-                        value={preferences.language}
-                        onChange={(e) => handlePreferenceChange('language', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      >
-                        <option value="en">English</option>
-                        <option value="id">Bahasa Indonesia</option>
-                      </select>
-                    </div>
-
-                    <div className="p-4 border border-gray-200 rounded-xl">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
-                      <select
-                        value={preferences.timezone}
-                        onChange={(e) => handlePreferenceChange('timezone', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      >
-                        <option value="Asia/Jakarta">Asia/Jakarta (WIB)</option>
-                        <option value="Asia/Makassar">Asia/Makassar (WITA)</option>
-                        <option value="Asia/Jayapura">Asia/Jayapura (WIT)</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
 
-            {/* Activity Tab */}
-            {activeTab === 'activity' && (
-              <div className="space-y-6">
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-                  <div className="flex items-center mb-6">
-                    <div className="p-3 bg-green-100 rounded-lg">
-                      <Activity className="h-6 w-6 text-green-600" />
-                    </div>
-                    <div className="ml-4">
-                      <h3 className="text-xl font-bold text-gray-900">Recent Activity</h3>
-                      <p className="text-gray-600">Your account activity and login history</p>
-                    </div>
-                  </div>
 
-                  <div className="space-y-4">
-                    {/* Mock activity items - replace with real data */}
-                    <div className="flex items-start p-4 border border-gray-200 rounded-xl">
-                      <div className="p-2 bg-blue-100 rounded-lg mr-4">
-                        <User className="h-4 w-4 text-blue-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">Profile updated</p>
-                        <p className="text-xs text-gray-600">You updated your profile information</p>
-                        <p className="text-xs text-gray-500 mt-1">2 hours ago</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start p-4 border border-gray-200 rounded-xl">
-                      <div className="p-2 bg-green-100 rounded-lg mr-4">
-                        <Lock className="h-4 w-4 text-green-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">Password changed</p>
-                        <p className="text-xs text-gray-600">You successfully changed your password</p>
-                        <p className="text-xs text-gray-500 mt-1">1 day ago</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start p-4 border border-gray-200 rounded-xl">
-                      <div className="p-2 bg-purple-100 rounded-lg mr-4">
-                        <Globe className="h-4 w-4 text-purple-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">Login from new device</p>
-                        <p className="text-xs text-gray-600">Logged in from Chrome on Windows</p>
-                        <p className="text-xs text-gray-500 mt-1">3 days ago</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start p-4 border border-gray-200 rounded-xl">
-                      <div className="p-2 bg-orange-100 rounded-lg mr-4">
-                        <Settings className="h-4 w-4 text-orange-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">Preferences updated</p>
-                        <p className="text-xs text-gray-600">You changed your notification settings</p>
-                        <p className="text-xs text-gray-500 mt-1">1 week ago</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

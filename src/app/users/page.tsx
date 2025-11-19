@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PermissionGuard } from '@/components/PermissionGuard'
+import { useTabCache } from '@/hooks/useTabCache'
 import { 
   Users, 
   CheckCircle, 
@@ -34,39 +35,33 @@ interface User {
 
 export default function UserManagementPage() {
   const router = useRouter()
-  const [users, setUsers] = useState<User[]>([])
   const [filteredUsers, setFilteredUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>('all')
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user'>('all')
 
-  useEffect(() => {
-    fetchUsers()
-  }, [])
-
-  useEffect(() => {
-    filterUsers()
-  }, [users, searchQuery, statusFilter, roleFilter])
-
-  const fetchUsers = async () => {
-    setLoading(true)
-    try {
+  // Use tab cache for users data
+  const { data: users, loading, refresh } = useTabCache<User[]>({
+    fetchData: async () => {
       const response = await fetch('/api/users')
       const data = await response.json()
-
       if (data.success) {
-        setUsers(data.data)
+        return data.data
       }
-    } catch (error) {
-      console.error('Failed to fetch users:', error)
-    } finally {
-      setLoading(false)
+      throw new Error('Failed to fetch users')
     }
-  }
+  })
+
+  useEffect(() => {
+    if (users) {
+      filterUsers()
+    }
+  }, [users, searchQuery, statusFilter, roleFilter])
 
   const filterUsers = () => {
+    if (!users) return
+    
     let filtered = [...users]
 
     // Search filter
@@ -108,7 +103,7 @@ export default function UserManagementPage() {
       })
 
       if (response.ok) {
-        await fetchUsers()
+        await refresh()
       }
     } catch (error) {
       console.error('Failed to update user:', error)
@@ -141,10 +136,10 @@ export default function UserManagementPage() {
   }
 
   const stats = {
-    total: users.length,
-    active: users.filter(u => u.IsActive === 'yes').length,
-    pending: users.filter(u => u.IsVerified === 'yes' && u.IsActive === 'no').length,
-    admins: users.filter(u => u.Role === 'admin').length,
+    total: users?.length || 0,
+    active: users?.filter(u => u.IsActive === 'yes').length || 0,
+    pending: users?.filter(u => u.IsVerified === 'yes' && u.IsActive === 'no').length || 0,
+    admins: users?.filter(u => u.Role === 'admin').length || 0,
   }
 
   return (
@@ -165,7 +160,7 @@ export default function UserManagementPage() {
             </p>
           </div>
           <button
-            onClick={fetchUsers}
+            onClick={refresh}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
           >

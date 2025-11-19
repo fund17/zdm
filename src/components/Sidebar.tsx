@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useTabs } from '@/contexts/TabContext'
 import { 
   Home, 
   Calendar, 
@@ -51,6 +51,8 @@ interface SubMenuItem {
 
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
   const pathname = usePathname()
+  const router = useRouter()
+  const { addTab, getTabLabel } = useTabs()
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
   const [isHovered, setIsHovered] = useState(false)
   const [permissions, setPermissions] = useState<UserPermissions | null>(null)
@@ -78,6 +80,12 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
       setLoadingPermissions(false)
     }
   }, [user])
+
+  // Handle navigation with tab
+  const handleNavigate = (href: string, label: string) => {
+    addTab(href, label)
+    router.push(href)
+  }
 
   // Determine if sidebar should show text (expanded state)
   const isExpanded = !collapsed || isHovered
@@ -233,10 +241,10 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
                     )}
                   </button>
                 ) : (
-                  <Link
-                    href={item.href!}
+                  <button
+                    onClick={() => handleNavigate(item.href!, item.label)}
                     className={`
-                      flex items-center gap-3 px-3 py-2 rounded-lg
+                      w-full flex items-center gap-3 px-3 py-2 rounded-lg
                       transition-all duration-150 group relative
                       ${isActive 
                         ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-200' 
@@ -263,7 +271,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
                     {!isActive && isExpanded && (
                       <ChevronRight className="h-3.5 w-3.5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200" />
                     )}
-                  </Link>
+                  </button>
                 )}
 
                 {/* Submenu */}
@@ -272,11 +280,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
                     {item.submenu!.map((subItem, subIndex) => {
                       const isSubActive = pathname === subItem.href
                       return (
-                        <Link
+                        <button
                           key={subIndex}
-                          href={subItem.href}
+                          onClick={() => handleNavigate(subItem.href, subItem.label)}
                           className={`
-                            flex items-center gap-2 px-3 py-1.5 rounded-md text-xs
+                            w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs
                             transition-all duration-150 group relative
                             ${isSubActive 
                               ? 'bg-blue-50 text-blue-700 font-medium' 
@@ -289,7 +297,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
                           {isSubActive && (
                             <div className="w-1 h-1 rounded-full bg-blue-600" />
                           )}
-                        </Link>
+                        </button>
                       )
                     })}
                   </div>

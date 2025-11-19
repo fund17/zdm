@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import * as XLSX from 'xlsx'
+import { useTabCache } from '@/hooks/useTabCache'
 import { 
   Database, 
   TrendingUp, 
@@ -26,11 +27,37 @@ interface SheetListItem {
 type PeriodFilter = 'all' | 'year' | 'sixmonths' | 'month' | 'week'
 
 export default function ItcHuaweiDashboard() {
-  const [allData, setAllData] = useState<any[]>([]) // Combined data from all sheets
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [sheetList, setSheetList] = useState<SheetListItem[]>([])
   const [loadingSheetList, setLoadingSheetList] = useState(true)
+  
+  // Use tab cache for combined data
+  const { data: allData, loading, error, refresh, setData: setAllData } = useTabCache<any[]>({
+    fetchData: async () => {
+      if (sheetList.length === 0) return []
+      
+      const promises = sheetList.map(sheet => 
+        fetch(`/api/sheets/itc-huawei?sheetName=${sheet.sheetName}`)
+          .then(res => res.json())
+          .then(result => ({
+            sheetName: sheet.sheetName,
+            title: sheet.title,
+            data: result.data || []
+          }))
+      )
+      
+      const results = await Promise.all(promises)
+      const combined = results.flatMap(result => 
+        result.data.map((row: any) => ({
+          ...row,
+          _project: result.title,
+          _sheetName: result.sheetName
+        }))
+      )
+      
+      return combined
+    },
+    dependencies: [sheetList]
+  })
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all')
   const [selectedRegion, setSelectedRegion] = useState<string>('all')
   const [selectedProject, setSelectedProject] = useState<string>('all')

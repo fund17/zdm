@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import Navbar from './Navbar'
 import Sidebar from './Sidebar'
 import Footer from './Footer'
+import { TabBar } from './TabBar'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -136,6 +137,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
         {/* Main content - Fixed height, no scroll */}
         <main className="flex-1 flex flex-col overflow-hidden">
+          {/* Tab Bar */}
+          <div className="flex-none">
+            <TabBar />
+          </div>
+
           <div className="flex-1 p-6 overflow-hidden">
             {children}
           </div>

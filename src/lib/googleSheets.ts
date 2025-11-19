@@ -190,17 +190,33 @@ export const createUser = async (
     const loginTimestamp = now.toISOString()
 
     // ID, Email, Name, Password, Region, Role, IsVerified, IsActive, registerDate, phoneNo, departement, Login
+    const rowData = [
+      id,                  // ID
+      email,              // Email
+      name,               // Name
+      hashedPassword,     // Password
+      region,             // Region
+      'user',             // Role
+      'yes',              // IsVerified
+      'no',               // IsActive (pending activation by admin)
+      registerDate,       // registerDate
+      '',                 // phoneNo
+      '',                 // departement
+      loginTimestamp      // Login
+    ]
+
     await sheets.spreadsheets.values.append({
       spreadsheetId,
       range: `${sheetName}!A:L`,
       valueInputOption: 'RAW',
       requestBody: {
-        values: [[id, email, name, hashedPassword, region, 'user', 'yes', 'no', registerDate, '', '', loginTimestamp]],
+        values: [rowData],
       },
     })
 
   } catch (error) {
-    throw new Error('Failed to create user')
+    console.error('Error creating user:', error)
+    throw new Error(`Failed to create user: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 

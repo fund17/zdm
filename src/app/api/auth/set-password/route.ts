@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
+    console.error('Set password error:', error)
     return NextResponse.json(
       { 
         error: 'Failed to create account. Please try again.',

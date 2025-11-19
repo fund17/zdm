@@ -58,6 +58,13 @@ function LoginForm() {
         } catch (e) {
           // ignore
         }
+        
+        // Check if user is active
+        if (data.user && data.user.isActive === false) {
+          router.push('/pending-activation')
+          return
+        }
+        
         // Get redirect parameter or default to home
         const redirectTo = searchParams.get('redirect') || '/'
         router.push(redirectTo)

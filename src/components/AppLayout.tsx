@@ -22,13 +22,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     email: string
     region: string
     usertype: string
+    isActive?: boolean
   } | null>(null)
 
   // Check authentication status
   useEffect(() => {
     const checkAuth = async () => {
       // Public pages that don't require authentication
-      const publicPages = ['/login', '/register', '/verify', '/set-password']
+      const publicPages = ['/login', '/register', '/verify', '/set-password', '/pending-activation']
       
       // Don't check auth on public pages
       if (publicPages.includes(pathname)) {
@@ -43,6 +44,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         if (data.success && data.user) {
           setIsAuthenticated(true)
           setUser(data.user)
+          
+          // Check if user is not active, redirect to pending activation page
+          if (data.user.isActive === false) {
+            router.push('/pending-activation')
+            return
+          }
         } else {
           setIsAuthenticated(false)
           setUser(null)
@@ -81,8 +88,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     setSidebarCollapsed(!sidebarCollapsed)
   }
 
-  // If on login page or not authenticated, show content without layout
-  if (pathname === '/login' || (!isAuthenticated && !loading)) {
+  // Public pages that should not have sidebar/navbar
+  const pagesWithoutLayout = ['/login', '/register', '/verify', '/set-password', '/pending-activation']
+  
+  // If on public page or not authenticated, show content without layout
+  if (pagesWithoutLayout.includes(pathname) || (!isAuthenticated && !loading)) {
     return <>{children}</>
   }
 
@@ -93,6 +103,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
       </div>
     )
+  }
+
+  // If user is not active, don't show sidebar/navbar (extra safety check)
+  if (user && user.isActive === false) {
+    return <>{children}</>
   }
 
   return (

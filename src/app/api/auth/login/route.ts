@@ -25,17 +25,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user is verified and active
+    // Check if user is verified
     if (user.IsVerified !== 'yes') {
       return NextResponse.json(
         { success: false, message: 'Please verify your email first' },
-        { status: 403 }
-      )
-    }
-
-    if (user.IsActive !== 'yes') {
-      return NextResponse.json(
-        { success: false, message: 'Account is not active. Please contact administrator.' },
         { status: 403 }
       )
     }
@@ -97,6 +90,7 @@ export async function POST(request: NextRequest) {
       email: user.Email,
       region: user.Region || '',
       usertype: user.Role || 'user',
+      isActive: user.IsActive === 'yes',
     }
 
     const response = NextResponse.json(

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { 
@@ -13,7 +13,8 @@ import {
   ChevronRight,
   Database,
   Circle,
-  User
+  User,
+  Shield
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -24,6 +25,15 @@ interface SidebarProps {
     region: string
     usertype: string
   } | null
+}
+
+interface UserPermissions {
+  userManagement: 'no' | 'read' | 'edit'
+  home: 'no' | 'read' | 'edit'
+  dashboard: 'no' | 'read' | 'edit'
+  projects: 'no' | 'read' | 'edit'
+  absensi: 'no' | 'read' | 'edit'
+  dailyPlan: 'no' | 'read' | 'edit'
 }
 
 interface MenuItem {
@@ -43,17 +53,55 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
   const pathname = usePathname()
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
   const [isHovered, setIsHovered] = useState(false)
+  const [permissions, setPermissions] = useState<UserPermissions | null>(null)
+  const [loadingPermissions, setLoadingPermissions] = useState(true)
+
+  // Fetch user permissions
+  useEffect(() => {
+    const fetchPermissions = async () => {
+      try {
+        const response = await fetch('/api/permissions')
+        if (response.ok) {
+          const data = await response.json()
+          setPermissions(data.permissions)
+        }
+      } catch (error) {
+        console.error('Error fetching permissions:', error)
+      } finally {
+        setLoadingPermissions(false)
+      }
+    }
+
+    if (user) {
+      fetchPermissions()
+    } else {
+      setLoadingPermissions(false)
+    }
+  }, [user])
 
   // Determine if sidebar should show text (expanded state)
   const isExpanded = !collapsed || isHovered
 
-  const menuItems: MenuItem[] = [
-    {
+  // Helper function to check if menu should be shown
+  const shouldShowMenu = (permissionKey: keyof UserPermissions): boolean => {
+    if (!permissions) return false
+    return permissions[permissionKey] !== 'no'
+  }
+
+  const menuItems: MenuItem[] = []
+
+  // Home
+  if (shouldShowMenu('home')) {
+    menuItems.push({
       icon: <Home className="h-4 w-4" />,
       label: 'Home',
       href: '/'
-    },
-    {
+    })
+  }
+
+  // Dashboards
+  if (shouldShowMenu('dashboard')) {
+    menuItems.push({
       icon: <BarChart3 className="h-4 w-4" />,
       label: 'Dashboards',
       submenu: [
@@ -61,14 +109,21 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
         { label: 'ITC Huawei', href: '/dashboard/itc-huawei' },
         { label: 'PO Huawei', href: '/dashboard/po-huawei' }
       ]
-    },
-    {
+    })
+  }
+
+  // Daily Plan
+  if (shouldShowMenu('dailyPlan')) {
+    menuItems.push({
       icon: <Calendar className="h-4 w-4" />,
       label: 'Daily Plan',
       href: '/daily-plan'
-    },
+    })
+  }
 
-    {
+  // Projects
+  if (shouldShowMenu('projects')) {
+    menuItems.push({
       icon: <Database className="h-4 w-4" />,
       label: 'Projects',
       submenu: [
@@ -77,13 +132,26 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
         { label: 'RNO Huawei', href: '/rno-huawei' },
         { label: 'RNO ZTE', href: '/rno-zte' }
       ]
-    },
-        {
+    })
+  }
+
+  // Absensi
+  if (shouldShowMenu('absensi')) {
+    menuItems.push({
       icon: <Users className="h-4 w-4" />,
       label: 'Absensi',
       href: '/absensi'
-    },
-  ]
+    })
+  }
+
+  // User Management (admin only)
+  if (shouldShowMenu('userManagement')) {
+    menuItems.push({
+      icon: <Shield className="h-4 w-4" />,
+      label: 'User Management',
+      href: '/users'
+    })
+  }
 
   return (
     <aside 

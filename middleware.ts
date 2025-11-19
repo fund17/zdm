@@ -5,7 +5,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Public paths that don't require authentication
-  const publicPaths = ['/login', '/register', '/verify', '/set-password']
+  const publicPaths = ['/login', '/register', '/verify', '/set-password', '/pending-activation']
   
   // API paths that are public
   const publicApiPaths = [

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { Calendar, Users, Activity, Clock, CheckCircle2, AlertCircle, Filter, Maximize2, X, XCircle } from 'lucide-react'
+import { useTabCache } from '@/hooks/useTabCache'
 
 interface DashboardStats {
   totalRecords: number
@@ -43,6 +44,34 @@ const getActivityColor = (activityName: string, index: number) => {
 }
 
 export default function Dashboard() {
+  const [loading, setLoading] = useState(false)
+  const [selectedRegion, setSelectedRegion] = useState<string>('All')
+  const [selectedVendor, setSelectedVendor] = useState<string>('All')
+  const [selectedTeamCategory, setSelectedTeamCategory] = useState<string>('All')
+  const [selectedDateCategory, setSelectedDateCategory] = useState<string>('Today')
+  const [regions, setRegions] = useState<string[]>(['All'])
+  const [vendors, setVendors] = useState<string[]>(['All'])
+  const [teamCategories, setTeamCategories] = useState<string[]>(['All'])
+  const [flippedTeamCards, setFlippedTeamCards] = useState<{[key: number]: boolean}>({})
+  const [flippedActivityCards, setFlippedActivityCards] = useState<{[key: number]: boolean}>({})
+  const [zoomedActivityCard, setZoomedActivityCard] = useState<number | null>(null)
+  const [zoomedTeamCard, setZoomedTeamCard] = useState<number | null>(null)
+  const [zoomedStatsCard, setZoomedStatsCard] = useState<number | null>(null)
+  
+  // Use tab cache for initial data load
+  const { data: rawData } = useTabCache<any[]>({
+    fetchData: async () => {
+      const response = await fetch('/api/sheets')
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch data')
+      }
+      
+      const result = await response.json()
+      return result.data || []
+    }
+  })
+  
   const [stats, setStats] = useState<DashboardStats>({
     totalRecords: 0,
     lastUpdated: 'Loading...',
@@ -64,32 +93,14 @@ export default function Dashboard() {
     todayTeamBreakdown: [],
     topTeams: []
   })
-  const [loading, setLoading] = useState(true)
-  const [selectedRegion, setSelectedRegion] = useState<string>('All')
-  const [selectedVendor, setSelectedVendor] = useState<string>('All')
-  const [selectedTeamCategory, setSelectedTeamCategory] = useState<string>('All')
-  const [selectedDateCategory, setSelectedDateCategory] = useState<string>('Today')
-  const [regions, setRegions] = useState<string[]>(['All'])
-  const [vendors, setVendors] = useState<string[]>(['All'])
-  const [teamCategories, setTeamCategories] = useState<string[]>(['All'])
-  const [flippedTeamCards, setFlippedTeamCards] = useState<{[key: number]: boolean}>({})
-  const [flippedActivityCards, setFlippedActivityCards] = useState<{[key: number]: boolean}>({})
-  const [zoomedActivityCard, setZoomedActivityCard] = useState<number | null>(null)
-  const [zoomedTeamCard, setZoomedTeamCard] = useState<number | null>(null)
-  const [zoomedStatsCard, setZoomedStatsCard] = useState<number | null>(null)
 
   useEffect(() => {
-    const loadDashboardData = async () => {
+    if (!rawData || rawData.length === 0) return
+    
+    const loadDashboardData = () => {
       try {
-        // Fetch data from Daily Plan API
-        const response = await fetch('/api/sheets')
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch data')
-        }
-        
-        const result = await response.json()
-        const data = result.data || []
+        setLoading(true)
+        const data = rawData
         
         
         // Extract unique regions from data
@@ -487,21 +498,14 @@ export default function Dashboard() {
         })
         
       } catch (error) {
+        console.error('Error loading dashboard data:', error)
       } finally {
         setLoading(false)
       }
     }
 
     loadDashboardData()
-    
-    // Auto refresh every 5 minutes (300000 ms)
-    const refreshInterval = setInterval(() => {
-      loadDashboardData()
-    }, 300000)
-    
-    // Cleanup interval on unmount
-    return () => clearInterval(refreshInterval)
-  }, [selectedRegion, selectedVendor, selectedTeamCategory, selectedDateCategory]) // Re-run when filters change
+  }, [rawData, selectedRegion, selectedVendor, selectedTeamCategory, selectedDateCategory]) // Re-run when filters or data change
 
   const dashboardCards = [
     {

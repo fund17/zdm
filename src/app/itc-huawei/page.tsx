@@ -5,6 +5,7 @@ import { HuaweiRolloutTable } from '@/components/HuaweiRolloutTable'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { RefreshCcw, Download, Database, Upload, X, CheckCircle, AlertCircle } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import { useTabCache } from '@/hooks/useTabCache'
 
 interface SheetData {
   [key: string]: string | number
@@ -28,12 +29,6 @@ interface ImportPreview {
 }
 
 export default function ItcHuaweiPage() {
-  const [data, setData] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-  const [tableRefreshing, setTableRefreshing] = useState(false)
-  const [exporting, setExporting] = useState(false)
   const [filteredData, setFilteredData] = useState<any[]>([])
   const [sheetList, setSheetList] = useState<SheetListItem[]>([])
   const [selectedSheet, setSelectedSheet] = useState<string>('')
@@ -65,13 +60,18 @@ export default function ItcHuaweiPage() {
     totalRows: number
   } | null>(null)
   const [analyzingRegisterFile, setAnalyzingRegisterFile] = useState(false)
+  
+  // Track separate loading states
+  const [refreshing, setRefreshing] = useState(false)
+  const [tableRefreshing, setTableRefreshing] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
-  const fetchData = useCallback(async (sheetName?: string, options?: { showFullLoading?: boolean }) => {
-    try {
-      if (options?.showFullLoading !== false) setLoading(true)
+  // Use tab cache with dependency on selectedSheet
+  const { data, loading, error, refresh } = useTabCache<any[]>({
+    fetchData: async () => {
+      if (!selectedSheet) return []
       
-      const sheetToFetch = sheetName || selectedSheet
-      const response = await fetch(`/api/sheets/itc-huawei?sheetName=${sheetToFetch}`)
+      const response = await fetch(`/api/sheets/itc-huawei?sheetName=${selectedSheet}`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch data')
@@ -79,14 +79,15 @@ export default function ItcHuaweiPage() {
       
       const result = await response.json()
       
-      setData(result.data || [])
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      if (options?.showFullLoading !== false) setLoading(false)
-    }
-  }, [selectedSheet])
+      return result.data || []
+    },
+    dependencies: [selectedSheet]
+  })
+
+  const fetchData = useCallback(async (sheetName?: string, options?: { showFullLoading?: boolean }) => {
+    // Just refresh the cache
+    await refresh()
+  }, [refresh])
 
   const fetchSheetList = async () => {
     try {
@@ -117,11 +118,7 @@ export default function ItcHuaweiPage() {
     fetchSheetList()
   }, [])
 
-  useEffect(() => {
-    if (selectedSheet) {
-      fetchData(selectedSheet)
-    }
-  }, [selectedSheet, fetchData])
+  // No longer need useEffect for fetchData - the hook handles it automatically
 
   const handleRefresh = async () => {
     if (!selectedSheet) {
@@ -130,8 +127,7 @@ export default function ItcHuaweiPage() {
     }
     setRefreshing(true)
     setTableRefreshing(true)
-    // Suppress full-page loading when refresh is triggered from the table
-    await fetchData(selectedSheet, { showFullLoading: false })
+    await refresh()
     setTableRefreshing(false)
     setRefreshing(false)
   }
@@ -178,9 +174,9 @@ export default function ItcHuaweiPage() {
       setExporting(true)
       
       // Use filtered data from table - already includes all filters
-      const dataToExport = filteredData.length > 0 ? filteredData : data
+      const dataToExport = filteredData.length > 0 ? filteredData : (data || [])
       
-      if (dataToExport.length === 0) {
+      if (!dataToExport || dataToExport.length === 0) {
         displayToast('No data to export', 'error')
         setExporting(false)
         return
@@ -276,7 +272,7 @@ export default function ItcHuaweiPage() {
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Data')
       
       // Generate filename
-      const isFiltered = filteredData.length > 0 && filteredData.length < data.length
+      const isFiltered = filteredData.length > 0 && filteredData.length < (data || []).length
       const filename = `itc-huawei-${isFiltered ? 'filtered-' : ''}export-${new Date().toISOString().split('T')[0]}.xlsx`
       
       // Write file (writeFile is optimized internally)
@@ -390,7 +386,7 @@ export default function ItcHuaweiPage() {
         const duid = excelRow['DUID'] || excelRow['duid']
         
         // Find existing row in current data
-        const existingRow = data.find(row => row.DUID === duid || row.duid === duid)
+        const existingRow = (data || []).find(row => row.DUID === duid || row.duid === duid)
         
         // Count cells in this row
         const cellsInRow = Object.keys(excelRow).length
@@ -493,7 +489,7 @@ export default function ItcHuaweiPage() {
       let missingFieldsCount = 0
       
       // Get existing DUIDs from current data
-      const existingDUIDs = new Set(data.map(row => row.DUID || row.duid))
+      const existingDUIDs = new Set((data || []).map(row => row.DUID || row.duid))
       
       for (const row of jsonData) {
         // Check required fields
@@ -591,7 +587,7 @@ export default function ItcHuaweiPage() {
       
       // Refresh data
       setTableRefreshing(true)
-      await fetchData(selectedSheet, { showFullLoading: false })
+      await refresh()
       setTableRefreshing(false)
       
     } catch (error) {
@@ -668,7 +664,7 @@ export default function ItcHuaweiPage() {
       
       // Refresh data
       setTableRefreshing(true)
-      await fetchData(selectedSheet, { showFullLoading: false })
+      await refresh()
       setTableRefreshing(false)
       
     } catch (error) {
@@ -757,7 +753,7 @@ export default function ItcHuaweiPage() {
         
         <div className="flex-1 overflow-hidden">
           <HuaweiRolloutTable 
-            data={data} 
+            data={data || []} 
             onUpdateData={handleUpdateData}
             rowIdColumn="DUID"
             onFilteredDataChange={setFilteredData}

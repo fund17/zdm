@@ -213,7 +213,6 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
         throw new Error(result.error || 'Failed to fetch files')
       }
     } catch (err) {
-      console.error('Failed to fetch files:', err)
       setFilesError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setFilesLoading(false)
@@ -268,7 +267,6 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
       // Reset file input
       event.target.value = ''
     } catch (err) {
-      console.error('Failed to upload files:', err)
       setFilesError(err instanceof Error ? err.message : 'Failed to upload files')
     } finally {
       setUploading(false)
@@ -310,7 +308,6 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
         throw new Error(result.error || 'Failed to create folder')
       }
     } catch (err) {
-      console.error('Failed to create folder:', err)
       setFilesError(err instanceof Error ? err.message : 'Failed to create folder')
     } finally {
       setCreatingFolder(false)
@@ -343,7 +340,6 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
       // Refresh file list
       await fetchFiles(currentFolderId || undefined)
     } catch (err) {
-      console.error('Failed to delete file:', err)
       setFilesError(err instanceof Error ? err.message : 'Failed to delete file')
     }
   }
@@ -399,7 +395,6 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
         throw new Error('No data found')
       }
     } catch (err) {
-      console.error('Failed to fetch daily plan data:', err)
       setDailyPlanError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setDailyPlanLoading(false)

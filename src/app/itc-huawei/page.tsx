@@ -100,7 +100,6 @@ export default function ItcHuaweiPage() {
       const result = await response.json()
       setSheetList(result.data || [])
     } catch (err) {
-      console.error('Failed to fetch sheet list:', err)
       // Use fallback data if API fails
       setSheetList([
         { sheetName: 'ITCHIOH', title: 'Huawei IOH Project' },
@@ -160,7 +159,6 @@ export default function ItcHuaweiPage() {
       }
       
     } catch (error) {
-      console.error('❌ Update error:', error)
       throw error
     }
   }
@@ -181,14 +179,6 @@ export default function ItcHuaweiPage() {
       
       // Use filtered data from table - already includes all filters
       const dataToExport = filteredData.length > 0 ? filteredData : data
-      
-      console.log('📥 Export data:', {
-        filteredDataLength: filteredData.length,
-        allDataLength: data.length,
-        exportingCount: dataToExport.length,
-        visibleColumns: exportData.columns.length,
-        isFiltered: filteredData.length !== data.length && filteredData.length > 0
-      })
       
       if (dataToExport.length === 0) {
         displayToast('No data to export', 'error')
@@ -295,7 +285,6 @@ export default function ItcHuaweiPage() {
       // Show success toast
       displayToast('Export completed successfully', 'success')
     } catch (error) {
-      console.error('❌ Export failed:', error)
       displayToast(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
     } finally {
       setExporting(false)
@@ -466,7 +455,6 @@ export default function ItcHuaweiPage() {
       })
       
     } catch (error) {
-      console.error('File analysis error:', error)
       displayToast('Failed to analyze file', 'error')
     } finally {
       setAnalyzingFile(false)
@@ -549,15 +537,10 @@ export default function ItcHuaweiPage() {
         totalRows: jsonData.length
       }
       
-      console.log('📊 Register Preview:', previewData)
-      console.log('Valid rows:', validRows.length)
-      console.log('Duplicates:', duplicates.length, duplicates)
-      console.log('Missing fields:', missingFieldsCount)
       
       setRegisterPreview(previewData)
       
     } catch (error) {
-      console.error('Register file analysis error:', error)
       displayToast('Failed to analyze file', 'error')
     } finally {
       setAnalyzingRegisterFile(false)
@@ -612,7 +595,6 @@ export default function ItcHuaweiPage() {
       setTableRefreshing(false)
       
     } catch (error) {
-      console.error('Register error:', error)
       displayToast(`Register failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
     } finally {
       setRegistering(false)
@@ -690,7 +672,6 @@ export default function ItcHuaweiPage() {
       setTableRefreshing(false)
       
     } catch (error) {
-      console.error('Import error:', error)
       displayToast(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
     } finally {
       setImporting(false)

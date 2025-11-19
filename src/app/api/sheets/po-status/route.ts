@@ -172,7 +172,6 @@ export async function GET(request: NextRequest) {
     // Return all
     return NextResponse.json({ success: true, data: allData }, { status: 200 })
   } catch (error) {
-    console.error('Error fetching PO status:', error)
     return NextResponse.json(
       { success: false, message: 'Failed to fetch PO status', error: String(error) },
       { status: 500 }
@@ -244,7 +243,6 @@ export async function POST(request: NextRequest) {
       }
     }, { status: 200 })
   } catch (error) {
-    console.error('Error fetching PO status:', error)
     return NextResponse.json(
       { success: false, message: 'Failed to fetch PO status', error: String(error) },
       { status: 500 }

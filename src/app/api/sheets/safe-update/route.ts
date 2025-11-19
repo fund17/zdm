@@ -39,15 +39,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    console.log('🔒 SAFE CELL UPDATE REQUEST:', {
-      rowId,
-      columnId,
-      value,
-      oldValue,
-      rowIdentifierColumn,
-      timestamp
-    })
-
     const sheets = await getSheetsClient()
 
     // 1. GET ALL DATA to find the correct row by ID
@@ -105,14 +96,6 @@ export async function PUT(request: NextRequest) {
     
     // 5. VERIFY OLD VALUE MATCHES (optional but recommended)
     if (oldValue !== undefined && currentValue !== oldValue) {
-      console.warn('⚠️ VALUE MISMATCH WARNING:', {
-        rowId,
-        columnId,
-        currentValue,
-        expectedOldValue: oldValue,
-        message: 'Data may have been modified by another user'
-      })
-      
       // Option: Strict mode - reject if values don't match
       // return NextResponse.json({ 
       //   error: 'Data has been modified by another user',
@@ -125,20 +108,6 @@ export async function PUT(request: NextRequest) {
     const columnLetter = String.fromCharCode(65 + targetColumnIndex)
     const sheetRowIndex = actualRowIndex + 2 // +1 for header, +1 for 1-based indexing
     const range = `${sheetName}!${columnLetter}${sheetRowIndex}`
-
-    console.log('🎯 SAFE CELL TARGET VERIFIED:', {
-      rowId,
-      rowIdentifierColumn,
-      idColumnIndex,
-      actualRowIndex,
-      columnId,
-      targetColumnIndex,
-      columnLetter,
-      sheetRowIndex,
-      range,
-      currentValue,
-      newValue: value
-    })
 
     // 7. PERFORM THE UPDATE
     await sheets.spreadsheets.values.update({
@@ -158,16 +127,6 @@ export async function PUT(request: NextRequest) {
     
     const updatedValue = verificationResponse.data.values?.[0]?.[0]
     const updateSuccess = updatedValue === value
-
-    console.log('✅ SAFE UPDATE COMPLETED:', {
-      rowId,
-      range,
-      oldValue: currentValue,
-      newValue: value,
-      verifiedValue: updatedValue,
-      updateSuccess,
-      timestamp: new Date().toISOString()
-    })
 
     const verification: CellVerification = {
       currentValue,
@@ -189,12 +148,6 @@ export async function PUT(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('❌ SAFE UPDATE ERROR:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      timestamp: new Date().toISOString()
-    })
-    
     return NextResponse.json(
       { 
         error: 'Failed to safely update cell',

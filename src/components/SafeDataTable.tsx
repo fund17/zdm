@@ -55,7 +55,6 @@ export function SafeDataTable({ data, onUpdateData, rowIdColumn = 'id' }: DataTa
   const handleCellEdit = useCallback((rowIndex: number, columnId: string, currentValue: any) => {
     const rowId = getRowId(rowIndex)
     if (!rowId) {
-      console.error('Cannot edit: Row ID not found', { rowIndex, rowIdColumn })
       return
     }
     setEditingCell({ rowId, columnId, value: currentValue, oldValue: currentValue })
@@ -69,7 +68,6 @@ export function SafeDataTable({ data, onUpdateData, rowIdColumn = 'id' }: DataTa
     // Find current row index by ID (it might have changed!)
     const currentRowIndex = localData.findIndex(row => row[rowIdColumn]?.toString() === rowId)
     if (currentRowIndex === -1) {
-      console.error('Row not found by ID', { rowId, rowIdColumn })
       setEditingCell(null)
       return
     }
@@ -86,7 +84,6 @@ export function SafeDataTable({ data, onUpdateData, rowIdColumn = 'id' }: DataTa
       } catch (error) {
         // Revert local changes on error
         setLocalData([...data])
-        console.error('❌ Safe cell update failed:', error)
       }
     }
 

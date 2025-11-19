@@ -57,14 +57,12 @@ const safeSetItem = (key: string, value: string): boolean => {
     // Check if storage would exceed 4MB (safe limit)
     const estimatedSize = value.length + key.length
     if (estimatedSize > 4 * 1024 * 1024) {
-      console.warn('Data too large for localStorage, skipping cache')
       return false
     }
     localStorage.setItem(key, value)
     return true
   } catch (e) {
     if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-      console.warn('localStorage quota exceeded, clearing old cache')
       // Try to clear old PO caches and retry
       localStorage.removeItem('po_huawei_full_data_cache')
       localStorage.removeItem('po_huawei_dashboard_cache')
@@ -72,11 +70,9 @@ const safeSetItem = (key: string, value: string): boolean => {
         localStorage.setItem(key, value)
         return true
       } catch (retryError) {
-        console.error('Still failed after clearing cache')
         return false
       }
     }
-    console.error('Error setting localStorage:', e)
     return false
   }
 }
@@ -262,7 +258,6 @@ export default function LandingDashboard() {
       loadPOData()
 
     } catch (error) {
-      console.error('Error loading summary data:', error)
       setLoading(false)
       setPoLoading(false)
     }
@@ -328,7 +323,6 @@ export default function LandingDashboard() {
         if (cacheSaved) {
           safeSetItem(fullDataCacheTimestampKey, Date.now().toString())
         } else {
-          console.warn('PO full data cache not saved due to size limitations')
         }
         
         const uniqueSiteIDs = new Set(data.map((row: any) => row['Site ID'] || row['Site ID PO']))
@@ -403,7 +397,6 @@ export default function LandingDashboard() {
         }))
       }
     } catch (error) {
-      console.error('Error loading PO data:', error)
     } finally {
       setPoLoading(false)
     }

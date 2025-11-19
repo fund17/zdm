@@ -66,7 +66,6 @@ function LoginForm() {
         setError(data.message || 'Login failed')
       }
     } catch (error) {
-      console.error('Login error:', error)
       setError('An error occurred. Please try again.')
     } finally {
       setLoading(false)

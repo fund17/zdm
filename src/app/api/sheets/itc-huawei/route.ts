@@ -48,7 +48,6 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('❌ ERROR FETCHING ITC HUAWEI DATA:', error)
     return NextResponse.json(
       { 
         error: 'Failed to fetch sheet data',

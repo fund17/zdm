@@ -34,7 +34,6 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, sidebarCollapsed }) =>
           setUser(data.user)
         }
       } catch (error) {
-        console.error('Failed to fetch user session:', error)
       } finally {
         setLoading(false)
       }
@@ -49,7 +48,6 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, sidebarCollapsed }) =>
       router.push('/login')
       router.refresh()
     } catch (error) {
-      console.error('Logout error:', error)
     }
   }
 

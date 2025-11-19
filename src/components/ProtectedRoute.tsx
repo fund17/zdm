@@ -47,7 +47,6 @@ export default function ProtectedRoute({ children, allowedUserTypes }: Protected
 
         setAuthorized(true)
       } catch (error) {
-        console.error('Auth check failed:', error)
         router.push('/login')
       } finally {
         setLoading(false)

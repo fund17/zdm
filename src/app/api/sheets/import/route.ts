@@ -16,7 +16,6 @@ export async function POST(request: NextRequest) {
     const { data } = body
 
     if (!data || !Array.isArray(data) || data.length === 0) {
-      console.error('❌ Invalid data format:', { data: typeof data, isArray: Array.isArray(data) })
       return NextResponse.json(
         { error: 'No data provided or invalid format' },
         { status: 400 }
@@ -27,7 +26,6 @@ export async function POST(request: NextRequest) {
     
     // Verify environment variables
     if (!SHEET_ID) {
-      console.error('❌ GOOGLE_SHEET_ID not configured')
       return NextResponse.json(
         { error: 'Sheet ID not configured' },
         { status: 500 }
@@ -35,7 +33,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
-      console.error('❌ Google credentials not configured')
       return NextResponse.json(
         { error: 'Google credentials not configured' },
         { status: 500 }
@@ -62,7 +59,6 @@ export async function POST(request: NextRequest) {
     const headers = headerResponse.data.values?.[0] || []
     
     if (headers.length === 0) {
-      console.error('❌ No headers found in the sheet')
       return NextResponse.json(
         { error: 'No headers found in the sheet' },
         { status: 400 }
@@ -73,7 +69,6 @@ export async function POST(request: NextRequest) {
     const rowIdIndex = headers.findIndex((h: string) => h === 'RowId')
     
     if (rowIdIndex === -1) {
-      console.error('❌ RowId column not found. Available headers:', headers)
       return NextResponse.json(
         { error: 'RowId column not found in the sheet' },
         { status: 400 }
@@ -119,8 +114,6 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('❌ Import error:', error)
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
     
     let errorMessage = 'Failed to import data'
     let errorDetails = 'Unknown error'

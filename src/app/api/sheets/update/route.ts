@@ -61,7 +61,6 @@ export async function PUT(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('API Error:', error)
     return NextResponse.json(
       { 
         error: 'Failed to update cell in Google Sheets',

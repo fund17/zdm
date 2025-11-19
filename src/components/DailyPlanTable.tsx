@@ -289,7 +289,6 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       
       // debug logs removed
     } catch (error) {
-      console.error('Export failed:', error)
       alert('Failed to export data: ' + (error instanceof Error ? error.message : 'Unknown error'))
     } finally {
       setExporting(false)
@@ -531,7 +530,6 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       if (columnFilters.length > 0) {
         const validFilters = columnFilters.filter(filter => validColumnIds.includes(filter.id))
         if (validFilters.length !== columnFilters.length) {
-          console.log('🧹 Cleaning invalid column filters:', columnFilters.filter(f => !validColumnIds.includes(f.id)))
           setColumnFilters(validFilters)
           // Also update localStorage
           if (typeof window !== 'undefined') {
@@ -544,7 +542,6 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       if (sorting.length > 0) {
         const validSorting = sorting.filter(sort => validColumnIds.includes(sort.id))
         if (validSorting.length !== sorting.length) {
-          console.log('🧹 Cleaning invalid sorting:', sorting.filter(s => !validColumnIds.includes(s.id)))
           setSorting(validSorting)
         }
       }

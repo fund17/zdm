@@ -35,7 +35,6 @@ export function useAuth(): UseAuthReturn {
           setUser(null)
         }
       } catch (error) {
-        console.error('Auth check failed:', error)
         setUser(null)
       } finally {
         setLoading(false)
@@ -52,7 +51,6 @@ export function useAuth(): UseAuthReturn {
       router.push('/login')
       router.refresh()
     } catch (error) {
-      console.error('Logout error:', error)
     }
   }
 

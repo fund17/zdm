@@ -30,12 +30,6 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
     return NextResponse.json({ error: 'Google Sheet ID is not configured' }, { status: 500 })
   }
 
-  console.log('📦 BULK IMPORT REQUEST:', {
-    sheetName: targetSheetName,
-    rowCount: updates.length,
-    timestamp: new Date().toISOString()
-  })
-
   const sheets = await getSheetsClient()
 
   // Get all data from Google Sheets
@@ -52,7 +46,6 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
   const headers = rows[0] as string[]
   const dataRows = rows.slice(1)
 
-  console.log(`📊 Sheet has ${headers.length} columns and ${dataRows.length} rows`)
 
   // Find DUID column index
   const duidColumnIndex = headers.findIndex(h => 
@@ -65,7 +58,6 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
     return NextResponse.json({ error: 'DUID column not found in sheet' }, { status: 400 })
   }
 
-  console.log(`🔍 DUID column found at index ${duidColumnIndex} (${headers[duidColumnIndex]})`)
 
   // Prepare batch updates array
   const batchUpdates: Array<{
@@ -82,7 +74,6 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
     const duid = excelRow['DUID'] || excelRow['duid']
     
     if (!duid) {
-      console.log('⚠️ Skipping row without DUID')
       cellsSkipped += Object.keys(excelRow).length
       continue
     }
@@ -101,7 +92,6 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
     }
 
     if (actualRowIndex === -1) {
-      console.log(`⚠️ DUID ${duid} not found in sheet - skipping row`)
       cellsSkipped += Object.keys(excelRow).length
       continue
     }
@@ -123,7 +113,6 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
       )
 
       if (targetColumnIndex === -1) {
-        console.log(`⚠️ Column not found: ${excelKey}`)
         cellsSkipped++
         continue
       }
@@ -138,7 +127,6 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
       if (isDateColumn && existingRow) {
         const existingValue = existingRow[targetColumnIndex]
         if (existingValue && existingValue !== '' && existingValue !== null) {
-          console.log(`🔒 Protected date column: ${excelKey} in DUID ${duid}`)
           cellsSkipped++
           continue // Skip this cell only
         }
@@ -174,7 +162,6 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
     }
   }
 
-  console.log(`📊 Batch update summary: ${cellsUpdated} cells to update, ${cellsSkipped} cells skipped`)
 
   // Execute batch update if there are updates
   if (batchUpdates.length > 0) {
@@ -186,7 +173,6 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
       }
     })
 
-    console.log(`✅ Batch update completed: ${batchUpdates.length} cells updated`)
   }
 
   return NextResponse.json({
@@ -230,16 +216,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    console.log('🔒 ITC HUAWEI UPDATE REQUEST:', {
-      rowId,
-      columnId,
-      value,
-      oldValue,
-      rowIdentifierColumn,
-      sheetName: targetSheetName,
-      timestamp
-    })
-
     const sheets = await getSheetsClient()
 
     // Get all data to find correct row
@@ -256,10 +232,6 @@ export async function PUT(request: NextRequest) {
     const headers = rows[0] as string[]
     const dataRows = rows.slice(1)
 
-    console.log(`📊 Google Sheets has ${dataRows.length} data rows`)
-    console.log(`🔍 Looking for DUID: "${rowId}"`)
-    console.log(`  📏 Length: ${rowId.toString().length}`)
-    console.log(`  🔤 Type: ${typeof rowId}`)
 
     // Find row by unique ID
     const idColumnIndex = headers.indexOf(rowIdentifierColumn)
@@ -269,13 +241,10 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log(`📍 DUID column index: ${idColumnIndex} (column ${String.fromCharCode(65 + idColumnIndex)})`)
 
     // Log first 5 DUIDs from Google Sheets for comparison
-    console.log('🔍 First 5 DUIDs in Google Sheets:')
     dataRows.slice(0, 5).forEach((row, idx) => {
       const sheetDuid = row[idColumnIndex]?.toString()
-      console.log(`  ${idx + 1}. "${sheetDuid}" (length: ${sheetDuid?.length})`)
     })
 
     let actualRowIndex = -1
@@ -297,10 +266,6 @@ export async function PUT(request: NextRequest) {
       if (sheetDuid === searchDuid) {
         actualRowIndex = i
         rowData = dataRows[i]
-        console.log(`✅ EXACT MATCH FOUND at row ${i + 2}`)
-        console.log(`  Sheet DUID: "${sheetDuid}" (length: ${sheetDuid.length})`)
-        console.log(`  Search DUID: "${searchDuid}" (length: ${searchDuid.length})`)
-        console.log(`  Exact match: ${sheetDuid === searchDuid}`)
         break
       }
       
@@ -312,43 +277,28 @@ export async function PUT(request: NextRequest) {
         if (normalizedSheet === normalizedSearch) {
           actualRowIndex = i
           rowData = dataRows[i]
-          console.log(`✅ NORMALIZED MATCH FOUND at row ${i + 2}`)
-          console.log(`  Sheet DUID (original): "${sheetDuid}"`)
-          console.log(`  Sheet DUID (normalized): "${normalizedSheet}"`)
-          console.log(`  Search DUID (original): "${searchDuid}"`)
-          console.log(`  Search DUID (normalized): "${normalizedSearch}"`)
           break
         }
         
         // Log very similar DUIDs (for debugging)
         if (sheetDuid.includes(searchDuid.substring(0, 15))) {
-          console.log(`💡 Similar DUID at row ${i + 2}: "${sheetDuid}"`)
-          console.log(`  Difference: Sheet has ${sheetDuid.length} chars, Search has ${searchDuid.length} chars`)
         }
       }
     }
 
     if (actualRowIndex === -1 || !rowData) {
-      console.error(`❌ DUID NOT FOUND IN GOOGLE SHEETS`)
-      console.log(`  🔍 Searched for: "${rowId}" (length: ${rowId.toString().length})`)
-      console.log(`  📊 Total rows searched: ${dataRows.length}`)
-      console.log(`  📊 Total DUIDs collected: ${allDuids.length}`)
       
       // Character-by-character comparison with first 3 DUIDs
-      console.log(`\n🔬 CHARACTER COMPARISON with first 3 DUIDs:`)
       allDuids.slice(0, 3).forEach(({ index, duid, length }) => {
-        console.log(`\n  Row ${index}: "${duid}" (length: ${length})`)
         const searchStr = rowId.toString()
         const minLength = Math.min(duid.length, searchStr.length)
         
         for (let i = 0; i < minLength; i++) {
           if (duid[i] !== searchStr[i]) {
-            console.log(`    ❌ Diff at position ${i}: Sheet='${duid[i]}' (code ${duid.charCodeAt(i)}) vs Search='${searchStr[i]}' (code ${searchStr.charCodeAt(i)})`)
           }
         }
         
         if (duid.length !== searchStr.length) {
-          console.log(`    ⚠️ Length difference: Sheet=${duid.length}, Search=${searchStr.length}`)
         }
       })
       
@@ -358,9 +308,7 @@ export async function PUT(request: NextRequest) {
         .slice(0, 5)
       
       if (partialMatches.length > 0) {
-        console.log(`\n  💡 Potential partial matches:`)
         partialMatches.forEach(({ index, duid, length }) => {
-          console.log(`    Row ${index}: "${duid}" (length: ${length})`)
         })
       }
       
@@ -370,9 +318,7 @@ export async function PUT(request: NextRequest) {
         .slice(0, 3)
       
       if (startMatches.length > 0) {
-        console.log(`\n  🎯 DUIDs starting with same prefix:`)
         startMatches.forEach(({ index, duid, length }) => {
-          console.log(`    Row ${index}: "${duid}" (length: ${length})`)
         })
       }
       
@@ -411,47 +357,25 @@ export async function PUT(request: NextRequest) {
     }
     
     if (targetColumnIndex === -1) {
-      console.error(`❌ Column '${columnId}' not found in headers`)
-      console.error(`Available headers: ${headers.join(', ')}`)
       return NextResponse.json({ 
         error: `Column '${columnId}' not found`,
         availableColumns: headers
       }, { status: 400 })
     }
     
-    console.log(`✅ Column found: "${columnId}" -> "${headers[targetColumnIndex]}" (index: ${targetColumnIndex})`)
 
     // Get current value for verification
     const currentValue = rowData[targetColumnIndex]
 
-    console.log('🔍 VERIFICATION:', {
-      rowId,
-      actualRowIndex,
-      sheetRowNumber: actualRowIndex + 2, // +1 for header, +1 for 1-based indexing
-      currentValue,
-      expectedOldValue: oldValue,
-      newValue: value
-    })
-
     // Optional: verify old value matches
     if (oldValue !== undefined && currentValue !== oldValue) {
-      console.warn('⚠️ OLD VALUE MISMATCH:', {
-        expected: oldValue,
-        actual: currentValue,
-        proceedingAnyway: true
-      })
+      // Warning: values don't match, but proceeding anyway
     }
 
     // Calculate cell range (A1 notation)
     const sheetRowNumber = actualRowIndex + 2 // +1 for header, +1 for 1-based
     const columnLetter = String.fromCharCode(65 + targetColumnIndex) // A=65
     const cellRange = `${targetSheetName}!${columnLetter}${sheetRowNumber}`
-
-    console.log('📝 UPDATING CELL:', {
-      cellRange,
-      oldValue: currentValue,
-      newValue: value
-    })
 
     // Update the cell
     await sheets.spreadsheets.values.update({
@@ -461,14 +385,6 @@ export async function PUT(request: NextRequest) {
       requestBody: {
         values: [[value]]
       }
-    })
-
-    console.log('✅ UPDATE SUCCESS:', {
-      cellRange,
-      rowId,
-      columnId,
-      value,
-      timestamp: new Date().toISOString()
     })
 
     return NextResponse.json({
@@ -486,7 +402,6 @@ export async function PUT(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('❌ ITC HUAWEI UPDATE ERROR:', error)
     return NextResponse.json(
       {
         error: 'Failed to update cell',

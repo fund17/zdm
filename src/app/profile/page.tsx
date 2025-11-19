@@ -72,7 +72,6 @@ export default function ProfilePage() {
           router.push('/login')
         }
       } catch (error) {
-        console.error('Failed to fetch user profile:', error)
         router.push('/login')
       } finally {
         setLoading(false)
@@ -138,7 +137,6 @@ export default function ProfilePage() {
         setMessageType('error')
       }
     } catch (error) {
-      console.error('Change password error:', error)
       setMessage('An error occurred. Please try again.')
       setMessageType('error')
     } finally {
@@ -168,7 +166,6 @@ export default function ProfilePage() {
         setMessageType('error')
       }
     } catch (error) {
-      console.error('Profile update error:', error)
       setMessage('An error occurred. Please try again.')
       setMessageType('error')
     }
@@ -599,7 +596,6 @@ export default function ProfilePage() {
                                 body: JSON.stringify({ loginAlerts: newValue }),
                               })
                             } catch (error) {
-                              console.error('Failed to save preference:', error)
                             }
                           }}
                           className="sr-only peer"

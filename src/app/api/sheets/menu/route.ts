@@ -82,7 +82,6 @@ export async function GET() {
     })
 
   } catch (error) {
-    console.error('❌ Error fetching menu data:', error)
     // debug logs removed
     
     // Return fallback menu data instead of error - matching sheet Menu structure

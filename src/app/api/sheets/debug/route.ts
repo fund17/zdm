@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
       debug
     })
   } catch (error) {
-    console.error('Debug API Error:', error)
     return NextResponse.json(
       { 
         error: 'Failed to fetch debug data',

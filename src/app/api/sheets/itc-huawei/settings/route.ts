@@ -95,7 +95,6 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('❌ ITC HUAWEI SETTINGS ERROR:', error)
 
     return NextResponse.json(
       {

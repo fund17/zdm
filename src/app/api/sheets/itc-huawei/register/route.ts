@@ -138,7 +138,6 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('❌ Register DUID error:', error)
     return NextResponse.json(
       { 
         error: 'Failed to register DUIDs', 

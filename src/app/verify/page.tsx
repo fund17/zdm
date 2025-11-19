@@ -94,7 +94,6 @@ function VerifyForm() {
         inputRefs.current[0]?.focus()
       }
     } catch (error) {
-      console.error('Verification error:', error)
       setError('An error occurred. Please try again.')
     } finally {
       setLoading(false)
@@ -125,7 +124,6 @@ function VerifyForm() {
         setError(data.error || 'Failed to resend code')
       }
     } catch (error) {
-      console.error('Resend error:', error)
       setError('Failed to resend code. Please try again.')
     } finally {
       setResending(false)

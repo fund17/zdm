@@ -49,7 +49,6 @@ export const getSheetMetadata = async (
       modifiedTime: response.data.modifiedTime || undefined
     }
   } catch (error) {
-    console.error('Error fetching sheet metadata:', error)
     return {}
   }
 }
@@ -86,7 +85,6 @@ export const getSheetData = async (
 
     return data
   } catch (error) {
-    console.error('Error fetching sheet data:', error)
     throw new Error('Failed to fetch data from Google Sheets')
   }
 }
@@ -164,7 +162,6 @@ export const getUserByEmail = async (email: string): Promise<User | null> => {
       Login: userRow[getColumnIndex('Login')] || '',
     }
   } catch (error) {
-    console.error('Error getting user by email:', error)
     return null
   }
 }
@@ -202,9 +199,7 @@ export const createUser = async (
       },
     })
 
-    console.log('✅ User created:', email)
   } catch (error) {
-    console.error('Error creating user:', error)
     throw new Error('Failed to create user')
   }
 }
@@ -259,9 +254,7 @@ export const createVerificationCode = async (
       },
     })
 
-    console.log('✅ Verification code created for:', email)
   } catch (error) {
-    console.error('Error creating verification code:', error)
     throw new Error('Failed to create verification code')
   }
 }
@@ -315,7 +308,6 @@ export const getVerificationCode = async (
       CreatedAt: codeRow[6] || '',
     }
   } catch (error) {
-    console.error('Error getting verification code:', error)
     return null
   }
 }
@@ -360,9 +352,7 @@ export const markCodeAsUsed = async (email: string, code: string): Promise<void>
       },
     })
 
-    console.log('✅ Code marked as used:', email)
   } catch (error) {
-    console.error('Error marking code as used:', error)
     throw new Error('Failed to mark code as used')
   }
 }
@@ -488,7 +478,6 @@ export const checkRateLimit = async (
       remainingAttempts: maxAttempts - newAttemptCount,
     }
   } catch (error) {
-    console.error('Error checking rate limit:', error)
     // Allow on error to prevent blocking legitimate users
     return { allowed: true, remainingAttempts: 5 }
   }

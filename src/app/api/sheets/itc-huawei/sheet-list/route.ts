@@ -44,7 +44,6 @@ export async function GET() {
       data: sheetList,
     })
   } catch (error) {
-    console.error('Error fetching sheet list:', error)
     return NextResponse.json(
       { error: 'Failed to fetch sheet list' },
       { status: 500 }

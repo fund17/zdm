@@ -123,7 +123,6 @@ export function DataTableWithTracking({ data, onUpdateData, showFilters = false 
         // Revert local changes on error
         setLocalData([...data])
         updateCellStatus(rowIndex, columnId, 'error')
-        console.error('❌ Failed to update cell:', error)
       }
     }
 

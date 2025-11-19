@@ -77,9 +77,7 @@ ZMG Management System
       `,
     })
     
-    console.log('✅ Verification email sent to:', email)
   } catch (error) {
-    console.error('❌ Failed to send email:', error)
     throw new Error('Failed to send verification email')
   }
 }
@@ -218,9 +216,7 @@ ZMG Management System Security
       `,
     })
     
-    console.log('✅ Login alert email sent to:', email)
   } catch (error) {
-    console.error('❌ Failed to send login alert email:', error)
     // Don't throw error, login alert email is not critical
   }
 }
@@ -289,9 +285,7 @@ export async function sendWelcomeEmail(
       `,
     })
     
-    console.log('✅ Welcome email sent to:', email)
   } catch (error) {
-    console.error('❌ Failed to send welcome email:', error)
     // Don't throw error, welcome email is not critical
   }
 }

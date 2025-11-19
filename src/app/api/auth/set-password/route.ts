@@ -72,9 +72,7 @@ export async function POST(request: NextRequest) {
     await createUser(email, name, hashedPassword, region || '')
 
     // Send welcome email (non-blocking)
-    sendWelcomeEmail(email, name).catch(err => 
-      console.error('Failed to send welcome email:', err)
-    )
+    sendWelcomeEmail(email, name).catch(err => console.error('Welcome email error:', err))
 
     return NextResponse.json({
       success: true,
@@ -82,7 +80,6 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('❌ Set password error:', error)
     return NextResponse.json(
       { 
         error: 'Failed to create account. Please try again.',

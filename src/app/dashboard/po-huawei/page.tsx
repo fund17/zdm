@@ -157,12 +157,22 @@ const getMainProject = (row: any): string => {
 
 // Helper function to get status from row (find status column dynamically)
 const getStatus = (row: any): string => {
+  // First try standardized column name from API normalization
+  if (row['PO Status']) {
+    return row['PO Status'].toString()
+  }
+  
+  // Fallback: search for status column (case-insensitive)
   const keys = Object.keys(row)
-  const statusKey = keys.find(key => 
-    key.toLowerCase().includes('status') && 
-    !key.toLowerCase().includes('site') &&
-    !key.toLowerCase().includes('payment')
-  )
+  const statusKey = keys.find(key => {
+    const keyLower = key.toLowerCase().trim()
+    return (keyLower === 'po status' || 
+            keyLower === 'postatus' || 
+            keyLower === 'status po') &&
+           !keyLower.includes('site') &&
+           !keyLower.includes('payment')
+  })
+  
   return statusKey && row[statusKey] ? row[statusKey].toString() : 'Unknown'
 }
 

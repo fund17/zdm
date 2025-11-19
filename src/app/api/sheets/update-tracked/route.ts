@@ -38,14 +38,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    console.log('🔄 CELL UPDATE REQUEST:', {
-      rowIndex,
-      columnId,
-      value,
-      oldValue,
-      timestamp
-    })
-
     const sheets = await getSheetsClient()
 
     // First, get the current data to find column index
@@ -74,15 +66,6 @@ export async function PUT(request: NextRequest) {
     
     // Create the range
     const range = `${sheetName}!${columnLetter}${sheetRowIndex}`
-    
-    console.log('🎯 CELL TARGET:', {
-      columnId,
-      columnIndex,
-      columnLetter,
-      tableRowIndex: rowIndex,
-      sheetRowIndex,
-      range
-    })
 
     // Get current value before update (for verification)
     const currentCellResponse = await sheets.spreadsheets.values.get({
@@ -91,13 +74,6 @@ export async function PUT(request: NextRequest) {
     })
     
     const currentValue = currentCellResponse.data.values?.[0]?.[0] || ''
-    
-    console.log('📝 VALUE CHANGE:', {
-      currentValue,
-      oldValueFromClient: oldValue,
-      newValue: value,
-      valuesMatch: currentValue === oldValue
-    })
     
     // Update the specific cell
     await sheets.spreadsheets.values.update({
@@ -119,7 +95,6 @@ export async function PUT(request: NextRequest) {
       range
     }
     
-    console.log('✅ CELL UPDATE SUCCESS:', updateLog)
 
     const responseData: UpdateResponse = {
       success: true,
@@ -137,12 +112,6 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(responseData)
     
   } catch (error) {
-    console.error('❌ CELL UPDATE ERROR:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      timestamp: new Date().toISOString()
-    })
-    
     return NextResponse.json(
       { 
         error: 'Failed to update cell in Google Sheets',

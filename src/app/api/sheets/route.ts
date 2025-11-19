@@ -91,7 +91,6 @@ export async function GET(request: NextRequest) {
       message: 'Data fetched successfully'
     })
   } catch (error) {
-    console.error('API Error:', error)
     return NextResponse.json(
       { 
         error: 'Failed to fetch data from Google Sheets',

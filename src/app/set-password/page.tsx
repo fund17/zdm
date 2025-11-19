@@ -71,7 +71,6 @@ function SetPasswordForm() {
         setError(data.error || 'Failed to create account')
       }
     } catch (error) {
-      console.error('Set password error:', error)
       setError('An error occurred. Please try again.')
     } finally {
       setLoading(false)

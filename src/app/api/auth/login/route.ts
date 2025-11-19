@@ -69,7 +69,6 @@ export async function POST(request: NextRequest) {
       const loginIndex = headers.findIndex(h => h === 'Login')
       
       if (emailIndex === -1 || loginIndex === -1) {
-        console.error('Required columns not found in sheet')
         return
       }
 
@@ -89,7 +88,6 @@ export async function POST(request: NextRequest) {
         })
       }
     } catch (error) {
-      console.error('Error updating last_login:', error)
       // Don't fail login if update fails
     }
 
@@ -127,12 +125,10 @@ export async function POST(request: NextRequest) {
     
     // Send email asynchronously without blocking response
     sendLoginAlertEmail(user.Email, user.Name, ipAddress, userAgent).catch(err => {
-      console.error('Failed to send login alert email:', err)
     })
 
     return response
   } catch (error) {
-    console.error('Login error:', error)
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }

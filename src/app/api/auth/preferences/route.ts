@@ -15,7 +15,6 @@ export async function POST(request: NextRequest) {
     
     // For now, just return success
     // In future, can save to Google Sheets user preferences column
-    console.log('Login alerts preference updated:', loginAlerts)
 
     return NextResponse.json(
       {
@@ -25,7 +24,6 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    console.error('Preferences update error:', error)
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }

@@ -44,20 +44,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('📋 FETCHING COLUMN SETTINGS:', {
-      spreadsheetId,
-      settingSheetName,
-      timestamp: new Date().toISOString()
-    })
-
     // Fetch settings data from the setting sheet
     const settingsData = await getSheetData(spreadsheetId, settingSheetName)
-
-    console.log('📊 SETTINGS FETCH RESULT:', {
-      success: !!settingsData,
-      dataType: Array.isArray(settingsData) ? 'array' : typeof settingsData,
-      length: settingsData?.length || 0
-    })
 
     if (!settingsData || settingsData.length === 0) {
       return NextResponse.json(
@@ -65,15 +53,6 @@ export async function GET(request: NextRequest) {
         { status: 404 }
       )
     }
-
-    // Log raw data from settings sheet for debugging
-    console.log('🔍 RAW SETTINGS DATA:', {
-      sheetName: settingSheetName,
-      rowCount: settingsData.length,
-      firstRow: settingsData[0],
-      columnNames: settingsData.length > 0 ? Object.keys(settingsData[0]) : [],
-      allRows: settingsData.slice(0, 5) // Show first 5 rows for debugging
-    })
 
     // Parse and normalize column configuration
     const columnConfigs: ColumnConfig[] = settingsData.map((row: any) => {
@@ -119,7 +98,6 @@ export async function GET(request: NextRequest) {
     // Ensure RowId column exists for table operations (must be hidden)
     const hasRowId = columnConfigs.some(config => config.name === 'RowId')
     if (!hasRowId) {
-      console.log('⚠️ Adding missing RowId column configuration')
       columnConfigs.unshift({
         name: 'RowId',
         type: 'string',
@@ -133,23 +111,12 @@ export async function GET(request: NextRequest) {
       if (rowIdConfig) {
         rowIdConfig.show = false
         rowIdConfig.editable = false
-        console.log('✅ RowId column found and configured as hidden/read-only')
       }
     }
 
     // Separate visible and hidden columns for logging
     const visibleColumns = columnConfigs.filter(c => c.show)
     const editableColumns = columnConfigs.filter(c => c.editable)
-
-    console.log('⚙️ COLUMN CONFIGURATION PARSED:', {
-      totalColumns: columnConfigs.length,
-      visibleColumns: visibleColumns.length,
-      editableColumns: editableColumns.length,
-      rowIdColumn: columnConfigs.find(c => c.name === 'RowId') ? 'Found (Hidden)' : 'Missing',
-      hiddenColumns: columnConfigs.filter(c => !c.show).map(c => c.name),
-      readOnlyColumns: columnConfigs.filter(c => c.show && !c.editable).map(c => c.name),
-      editableColumnsList: editableColumns.map(c => `${c.name}(${c.type})`)
-    })
 
     return NextResponse.json({
       success: true,
@@ -173,12 +140,6 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('❌ COLUMN SETTINGS ERROR:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      timestamp: new Date().toISOString()
-    })
-
     return NextResponse.json(
       {
         error: 'Failed to fetch column settings',

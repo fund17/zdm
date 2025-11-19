@@ -36,14 +36,12 @@ export async function PUT(request: Request) {
     }
 
     const startTime = Date.now()
-    console.log(`📝 Batch update request: ${cellUpdates.length} cells to update`)
 
     // Get Google Sheets client
     const { sheets, spreadsheetId } = await getGoogleSheetsClient()
 
     // Determine which sheet to use (default or specified)
     const targetSheetName = sheetName || process.env.GOOGLE_SHEET_NAME || 'Sheet1'
-    console.log(`📊 Target sheet: ${targetSheetName}`)
 
     // Get the sheet data to find row and column indices
     const response = await sheets.spreadsheets.values.get({
@@ -66,7 +64,6 @@ export async function PUT(request: Request) {
     })
 
     if (rowIdColIndex === -1) {
-      console.error(`❌ Row identifier column '${rowIdentifierColumn}' not found in headers:`, headers)
       return NextResponse.json(
         { error: `Column '${rowIdentifierColumn}' not found in sheet` },
         { status: 404 }
@@ -83,7 +80,6 @@ export async function PUT(request: Request) {
       }
     })
 
-    console.log(`📋 Found ${duidToRowIndex.size} rows in sheet`)
 
     // Prepare batch update requests for ALL cells at once
     const batchUpdateRequests: any[] = []
@@ -96,7 +92,6 @@ export async function PUT(request: Request) {
       // Find row index
       const rowIndex = duidToRowIndex.get(String(duid).trim())
       if (rowIndex === undefined) {
-        console.warn(`⚠️ DUID '${duid}' not found in sheet`)
         skippedCells++
         continue
       }
@@ -115,7 +110,6 @@ export async function PUT(request: Request) {
       })
 
       if (colIndex === -1) {
-        console.warn(`⚠️ Column '${columnId}' not found in headers`)
         skippedCells++
         continue
       }
@@ -133,7 +127,6 @@ export async function PUT(request: Request) {
     }
 
     if (batchUpdateRequests.length === 0) {
-      console.warn('⚠️ No valid cells to update')
       return NextResponse.json(
         { error: 'No valid cells to update', skippedCells },
         { status: 400 }
@@ -141,7 +134,6 @@ export async function PUT(request: Request) {
     }
 
     // Execute SINGLE batch update with ALL cells
-    console.log(`🚀 Executing SINGLE batch update for ${batchUpdateRequests.length} cells...`)
     
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId,
@@ -153,9 +145,7 @@ export async function PUT(request: Request) {
 
     const updateTime = Date.now() - startTime
 
-    console.log(`✅ Batch update completed: ${processedCells} cells updated in ${updateTime}ms`)
     if (skippedCells > 0) {
-      console.warn(`⚠️ Skipped ${skippedCells} cells (not found)`)
     }
 
     return NextResponse.json({
@@ -166,7 +156,6 @@ export async function PUT(request: Request) {
     })
 
   } catch (error) {
-    console.error('❌ Batch update error:', error)
     return NextResponse.json(
       { 
         error: 'Failed to update data',

@@ -105,8 +105,36 @@ export async function GET(request: NextRequest) {
             _spreadsheet: spreadsheetId 
           }
           
+          // Map headers with normalization for common column names
           headers.forEach((header, index) => {
-            rowData[header] = row[index] || ''
+            const value = row[index] || ''
+            
+            // Normalize column names (case-insensitive, remove extra spaces)
+            const normalizedHeader = header.trim()
+            const headerLower = normalizedHeader.toLowerCase()
+            
+            // Normalize PO Status column
+            if (headerLower === 'po status' || 
+                headerLower === 'postatus' || 
+                headerLower === 'status po') {
+              rowData['PO Status'] = value
+            }
+            // Normalize Invoice Pending column
+            else if (headerLower === 'invoice pending' || 
+                     headerLower === 'invoicepending' || 
+                     headerLower === 'pending invoice') {
+              rowData['Invoice Pending'] = value
+            }
+            // Normalize Invoice Amount column
+            else if (headerLower === 'invoice amount' || 
+                     headerLower === 'invoiceamount' || 
+                     headerLower === 'amount invoice') {
+              rowData['Invoice Amount'] = value
+            }
+            else {
+              // Keep original header for other columns
+              rowData[header] = value
+            }
           })
 
           allData.push(rowData)

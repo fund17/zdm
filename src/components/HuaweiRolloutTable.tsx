@@ -219,7 +219,6 @@ export function HuaweiRolloutTable({
       
       // debug logs removed
     } catch (error) {
-      console.error('Export failed:', error)
       alert('Failed to export data: ' + (error instanceof Error ? error.message : 'Unknown error'))
     } finally {
       setLocalExporting(false)
@@ -392,7 +391,6 @@ export function HuaweiRolloutTable({
           // debug logs removed
         }
       } catch (error) {
-        console.error('Failed to load PO status:', error)
       } finally {
         setPoLoading(false)
       }
@@ -430,7 +428,6 @@ export function HuaweiRolloutTable({
         setPoColumnVisible(false)
 
       } catch (error) {
-        console.error('Failed to load column configuration:', error)
       }
     }
 
@@ -1492,16 +1489,10 @@ export function HuaweiRolloutTable({
           // Backup current data before update
           setBackupData([...data])
 
-          console.log('📋 Excel file loaded:')
-          console.log(`  - Total rows: ${importedData.length}`)
-          console.log(`  - First row keys: ${Object.keys(importedData[0] || {}).join(', ')}`)
-          console.log(`  - Editable columns from settings: ${columnConfigs.filter(c => c.editable).map(c => `${c.displayName} (${c.name})`).join(', ')}`)
 
           // Log first 5 DUIDs from Google Sheets for reference
-          console.log('🔍 First 5 DUIDs in current data:')
           data.slice(0, 5).forEach((row, idx) => {
             const duid = row[rowIdColumn]?.toString()
-            console.log(`  ${idx + 1}. ${duid}`)
           })
 
           // Create DUID lookup map from current data with multiple normalization strategies
@@ -1562,7 +1553,6 @@ export function HuaweiRolloutTable({
                              dataMap.get(duid.replace(/\s+/g, '').toUpperCase())
             
             if (!matchedData) {
-              console.error(`❌ Row ${i + 1}: DUID='${duid}' NOT FOUND in Google Sheets data`)
               // debug logs removed
               // debug logs removed
               // debug logs removed
@@ -1597,7 +1587,6 @@ export function HuaweiRolloutTable({
             }
             
             if (!originalDuid || !existingRow) {
-              console.error(`❌ Row ${i + 1}: Invalid data structure for DUID='${duid}'`)
               skippedCount++
               continue
             }
@@ -1634,7 +1623,6 @@ export function HuaweiRolloutTable({
               
               // Log column check for first few rows
               if (i < 3) {
-                console.log(`  📝 Column "${columnConfig.displayName}" (${columnConfig.name}): Excel value = "${excelValue}"`)
               }
               
               if (excelValue === undefined || excelValue === null || excelValue === '') continue
@@ -1729,7 +1717,6 @@ export function HuaweiRolloutTable({
                   rowChangesList.push(`${columnConfig.displayName}: "${currentValue}" → "${newValue}"`)
                   
                   if (i < 3) {
-                    console.log(`    ✏️ Will update: ${columnConfig.displayName}`)
                   }
                 }
               }
@@ -1738,16 +1725,13 @@ export function HuaweiRolloutTable({
             if (rowHasUpdates) {
               updatedCount++
               if (i < 3) {
-                console.log(`  ✅ Row ${i + 1} (${duid}): ${rowChangesList.length} updates: ${rowChangesList.join(', ')}`)
               }
             } else if (i < 3) {
-              console.log(`  ⏭️ Row ${i + 1} (${duid}): No changes detected`)
             }
           }
 
           // Apply all cell updates using SINGLE batch API call
           const totalUpdates = Array.from(rowUpdates.values()).reduce((sum, cols) => sum + cols.size, 0)
-          console.log(`\n📤 Preparing single batch update: ${rowUpdates.size} rows with ${totalUpdates} total cell changes...`)
           
           // Breakdown by column
           const updatesByColumn = new Map<string, number>()
@@ -1756,10 +1740,8 @@ export function HuaweiRolloutTable({
               updatesByColumn.set(colId, (updatesByColumn.get(colId) || 0) + 1)
             })
           })
-          console.log(`   Breakdown by column:`)
           updatesByColumn.forEach((count, col) => {
             const config = columnConfigs.find(c => c.name === col)
-            console.log(`   - ${config?.displayName || col}: ${count} rows`)
           })
           
           if (rowUpdates.size > 0) {
@@ -1782,7 +1764,6 @@ export function HuaweiRolloutTable({
               })
             })
             
-            console.log(`🚀 Sending SINGLE batch update API call for ${cellUpdates.length} cells...`)
             
             try {
               // Call batch update API ONCE with all changes
@@ -1802,9 +1783,7 @@ export function HuaweiRolloutTable({
               }
               
               const result = await response.json()
-              console.log(`✅ Batch update completed: ${result.updatedCells} cells updated in ${result.updateTime}ms`)
             } catch (error) {
-              console.error(`❌ Batch update failed:`, error)
               throw error
             }
           }
@@ -1815,7 +1794,6 @@ export function HuaweiRolloutTable({
           setTimeout(() => setImportSuccess(null), 10000)
 
         } catch (error) {
-          console.error('Error processing Excel file:', error)
           alert('Failed to process Excel file: ' + (error instanceof Error ? error.message : 'Unknown error'))
         } finally {
           setImporting(false)
@@ -1830,7 +1808,6 @@ export function HuaweiRolloutTable({
 
       reader.readAsArrayBuffer(file)
     } catch (error) {
-      console.error('Error importing Excel:', error)
       alert('Failed to import Excel file')
       setImporting(false)
     }
@@ -1877,7 +1854,6 @@ export function HuaweiRolloutTable({
       setImportSuccess(null)
       alert('Import successfully undone')
     } catch (error) {
-      console.error('Error undoing import:', error)
       alert('Failed to undo import: ' + (error instanceof Error ? error.message : 'Unknown error'))
     } finally {
       setImporting(false)

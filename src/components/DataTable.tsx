@@ -60,7 +60,6 @@ export function DataTable({ data, onUpdateData }: DataTableProps) {
       } catch (error) {
         // Revert local changes on error
         setLocalData([...data])
-        console.error('Failed to update data:', error)
       }
     }
 

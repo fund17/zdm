@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
         projects: permissions.projects,
         absensi: permissions.absensi,
         dailyPlan: permissions.dailyPlan,
+        fileUploadCenter: permissions.fileUploadCenter,
       }
     })
 

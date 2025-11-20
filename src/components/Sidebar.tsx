@@ -14,7 +14,8 @@ import {
   Database,
   Circle,
   User,
-  Shield
+  Shield,
+  Upload
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -34,6 +35,7 @@ interface UserPermissions {
   projects: 'no' | 'read' | 'edit'
   absensi: 'no' | 'read' | 'edit'
   dailyPlan: 'no' | 'read' | 'edit'
+  fileUploadCenter: 'no' | 'read' | 'edit'
 }
 
 interface MenuItem {
@@ -150,6 +152,15 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
       icon: <Shield className="h-4 w-4" />,
       label: 'User Management',
       href: '/users'
+    })
+  }
+
+  // File Upload Center
+  if (shouldShowMenu('fileUploadCenter')) {
+    menuItems.push({
+      icon: <Upload className="h-4 w-4" />,
+      label: 'File Upload Center',
+      href: '/file-upload'
     })
   }
 

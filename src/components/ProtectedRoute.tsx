@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { MenuKey } from '@/lib/permissions'
 
 interface UserData {
   name: string
@@ -9,14 +10,16 @@ interface UserData {
   region: string
   usertype: string
   status: string
+  role: string
 }
 
 interface ProtectedRouteProps {
   children: React.ReactNode
   allowedUserTypes?: string[]
+  requiredMenu?: MenuKey
 }
 
-export default function ProtectedRoute({ children, allowedUserTypes }: ProtectedRouteProps) {
+export default function ProtectedRoute({ children, allowedUserTypes, requiredMenu }: ProtectedRouteProps) {
   const router = useRouter()
   const [user, setUser] = useState<UserData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,12 +39,39 @@ export default function ProtectedRoute({ children, allowedUserTypes }: Protected
 
         setUser(data.user)
 
-        // Check if user type is allowed
+        // Check if user type is allowed (legacy check)
         if (allowedUserTypes && allowedUserTypes.length > 0) {
           if (!allowedUserTypes.includes(data.user.usertype)) {
             // User type not allowed
             router.push('/')
             return
+          }
+        }
+
+        // Check menu permission
+        if (requiredMenu) {
+          const permResponse = await fetch('/api/permissions')
+          if (permResponse.ok) {
+            const permData = await permResponse.json()
+            const permissions = permData.permissions
+
+            // Map menu name to permission key
+            const menuPermissionMap: Record<MenuKey, keyof typeof permissions> = {
+              'User management': 'userManagement',
+              'Home': 'home',
+              'Dashboard': 'dashboard',
+              'Projects': 'projects',
+              'Absensi': 'absensi',
+              'Daily Plan': 'dailyPlan',
+              'File Upload Center': 'fileUploadCenter',
+            }
+
+            const permKey = menuPermissionMap[requiredMenu]
+            if (permKey && permissions[permKey] === 'no') {
+              // No access to this menu
+              router.push('/')
+              return
+            }
           }
         }
 
@@ -54,7 +84,7 @@ export default function ProtectedRoute({ children, allowedUserTypes }: Protected
     }
 
     checkAuth()
-  }, [router, allowedUserTypes])
+  }, [router, allowedUserTypes, requiredMenu])
 
   if (loading) {
     return (

@@ -42,6 +42,20 @@ function doGet(e) {
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === 'listFilesInFolder') {
+      const folderId = e.parameter.folderId;
+      if (!folderId) {
+        return ContentService.createTextOutput(
+          JSON.stringify({ error: 'folderId parameter is required' })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      const result = listFilesInFolder(folderId);
+      return ContentService.createTextOutput(
+        JSON.stringify({ success: true, files: result })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
     return ContentService.createTextOutput(
       JSON.stringify({ error: 'Invalid action' })
     ).setMimeType(ContentService.MimeType.JSON);
@@ -60,7 +74,6 @@ function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const action = data.action;
-    const mainFolderId = data.mainFolderId;
 
     if (!action) {
       return ContentService.createTextOutput(
@@ -68,28 +81,37 @@ function doPost(e) {
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
-    if (!mainFolderId) {
-      return ContentService.createTextOutput(
-        JSON.stringify({ error: 'mainFolderId is required' })
-      ).setMimeType(ContentService.MimeType.JSON);
-    }
-
     if (action === 'uploadFile') {
+      const mainFolderId = data.mainFolderId;
       const duid = data.duid;
       const fileName = data.fileName;
       const mimeType = data.mimeType;
       const fileData = data.fileData;
       const folderId = data.folderId;
 
-      if (!duid || !fileName || !fileData) {
+      if (!mainFolderId) {
         return ContentService.createTextOutput(
-          JSON.stringify({ error: 'DUID, fileName, and fileData are required' })
+          JSON.stringify({ error: 'mainFolderId is required for uploadFile' })
         ).setMimeType(ContentService.MimeType.JSON);
       }
 
-      const result = uploadFile(mainFolderId, duid, fileName, mimeType, fileData, folderId);
+      if (!fileName || !fileData) {
+        return ContentService.createTextOutput(
+          JSON.stringify({ error: 'fileName and fileData are required' })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      const result = uploadFile(mainFolderId, duid || '', fileName, mimeType, fileData, folderId);
       return ContentService.createTextOutput(
         JSON.stringify({ success: true, file: result })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // For other actions, mainFolderId is required
+    const mainFolderId = data.mainFolderId;
+    if (!mainFolderId) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ error: 'mainFolderId is required' })
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -232,7 +254,50 @@ function listFiles(mainFolderId, duid, folderId) {
 }
 
 /**
+ * List all files in a specific folder (direct folder access, no DUID)
+ */
+function listFilesInFolder(folderId) {
+  try {
+    const targetFolder = DriveApp.getFolderById(folderId);
+    const files = targetFolder.getFiles();
+    const fileList = [];
+
+    while (files.hasNext()) {
+      const file = files.next();
+      
+      // Get thumbnail URL (only for images)
+      let thumbnailUrl = null;
+      const mimeType = file.getMimeType();
+      if (mimeType.startsWith('image/')) {
+        thumbnailUrl = 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w200';
+      }
+      
+      fileList.push({
+        id: file.getId(),
+        name: file.getName(),
+        mimeType: mimeType,
+        size: file.getSize(),
+        createdTime: file.getDateCreated().toISOString(),
+        modifiedTime: file.getLastUpdated().toISOString(),
+        url: file.getUrl(),
+        downloadUrl: file.getDownloadUrl(),
+        thumbnailUrl: thumbnailUrl,
+        webViewLink: file.getUrl(),
+        webContentLink: file.getDownloadUrl(),
+      });
+    }
+
+    Logger.log('Found ' + fileList.length + ' files in folder ' + folderId);
+    return fileList;
+  } catch (error) {
+    Logger.log('Error listing files in folder: ' + error.toString());
+    throw error;
+  }
+}
+
+/**
  * Upload file to DUID folder or subfolder
+ * If DUID is empty, upload directly to mainFolderId (for general uploads)
  */
 function uploadFile(mainFolderId, duid, fileName, mimeType, base64Data, folderId) {
   try {
@@ -241,9 +306,12 @@ function uploadFile(mainFolderId, duid, fileName, mimeType, base64Data, folderId
     if (folderId) {
       // Upload to specific subfolder
       targetFolder = DriveApp.getFolderById(folderId);
-    } else {
+    } else if (duid && duid !== '') {
       // Upload to DUID root folder
       targetFolder = getOrCreateDUIDFolder(mainFolderId, duid);
+    } else {
+      // Upload directly to mainFolderId (no DUID subfolder)
+      targetFolder = DriveApp.getFolderById(mainFolderId);
     }
     
     // Decode base64
@@ -256,7 +324,7 @@ function uploadFile(mainFolderId, duid, fileName, mimeType, base64Data, folderId
     // Create file
     const file = targetFolder.createFile(blob);
     
-    Logger.log('File uploaded successfully: ' + fileName + ' to folder: ' + duid);
+    Logger.log('File uploaded successfully: ' + fileName + ' to folder: ' + (duid || mainFolderId));
     
     // Get thumbnail URL (only for images)
     let thumbnailUrl = null;

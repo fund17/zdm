@@ -11,6 +11,7 @@ export type MenuKey =
   | 'Projects' 
   | 'Absensi' 
   | 'Daily Plan'
+  | 'File Upload Center'
 
 // Permission map for a role
 export interface RolePermissions {
@@ -21,6 +22,7 @@ export interface RolePermissions {
   projects: PermissionLevel
   absensi: PermissionLevel
   dailyPlan: PermissionLevel
+  fileUploadCenter: PermissionLevel
 }
 
 // Cache for permissions (to avoid fetching on every request)
@@ -53,7 +55,7 @@ export async function fetchRolePermissions(): Promise<RolePermissions[]> {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!A1:H100`, // Get all rows
+      range: `${sheetName}!A1:I100`, // Get all rows (A-I for 8 columns)
     })
 
     const rows = response.data.values
@@ -78,8 +80,12 @@ export async function fetchRolePermissions(): Promise<RolePermissions[]> {
         projects: (row[4]?.toLowerCase() || 'no') as PermissionLevel,
         absensi: (row[5]?.toLowerCase() || 'no') as PermissionLevel,
         dailyPlan: (row[6]?.toLowerCase() || 'no') as PermissionLevel,
+        fileUploadCenter: (row[7]?.toLowerCase() || 'no') as PermissionLevel,
       })
     }
+
+    // Log fetched permissions for debugging
+    console.log('Fetched permissions from Google Sheets:', JSON.stringify(permissions, null, 2))
 
     // Update cache
     permissionsCache = permissions
@@ -112,6 +118,7 @@ export function hasMenuAccess(permissions: RolePermissions, menuKey: MenuKey): b
     'Projects': permissions.projects,
     'Absensi': permissions.absensi,
     'Daily Plan': permissions.dailyPlan,
+    'File Upload Center': permissions.fileUploadCenter,
   }
 
   const level = permissionMap[menuKey]
@@ -129,6 +136,7 @@ export function canEdit(permissions: RolePermissions, menuKey: MenuKey): boolean
     'Projects': permissions.projects,
     'Absensi': permissions.absensi,
     'Daily Plan': permissions.dailyPlan,
+    'File Upload Center': permissions.fileUploadCenter,
   }
 
   const level = permissionMap[menuKey]
@@ -146,6 +154,7 @@ export function getPermissionLevel(permissions: RolePermissions, menuKey: MenuKe
     'Projects': permissions.projects,
     'Absensi': permissions.absensi,
     'Daily Plan': permissions.dailyPlan,
+    'File Upload Center': permissions.fileUploadCenter,
   }
 
   return permissionMap[menuKey] || 'no'

@@ -6,13 +6,15 @@ import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { RefreshCcw, Calendar, Upload, X, CheckCircle, AlertCircle, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { getDefaultDateFilter } from '@/lib/dateFilterUtils'
-import { useTabCache } from '@/hooks/useTabCache'
 
 interface SheetData {
   [key: string]: string | number
 }
 
 export default function DailyPlanPage() {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [tableRefreshing, setTableRefreshing] = useState(false)
   const [filteredData, setFilteredData] = useState<any[]>([])
@@ -32,20 +34,10 @@ export default function DailyPlanPage() {
   const [showSuccessNotification, setShowSuccessNotification] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
 
-  // Use tab cache for daily plan data
-  const { data, loading, error, refresh: refreshCache, setData } = useTabCache<any[]>({
-    fetchData: async () => {
-      const response = await fetch('/api/sheets')
-      if (!response.ok) {
-        throw new Error('Failed to fetch data')
-      }
-      const result = await response.json()
-      return result.data || []
-    }
-  })
-
   const fetchData = async (startDate?: string, endDate?: string, options?: { showFullLoading?: boolean }) => {
     try {
+      if (options?.showFullLoading !== false) setLoading(true)
+      
       // Build URL with date parameters
       const url = new URL('/api/sheets', window.location.origin)
       if (startDate && endDate) {
@@ -62,10 +54,19 @@ export default function DailyPlanPage() {
       const result = await response.json()
       
       setData(result.data || [])
+      setError(null)
     } catch (err) {
-      console.error('Failed to fetch data:', err)
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      if (options?.showFullLoading !== false) setLoading(false)
     }
   }
+
+  // Initial data fetch with default date range (load full dataset for client-side filtering)
+  useEffect(() => {
+    // Load full dataset initially for faster preset filtering
+    fetchData() // No date parameters - load all data
+  }, []) // Only run on mount
 
   // Check if date range is within loaded data range
   const isWithinLoadedRange = (startDate: string, endDate: string) => {
@@ -89,14 +90,15 @@ export default function DailyPlanPage() {
 
   const handleRefresh = async () => {
     setTableRefreshing(true)
-    await refreshCache()
+    // Suppress full-page loading - just update table
+    await fetchData(dateFilter.startDate, dateFilter.endDate, { showFullLoading: false })
     setTableRefreshing(false)
   }
 
   const handleSaveComplete = async () => {
     // Refresh data after save without full page reload
     setTableRefreshing(true)
-    await refreshCache()
+    await fetchData(dateFilter.startDate, dateFilter.endDate, { showFullLoading: false })
     setTableRefreshing(false)
   }
 
@@ -160,6 +162,7 @@ export default function DailyPlanPage() {
       // await fetchData()
       
     } catch (error) {
+      console.error('❌ Safe update error:', error)
       throw error // Re-throw to let DataTable handle the error
     }
   }
@@ -278,6 +281,8 @@ export default function DailyPlanPage() {
       setTableRefreshing(false)
 
     } catch (error) {
+      console.error('Import error:', error)
+      console.error('Error details:', error instanceof Error ? error.stack : error)
       
       let errorMessage = 'An error occurred during import'
       
@@ -310,9 +315,9 @@ export default function DailyPlanPage() {
   const handleExport = async () => {
     try {
       // Use filtered data for export
-      const dataToExport = filteredData.length > 0 ? filteredData : (data || [])
+      const dataToExport = filteredData.length > 0 ? filteredData : data
 
-      if (!dataToExport || dataToExport.length === 0) {
+      if (dataToExport.length === 0) {
         alert('No data to export')
         return
       }
@@ -374,6 +379,7 @@ export default function DailyPlanPage() {
       // Write and download file
       XLSX.writeFile(workbook, filename)
     } catch (error) {
+      console.error('❌ Export failed:', error)
       alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
@@ -628,7 +634,7 @@ export default function DailyPlanPage() {
       <div className="flex-1 bg-white shadow-sm rounded-lg border border-gray-200 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-hidden">
           <DailyPlanTable
-            data={data || []}
+            data={data}
             onUpdateData={handleUpdateData}
             rowIdColumn="RowId" // Use the actual column name from Google Sheets
             onFilteredDataChange={setFilteredData} // Pass callback to get filtered data

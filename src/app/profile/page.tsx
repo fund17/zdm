@@ -189,13 +189,13 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 overflow-y-auto pb-2">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-white/20 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
+      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                 Profile Settings
               </h1>
               <p className="text-sm text-gray-600 mt-1">Manage your account and preferences</p>
@@ -211,38 +211,38 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 sticky top-24">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Sidebar - Desktop */}
+          <div className="hidden lg:block lg:col-span-3">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
               {/* Profile Summary */}
-              <div className="text-center mb-6">
-                <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-lg mx-auto mb-4">
-                  <span className="text-2xl font-bold text-white">
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-6 text-center">
+                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg mx-auto mb-3">
+                  <span className="text-2xl font-bold bg-gradient-to-br from-blue-500 to-indigo-600 bg-clip-text text-transparent">
                     {user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                   </span>
                 </div>
-                <h3 className="font-bold text-gray-900">{user.name}</h3>
-                <p className="text-sm text-gray-500">{user.email}</p>
-                <div className="mt-2">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                <h3 className="font-bold text-white text-lg">{user.name}</h3>
+                <p className="text-sm text-blue-100 mt-1 truncate">{user.email}</p>
+                <div className="mt-3">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-white/20 text-white backdrop-blur-sm">
                     {user.status}
                   </span>
                 </div>
               </div>
 
               {/* Navigation Tabs */}
-              <nav className="space-y-2">
+              <nav className="p-3">
                 {tabs.map((tab) => {
                   const Icon = tab.icon
                   return (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`w-full flex items-center px-4 py-3 rounded-xl text-left transition-all ${
+                      className={`w-full flex items-center px-4 py-3 rounded-lg text-left transition-all mb-1 ${
                         activeTab === tab.id
-                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                          ? 'bg-blue-50 text-blue-700 shadow-sm'
                           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                       }`}
                     >
@@ -255,173 +255,225 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          {/* Mobile Tabs */}
+          <div className="lg:hidden col-span-1">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-2">
+              <div className="flex space-x-2">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex-1 flex items-center justify-center px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                        activeTab === tab.id
+                          ? 'bg-blue-50 text-blue-700 shadow-sm'
+                          : 'text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Icon className="h-5 w-5 mr-2" />
+                      <span>{tab.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
           {/* Main Content */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-9">
+            {/* Message Display */}
+            {message && (
+              <div className={`mb-6 p-4 rounded-xl flex items-start animate-fadeIn ${
+                messageType === 'success'
+                  ? 'bg-green-50 border border-green-200'
+                  : 'bg-red-50 border border-red-200'
+              }`}>
+                {messageType === 'success' ? (
+                  <CheckCircle className="h-5 w-5 text-green-600 mr-3 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-red-600 mr-3 flex-shrink-0 mt-0.5" />
+                )}
+                <span className={`text-sm font-medium ${
+                  messageType === 'success' ? 'text-green-800' : 'text-red-800'
+                }`}>
+                  {message}
+                </span>
+              </div>
+            )}
+
             {/* Overview Tab */}
             {activeTab === 'overview' && (
               <div className="space-y-6">
                 {/* Profile Header Card */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-                  <div className="flex items-start justify-between mb-6">
-                    <div>
-                      <h2 className="text-2xl font-bold text-gray-900">Profile Information</h2>
-                      <p className="text-gray-600 mt-1">Your personal and account details</p>
-                    </div>
-                    <button
-                      onClick={() => setIsEditingProfile(!isEditingProfile)}
-                      className="flex items-center px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      <Edit3 className="h-4 w-4 mr-2" />
-                      {isEditingProfile ? 'Cancel' : 'Edit'}
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Name */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-                      {isEditingProfile ? (
-                        <input
-                          type="text"
-                          value={editForm.name}
-                          onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                        />
-                      ) : (
-                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                          <User className="h-5 w-5 text-gray-400 mr-3" />
-                          <span className="text-gray-900">{user.name}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Email */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <Mail className="h-5 w-5 text-gray-400 mr-3" />
-                        <span className="text-gray-900">{user.email}</span>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="p-6 sm:p-8">
+                    <div className="flex flex-col sm:flex-row items-start justify-between mb-6 gap-4">
+                      <div>
+                        <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Profile Information</h2>
+                        <p className="text-gray-600 mt-1 text-sm">Your personal and account details</p>
                       </div>
-                    </div>
-
-                    {/* Phone */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                      {isEditingProfile ? (
-                        <input
-                          type="tel"
-                          value={editForm.phone}
-                          onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                          placeholder="Enter phone number"
-                        />
-                      ) : (
-                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                          <Phone className="h-5 w-5 text-gray-400 mr-3" />
-                          <span className="text-gray-900">{user.phone || 'Not provided'}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Department */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-                      {isEditingProfile ? (
-                        <input
-                          type="text"
-                          value={editForm.department}
-                          onChange={(e) => setEditForm(prev => ({ ...prev, department: e.target.value }))}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                          placeholder="Enter department"
-                        />
-                      ) : (
-                        <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                          <Building className="h-5 w-5 text-gray-400 mr-3" />
-                          <span className="text-gray-900">{user.department || 'Not specified'}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Region */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Region</label>
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <MapPin className="h-5 w-5 text-gray-400 mr-3" />
-                        <span className="text-gray-900">{user.region}</span>
-                      </div>
-                    </div>
-
-                    {/* User Type */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">User Type</label>
-                      <div className="flex items-center p-4 bg-gray-50 rounded-xl">
-                        <Briefcase className="h-5 w-5 text-gray-400 mr-3" />
-                        <span className="text-gray-900">{user.usertype}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Save/Cancel Buttons */}
-                  {isEditingProfile && (
-                    <div className="flex items-center justify-end space-x-3 mt-6 pt-6 border-t border-gray-200">
                       <button
-                        onClick={() => {
-                          setIsEditingProfile(false)
-                          setEditForm({
-                            name: user.name || '',
-                            phone: user.phone || '',
-                            department: user.department || ''
-                          })
-                        }}
-                        className="px-6 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+                        onClick={() => setIsEditingProfile(!isEditingProfile)}
+                        className="flex items-center px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors border border-blue-200 text-sm font-medium"
                       >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleSaveProfile}
-                        className="px-6 py-2 bg-blue-50 text-blue-700 border border-blue-100 rounded-xl hover:bg-blue-100 transition-colors flex items-center"
-                      >
-                        <Save className="h-4 w-4 mr-2" />
-                        Save Changes
+                        <Edit3 className="h-4 w-4 mr-2" />
+                        {isEditingProfile ? 'Cancel' : 'Edit Profile'}
                       </button>
                     </div>
-                  )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                      {/* Name */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                        {isEditingProfile ? (
+                          <input
+                            type="text"
+                            value={editForm.name}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                            placeholder="Enter your full name"
+                          />
+                        ) : (
+                          <div className="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <User className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" />
+                            <span className="text-gray-900 text-sm">{user.name}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Email */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                        <div className="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <Mail className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" />
+                          <span className="text-gray-900 text-sm truncate">{user.email}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+                      </div>
+
+                      {/* Phone */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+                        {isEditingProfile ? (
+                          <input
+                            type="tel"
+                            value={editForm.phone}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                            placeholder="e.g., +62 812-3456-7890"
+                          />
+                        ) : (
+                          <div className="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <Phone className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" />
+                            <span className="text-gray-900 text-sm">{user.phone || 'Not provided'}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Department */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                        {isEditingProfile ? (
+                          <input
+                            type="text"
+                            value={editForm.department}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, department: e.target.value }))}
+                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                            placeholder="e.g., Engineering, Sales"
+                          />
+                        ) : (
+                          <div className="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <Building className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" />
+                            <span className="text-gray-900 text-sm">{user.department || 'Not specified'}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Region */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Region</label>
+                        <div className="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <MapPin className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" />
+                          <span className="text-gray-900 text-sm">{user.region}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Contact admin to change region</p>
+                      </div>
+
+                      {/* User Type */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                        <div className="flex items-center p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <Briefcase className="h-5 w-5 text-blue-600 mr-3 flex-shrink-0" />
+                          <span className="text-blue-900 font-medium text-sm uppercase">{user.usertype}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Contact admin to change role</p>
+                      </div>
+                    </div>
+
+                    {/* Save/Cancel Buttons */}
+                    {isEditingProfile && (
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-200">
+                        <button
+                          onClick={() => {
+                            setIsEditingProfile(false)
+                            setEditForm({
+                              name: user.name || '',
+                              phone: user.phone || '',
+                              department: user.department || ''
+                            })
+                            setMessage('')
+                          }}
+                          className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveProfile}
+                          className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors flex items-center justify-center text-sm font-medium shadow-sm"
+                        >
+                          <Save className="h-4 w-4 mr-2" />
+                          Save Changes
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Account Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
                     <div className="flex items-center">
                       <div className="p-3 bg-green-100 rounded-lg">
-                        <Calendar className="h-6 w-6 text-green-600" />
+                        <Calendar className="h-5 w-5 text-green-600" />
                       </div>
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600">Member Since</p>
-                        <p className="text-lg font-bold text-gray-900">{user.joinDate || 'N/A'}</p>
+                      <div className="ml-4 min-w-0 flex-1">
+                        <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Member Since</p>
+                        <p className="text-base font-bold text-gray-900 mt-1 truncate">{user.joinDate || 'N/A'}</p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
                     <div className="flex items-center">
                       <div className="p-3 bg-blue-100 rounded-lg">
-                        <Clock className="h-6 w-6 text-blue-600" />
+                        <Clock className="h-5 w-5 text-blue-600" />
                       </div>
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600">Last Login</p>
-                        <p className="text-lg font-bold text-gray-900">{user.lastLogin || 'N/A'}</p>
+                      <div className="ml-4 min-w-0 flex-1">
+                        <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Last Login</p>
+                        <p className="text-base font-bold text-gray-900 mt-1 truncate">{user.lastLogin || 'N/A'}</p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
                     <div className="flex items-center">
                       <div className={`p-3 rounded-lg ${user.status === 'Active' ? 'bg-green-100' : 'bg-red-100'}`}>
-                        <Shield className={`h-6 w-6 ${user.status === 'Active' ? 'text-green-600' : 'text-red-600'}`} />
+                        <Shield className={`h-5 w-5 ${user.status === 'Active' ? 'text-green-600' : 'text-red-600'}`} />
                       </div>
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600">Account Status</p>
-                        <p className={`text-lg font-bold ${user.status === 'Active' ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className="ml-4 min-w-0 flex-1">
+                        <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Status</p>
+                        <p className={`text-base font-bold mt-1 ${user.status === 'Active' ? 'text-green-600' : 'text-red-600'}`}>
                           {user.status}
                         </p>
                       </div>
@@ -435,40 +487,23 @@ export default function ProfilePage() {
             {activeTab === 'security' && (
               <div className="space-y-6">
                 {/* Password Change Card */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-                  <div className="flex items-center mb-6">
-                    <div className="p-3 bg-red-100 rounded-lg">
-                      <Lock className="h-6 w-6 text-red-600" />
-                    </div>
-                    <div className="ml-4">
-                      <h3 className="text-xl font-bold text-gray-900">Change Password</h3>
-                      <p className="text-gray-600">Update your password to keep your account secure</p>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="bg-gradient-to-r from-red-500 to-pink-600 p-6">
+                    <div className="flex items-center text-white">
+                      <div className="p-3 bg-white/20 rounded-lg backdrop-blur-sm">
+                        <Lock className="h-6 w-6 text-white" />
+                      </div>
+                      <div className="ml-4">
+                        <h3 className="text-xl font-bold">Change Password</h3>
+                        <p className="text-red-100 text-sm mt-1">Update your password to keep your account secure</p>
+                      </div>
                     </div>
                   </div>
 
-                  {message && (
-                    <div className={`mb-6 p-4 rounded-xl flex items-start ${
-                      messageType === 'success'
-                        ? 'bg-green-50 border border-green-200'
-                        : 'bg-red-50 border border-red-200'
-                    }`}>
-                      {messageType === 'success' ? (
-                        <CheckCircle className="h-5 w-5 text-green-600 mr-3 flex-shrink-0 mt-0.5" />
-                      ) : (
-                        <AlertCircle className="h-5 w-5 text-red-600 mr-3 flex-shrink-0 mt-0.5" />
-                      )}
-                      <span className={`text-sm font-medium ${
-                        messageType === 'success' ? 'text-green-800' : 'text-red-800'
-                      }`}>
-                        {message}
-                      </span>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleChangePassword} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="p-6 sm:p-8">
+                    <form onSubmit={handleChangePassword} className="space-y-5">
                       {/* Current Password */}
-                      <div className="md:col-span-2">
+                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Current Password
                         </label>
@@ -477,138 +512,150 @@ export default function ProfilePage() {
                             type={showCurrentPassword ? 'text' : 'password'}
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
-                            className="w-full pl-4 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            className="w-full pl-4 pr-12 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-sm"
                             placeholder="Enter current password"
                           />
                           <button
                             type="button"
                             onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                           >
                             {showCurrentPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                           </button>
                         </div>
                       </div>
 
-                      {/* New Password */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          New Password
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showNewPassword ? 'text' : 'password'}
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
-                            className="w-full pl-4 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                            placeholder="Enter new password"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowNewPassword(!showNewPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                          >
-                            {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                          </button>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        {/* New Password */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            New Password
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showNewPassword ? 'text' : 'password'}
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              className="w-full pl-4 pr-12 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-sm"
+                              placeholder="Enter new password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowNewPassword(!showNewPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Confirm Password */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Confirm New Password
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showConfirmPassword ? 'text' : 'password'}
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              className="w-full pl-4 pr-12 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all text-sm"
+                              placeholder="Confirm new password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                            </button>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Confirm Password */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Confirm New Password
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showConfirmPassword ? 'text' : 'password'}
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full pl-4 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                            placeholder="Confirm new password"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                          >
-                            {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                          </button>
-                        </div>
+                      {/* Password Requirements */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-sm font-medium text-blue-900 mb-2">Password Requirements:</p>
+                        <ul className="text-xs text-blue-800 space-y-1 ml-4 list-disc">
+                          <li>At least 8 characters long</li>
+                          <li>Must contain both letters and numbers</li>
+                          <li>Use a unique password you haven't used before</li>
+                        </ul>
                       </div>
-                    </div>
 
-                    <div className="flex items-center justify-between pt-4">
-                      <div className="text-sm text-gray-600">
-                        Password must be at least 8 characters with letters and numbers
+                      {/* Submit Button */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-4">
+                        <button
+                          type="submit"
+                          disabled={isChangingPassword}
+                          className="px-8 py-2.5 bg-gradient-to-r from-red-600 to-pink-600 text-white font-medium rounded-lg hover:from-red-700 hover:to-pink-700 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-sm"
+                        >
+                          {isChangingPassword ? (
+                            <>
+                              <LoadingSpinner />
+                              <span className="ml-2">Updating...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="h-4 w-4 mr-2" />
+                              Update Password
+                            </>
+                          )}
+                        </button>
                       </div>
-                      <button
-                        type="submit"
-                        disabled={isChangingPassword}
-                        className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                      >
-                        {isChangingPassword ? (
-                          <>
-                            <LoadingSpinner />
-                            <span className="ml-2">Updating...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Lock className="h-5 w-5 mr-2" />
-                            Update Password
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </form>
+                    </form>
+                  </div>
                 </div>
 
                 {/* Security Settings */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-                  <div className="flex items-center mb-6">
-                    <div className="p-3 bg-yellow-100 rounded-lg">
-                      <Bell className="h-6 w-6 text-yellow-600" />
-                    </div>
-                    <div className="ml-4">
-                      <h3 className="text-xl font-bold text-gray-900">Security Settings</h3>
-                      <p className="text-gray-600">Additional security options for your account</p>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="bg-gradient-to-r from-yellow-500 to-orange-600 p-6">
+                    <div className="flex items-center text-white">
+                      <div className="p-3 bg-white/20 rounded-lg backdrop-blur-sm">
+                        <Bell className="h-6 w-6 text-white" />
+                      </div>
+                      <div className="ml-4">
+                        <h3 className="text-xl font-bold">Security Preferences</h3>
+                        <p className="text-yellow-100 text-sm mt-1">Manage your account security settings</p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between p-4 border border-gray-200 rounded-xl">
-                      <div>
-                        <h4 className="font-medium text-gray-900">Login Alerts</h4>
-                        <p className="text-sm text-gray-600">Get notified via email when someone logs into your account</p>
+                  <div className="p-6 sm:p-8">
+                    <div className="space-y-4">
+                      <div className="flex items-start sm:items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors gap-4">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900 text-sm">Login Alerts</h4>
+                          <p className="text-xs text-gray-600 mt-1">Get notified via email when someone logs into your account</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={loginAlerts}
+                            onChange={async (e) => {
+                              const newValue = e.target.checked
+                              setLoginAlerts(newValue)
+                              
+                              try {
+                                await fetch('/api/auth/preferences', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ loginAlerts: newValue }),
+                                })
+                              } catch (error) {
+                                console.error('Failed to save preference')
+                              }
+                            }}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-600"></div>
+                        </label>
                       </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={loginAlerts}
-                          onChange={async (e) => {
-                            const newValue = e.target.checked
-                            setLoginAlerts(newValue)
-                            
-                            // Save preference (optional - for future use)
-                            try {
-                              await fetch('/api/auth/preferences', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ loginAlerts: newValue }),
-                              })
-                            } catch (error) {
-                            }
-                          }}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
                     </div>
                   </div>
                 </div>
               </div>
             )}
-
-
           </div>
         </div>
       </div>

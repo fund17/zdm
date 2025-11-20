@@ -5,7 +5,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Public paths that don't require authentication
-  const publicPaths = ['/login', '/register', '/verify', '/set-password', '/pending-activation']
+  const publicPaths = ['/login', '/register', '/verify', '/set-password', '/pending-activation', '/forgot-password']
   
   // API paths that are public
   const publicApiPaths = [
@@ -15,6 +15,9 @@ export function middleware(request: NextRequest) {
     '/api/auth/verify-code',
     '/api/auth/set-password',
     '/api/auth/resend-code',
+    '/api/auth/forgot-password',
+    '/api/auth/verify-reset-code',
+    '/api/auth/reset-password',
   ]
   
   // Check if the path is public
@@ -35,7 +38,7 @@ export function middleware(request: NextRequest) {
   }
 
   // If already logged in and trying to access login/register pages, redirect to home
-  if (userSession && ['/login', '/register', '/verify', '/set-password'].includes(pathname)) {
+  if (userSession && ['/login', '/register', '/verify', '/set-password', '/forgot-password'].includes(pathname)) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 

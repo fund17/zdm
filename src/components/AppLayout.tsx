@@ -5,7 +5,6 @@ import { usePathname, useRouter } from 'next/navigation'
 import Navbar from './Navbar'
 import Sidebar from './Sidebar'
 import Footer from './Footer'
-import { TabBar } from './TabBar'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -30,7 +29,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   useEffect(() => {
     const checkAuth = async () => {
       // Public pages that don't require authentication
-      const publicPages = ['/login', '/register', '/verify', '/set-password', '/pending-activation']
+      const publicPages = ['/login', '/register', '/verify', '/set-password', '/pending-activation', '/forgot-password']
       
       // Don't check auth on public pages
       if (publicPages.includes(pathname)) {
@@ -90,7 +89,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   }
 
   // Public pages that should not have sidebar/navbar
-  const pagesWithoutLayout = ['/login', '/register', '/verify', '/set-password', '/pending-activation']
+  const pagesWithoutLayout = ['/login', '/register', '/verify', '/set-password', '/pending-activation', '/forgot-password']
   
   // If on public page or not authenticated, show content without layout
   if (pagesWithoutLayout.includes(pathname) || (!isAuthenticated && !loading)) {
@@ -137,11 +136,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
         {/* Main content - Fixed height, no scroll */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          {/* Tab Bar */}
-          <div className="flex-none">
-            <TabBar />
-          </div>
-
           <div className="flex-1 p-6 overflow-hidden">
             {children}
           </div>

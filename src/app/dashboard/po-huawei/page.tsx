@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
-import { useTabCache } from '@/hooks/useTabCache'
 import * as XLSX from 'xlsx'
 import { 
   FileText,
@@ -194,6 +193,9 @@ const normalizeStatus = (status: string | undefined | null): string => {
 }
 
 export default function POHuaweiDashboard() {
+  const [allData, setAllData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedMainProject, setSelectedMainProject] = useState<string>('all')
   const [selectedProject, setSelectedProject] = useState<string>('all')
@@ -204,9 +206,16 @@ export default function POHuaweiDashboard() {
     sites: any[]
   }>({ title: '', sites: [] })
 
-  // Use tab cache for data fetching
-  const { data: allData, loading, error, refresh } = useTabCache<any[]>({
-    fetchData: async () => {
+  // Fetch data
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  const fetchData = async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
       // Check cache first
       const cacheKey = 'po_huawei_full_data_cache'
       const cacheTimestampKey = 'po_huawei_full_data_cache_timestamp'
@@ -223,7 +232,9 @@ export default function POHuaweiDashboard() {
         if (now - timestamp < cacheExpiry) {
           // Use cached data
           const cached = JSON.parse(cachedData)
-          return cached
+          setAllData(cached)
+          setLoading(false)
+          return
         }
       }
 
@@ -232,6 +243,8 @@ export default function POHuaweiDashboard() {
       const data = await response.json()
 
       if (data.success) {
+        setAllData(data.data)
+        
         // Save to cache with compression and size check
         const compressedData = compressData(data.data)
         const cacheSaved = safeSetItem(cacheKey, compressedData)
@@ -241,22 +254,20 @@ export default function POHuaweiDashboard() {
         } else {
           console.warn('Cache not saved due to size limitations')
         }
-        
-        return data.data
       } else {
-        throw new Error(data.message || 'Failed to load data')
+        setError(data.message || 'Failed to load data')
       }
+    } catch (err) {
+      setError('Failed to connect to server')
+      console.error('Error fetching data:', err)
+    } finally {
+      setLoading(false)
     }
-  })
-
-  // Fetch data (now just calls refresh from hook)
-  const fetchData = async () => {
-    await refresh()
   }
 
   // Get unique projects based on category, main project and date range filters
   const projects = useMemo(() => {
-    let filtered = [...(allData || [])]
+    let filtered = [...allData]
     
     // Apply category filter
     if (selectedCategory !== 'all') {
@@ -283,7 +294,7 @@ export default function POHuaweiDashboard() {
 
   // Filter data
   const filteredData = useMemo(() => {
-    let filtered = [...(allData || [])]
+    let filtered = [...allData]
 
     // Filter by category (ITC/RNO)
     if (selectedCategory !== 'all') {
@@ -309,7 +320,7 @@ export default function POHuaweiDashboard() {
 
   // Calculate metrics
   const metrics = useMemo(() => {
-    if (!filteredData || filteredData.length === 0) return null
+    if (filteredData.length === 0) return null
 
     const totalUniqueSites = new Set(filteredData.map(row => row['Site ID'] || row['Site ID PO'])).size
     const totalLines = filteredData.length

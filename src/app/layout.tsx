@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import AppLayout from '@/components/AppLayout'
-import { TabProvider } from '@/contexts/TabContext'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,11 +18,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <TabProvider>
-          <AppLayout>
-            {children}
-          </AppLayout>
-        </TabProvider>
+        <AppLayout>
+          {children}
+        </AppLayout>
       </body>
     </html>
   )

@@ -183,34 +183,35 @@ function LoginForm() {
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
-              {/* Forgot password link - positioned under password field on the right */}
-              <div className="mt-2 text-right">
-                <a href="/forgot-password" className="text-xs text-blue-600 hover:underline">Forgot password?</a>
-              </div>
             </div>
 
-              {/* Remember / Submit Row */}
-              <div className="flex items-center justify-between gap-4">
+              {/* Remember / Forgot Password Row */}
+              <div className="flex items-center justify-between gap-4 mb-4">
                 <label className="inline-flex items-center gap-2 text-sm">
                   <input type="checkbox" className="form-checkbox h-4 w-4" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
                   <span className="text-sm text-slate-600">Remember me</span>
                 </label>
-                <div className="flex gap-2 items-center">
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold rounded-xl transition-all duration-200 shadow disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {loading ? (
-                      <div className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <LogIn className="h-4 w-4" />
-                    )}
-                    <span className="text-sm">Sign In</span>
-                  </button>
-                </div>
+                <a
+                  href="/forgot-password"
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  Forgot password?
+                </a>
               </div>
-              {/* Social SSO and OR divider removed */}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <div className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <LogIn className="h-4 w-4" />
+                )}
+                <span>Sign In</span>
+              </button>
 
               </form>
 

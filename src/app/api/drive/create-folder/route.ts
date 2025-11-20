@@ -13,10 +13,18 @@ export async function POST(request: NextRequest) {
     }
 
     const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_DRIVE_URL
+    const mainFolderId = process.env.GOOGLE_DRIVE_MAIN_FILE_FOLDERID
 
     if (!appsScriptUrl) {
       return NextResponse.json(
         { error: 'Apps Script URL not configured' },
+        { status: 500 }
+      )
+    }
+
+    if (!mainFolderId) {
+      return NextResponse.json(
+        { error: 'Main Folder ID not configured' },
         { status: 500 }
       )
     }
@@ -29,6 +37,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         action: 'createFolder',
+        mainFolderId: mainFolderId,
         duid: duid,
         folderName: folderName,
         parentFolderId: parentFolderId,

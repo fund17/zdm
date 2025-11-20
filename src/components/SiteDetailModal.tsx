@@ -80,6 +80,18 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
   const [newFolderName, setNewFolderName] = useState('')
   const [creatingFolder, setCreatingFolder] = useState(false)
   
+  // User session state
+  const [userRole, setUserRole] = useState<string | null>(null)
+  
+  // Delete modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [fileToDelete, setFileToDelete] = useState<{id: string, name: string} | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  
+  // Multiple selection state
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([])
+  const [showDeleteMultipleModal, setShowDeleteMultipleModal] = useState(false)
+  
   // Daily Plan tab state
   const [dailyPlanData, setDailyPlanData] = useState<DailyPlanData[]>([])
   const [dailyPlanLoading, setDailyPlanLoading] = useState(false)
@@ -95,7 +107,24 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
     if (isOpen && activeTab === 'dailyplan') {
       fetchDailyPlanData()
     }
+    if (isOpen) {
+      fetchUserSession()
+    }
   }, [isOpen, activeTab])
+
+  const fetchUserSession = async () => {
+    try {
+      const response = await fetch('/api/auth/session')
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.user) {
+          setUserRole(data.user.usertype || data.user.role || null)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch user session:', error)
+    }
+  }
 
   const fetchPOData = async () => {
     try {
@@ -315,21 +344,24 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
   }
 
   const handleDeleteFile = async (fileId: string, fileName: string) => {
-    if (!confirm(`Are you sure you want to delete "${fileName}"?`)) {
-      return
-    }
+    setFileToDelete({ id: fileId, name: fileName })
+    setShowDeleteModal(true)
+  }
+
+  const confirmDeleteFile = async () => {
+    if (!fileToDelete) return
 
     try {
+      setDeleting(true)
       setFilesError(null)
 
-      const response = await fetch('/api/drive/upload', {
+      const response = await fetch('/api/drive/delete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'deleteFile',
-          fileId: fileId,
+          fileId: fileToDelete.id,
         }),
       })
 
@@ -337,10 +369,76 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
         throw new Error('Failed to delete file')
       }
 
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete file')
+      }
+
+      // Close modal and refresh
+      setShowDeleteModal(false)
+      setFileToDelete(null)
+      
       // Refresh file list
       await fetchFiles(currentFolderId || undefined)
     } catch (err) {
       setFilesError(err instanceof Error ? err.message : 'Failed to delete file')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleDeleteMultiple = () => {
+    if (selectedFiles.length === 0) return
+    setShowDeleteMultipleModal(true)
+  }
+
+  const confirmDeleteMultiple = async () => {
+    try {
+      setDeleting(true)
+      setFilesError(null)
+
+      // Delete files one by one
+      for (const fileId of selectedFiles) {
+        const response = await fetch('/api/drive/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fileId }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Failed to delete file ${fileId}`)
+        }
+      }
+
+      // Close modal and clear selection
+      setShowDeleteMultipleModal(false)
+      setSelectedFiles([])
+      
+      // Refresh file list
+      await fetchFiles(currentFolderId || undefined)
+    } catch (err) {
+      setFilesError(err instanceof Error ? err.message : 'Failed to delete files')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const toggleFileSelection = (fileId: string) => {
+    setSelectedFiles(prev => 
+      prev.includes(fileId) 
+        ? prev.filter(id => id !== fileId)
+        : [...prev, fileId]
+    )
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedFiles.length === files.length) {
+      setSelectedFiles([])
+    } else {
+      setSelectedFiles(files.map(f => f.id))
     }
   }
 
@@ -658,7 +756,31 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                 {/* Files Grid - Compact */}
                 {!filesLoading && files.length > 0 && (
                   <div>
-                    <h4 className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Files</h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Files</h4>
+                      {userRole === 'admin' && (
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer hover:text-gray-900 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={selectedFiles.length === files.length && files.length > 0}
+                              onChange={toggleSelectAll}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            Select All
+                          </label>
+                          {selectedFiles.length > 0 && (
+                            <button
+                              onClick={handleDeleteMultiple}
+                              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              Delete ({selectedFiles.length})
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <div className="grid grid-cols-1 gap-2">
                       {files.map((file) => (
                         <div
@@ -666,6 +788,16 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                           className="bg-white border border-gray-200 rounded-lg p-2 hover:shadow-sm transition-all group"
                         >
                           <div className="flex items-center gap-2">
+                            {/* Checkbox for admin */}
+                            {userRole === 'admin' && (
+                              <input
+                                type="checkbox"
+                                checked={selectedFiles.includes(file.id)}
+                                onChange={() => toggleFileSelection(file.id)}
+                                className="flex-shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            )}
                             {/* File Icon - Smaller */}
                             <button
                               onClick={() => handlePreviewFile(file)}
@@ -728,6 +860,15 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                                 >
                                   <Download className="h-3.5 w-3.5" />
                                 </a>
+                              )}
+                              {userRole === 'admin' && (
+                                <button
+                                  onClick={() => handleDeleteFile(file.id, file.name)}
+                                  className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
                               )}
                             </div>
                           </div>
@@ -1092,6 +1233,124 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
               >
                 {creatingFolder ? 'Creating...' : 'Create'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && fileToDelete && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 className="h-6 w-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Delete File</h3>
+                  <p className="text-sm text-gray-600">This action cannot be undone</p>
+                </div>
+              </div>
+              
+              <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                <p className="text-sm text-gray-700">
+                  Are you sure you want to delete <span className="font-semibold text-gray-900">"{fileToDelete.name}"</span>?
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false)
+                    setFileToDelete(null)
+                  }}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteFile}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Multiple Confirmation Modal */}
+      {showDeleteMultipleModal && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 className="h-6 w-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Delete Multiple Files</h3>
+                  <p className="text-sm text-gray-600">This action cannot be undone</p>
+                </div>
+              </div>
+              
+              <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                <p className="text-sm text-gray-700 mb-2">
+                  Are you sure you want to delete <span className="font-semibold text-gray-900">{selectedFiles.length} file(s)</span>?
+                </p>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {selectedFiles.map(fileId => {
+                    const file = files.find(f => f.id === fileId)
+                    return file ? (
+                      <div key={fileId} className="text-xs text-gray-600 flex items-center gap-1">
+                        <span className="w-1 h-1 bg-gray-400 rounded-full"></span>
+                        {file.name}
+                      </div>
+                    ) : null
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowDeleteMultipleModal(false)}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteMultiple}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4" />
+                      Delete All
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

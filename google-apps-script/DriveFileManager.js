@@ -2,12 +2,10 @@
  * Google Apps Script for managing files in Google Drive
  * Deploy this as a Web App with "Execute as: Me" and "Who has access: Anyone"
  * 
- * Main Folder ID: 1AqY9DG_O5HoN4HmD61CulPQl9QzcMHxm
+ * Now accepts mainFolderId as a parameter instead of hardcoded
  * 
  * Structure: Main Folder > DUID Folders > Files
  */
-
-const MAIN_FOLDER_ID = '1AqY9DG_O5HoN4HmD61CulPQl9QzcMHxm';
 
 /**
  * Handle GET requests
@@ -16,10 +14,17 @@ function doGet(e) {
   try {
     const action = e.parameter.action;
     const duid = e.parameter.duid;
+    const mainFolderId = e.parameter.mainFolderId;
 
     if (!action) {
       return ContentService.createTextOutput(
         JSON.stringify({ error: 'Action parameter is required' })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (!mainFolderId) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ error: 'mainFolderId parameter is required' })
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -31,7 +36,7 @@ function doGet(e) {
       }
 
       const folderId = e.parameter.folderId;
-      const result = listFiles(duid, folderId);
+      const result = listFiles(mainFolderId, duid, folderId);
       return ContentService.createTextOutput(
         JSON.stringify({ success: true, files: result.files, folders: result.folders })
       ).setMimeType(ContentService.MimeType.JSON);
@@ -55,10 +60,17 @@ function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const action = data.action;
+    const mainFolderId = data.mainFolderId;
 
     if (!action) {
       return ContentService.createTextOutput(
         JSON.stringify({ error: 'Action is required' })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (!mainFolderId) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ error: 'mainFolderId is required' })
       ).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -75,7 +87,7 @@ function doPost(e) {
         ).setMimeType(ContentService.MimeType.JSON);
       }
 
-      const result = uploadFile(duid, fileName, mimeType, fileData, folderId);
+      const result = uploadFile(mainFolderId, duid, fileName, mimeType, fileData, folderId);
       return ContentService.createTextOutput(
         JSON.stringify({ success: true, file: result })
       ).setMimeType(ContentService.MimeType.JSON);
@@ -106,7 +118,7 @@ function doPost(e) {
         ).setMimeType(ContentService.MimeType.JSON);
       }
 
-      const result = createFolder(duid, folderName, parentFolderId);
+      const result = createFolder(mainFolderId, duid, folderName, parentFolderId);
       return ContentService.createTextOutput(
         JSON.stringify({ success: true, folder: result })
       ).setMimeType(ContentService.MimeType.JSON);
@@ -126,8 +138,8 @@ function doPost(e) {
 /**
  * Get or create folder for DUID
  */
-function getOrCreateDUIDFolder(duid) {
-  const mainFolder = DriveApp.getFolderById(MAIN_FOLDER_ID);
+function getOrCreateDUIDFolder(mainFolderId, duid) {
+  const mainFolder = DriveApp.getFolderById(mainFolderId);
   
   // Search for existing DUID folder
   const folders = mainFolder.getFoldersByName(duid);
@@ -144,7 +156,7 @@ function getOrCreateDUIDFolder(duid) {
 /**
  * List all files and folders in DUID folder or subfolder
  */
-function listFiles(duid, folderId) {
+function listFiles(mainFolderId, duid, folderId) {
   try {
     let targetFolder;
     
@@ -153,7 +165,7 @@ function listFiles(duid, folderId) {
       targetFolder = DriveApp.getFolderById(folderId);
     } else {
       // List contents of DUID root folder
-      targetFolder = getOrCreateDUIDFolder(duid);
+      targetFolder = getOrCreateDUIDFolder(mainFolderId, duid);
     }
     
     // Get folders
@@ -222,7 +234,7 @@ function listFiles(duid, folderId) {
 /**
  * Upload file to DUID folder or subfolder
  */
-function uploadFile(duid, fileName, mimeType, base64Data, folderId) {
+function uploadFile(mainFolderId, duid, fileName, mimeType, base64Data, folderId) {
   try {
     let targetFolder;
     
@@ -231,7 +243,7 @@ function uploadFile(duid, fileName, mimeType, base64Data, folderId) {
       targetFolder = DriveApp.getFolderById(folderId);
     } else {
       // Upload to DUID root folder
-      targetFolder = getOrCreateDUIDFolder(duid);
+      targetFolder = getOrCreateDUIDFolder(mainFolderId, duid);
     }
     
     // Decode base64
@@ -287,7 +299,7 @@ function deleteFile(fileId) {
 /**
  * Create folder in DUID folder or subfolder
  */
-function createFolder(duid, folderName, parentFolderId) {
+function createFolder(mainFolderId, duid, folderName, parentFolderId) {
   try {
     let parentFolder;
     
@@ -296,7 +308,7 @@ function createFolder(duid, folderName, parentFolderId) {
       parentFolder = DriveApp.getFolderById(parentFolderId);
     } else {
       // Create in DUID root folder
-      parentFolder = getOrCreateDUIDFolder(duid);
+      parentFolder = getOrCreateDUIDFolder(mainFolderId, duid);
     }
     
     const newFolder = parentFolder.createFolder(folderName);
@@ -317,15 +329,20 @@ function createFolder(duid, folderName, parentFolderId) {
 
 /**
  * Test function to verify setup
+ * Pass your mainFolderId to test
  */
-function testSetup() {
+function testSetup(mainFolderId) {
   try {
-    const mainFolder = DriveApp.getFolderById(MAIN_FOLDER_ID);
+    if (!mainFolderId) {
+      mainFolderId = '1AqY9DG_O5HoN4HmD61CulPQl9QzcMHxm'; // Default for testing
+    }
+    
+    const mainFolder = DriveApp.getFolderById(mainFolderId);
     Logger.log('✅ Main folder accessible: ' + mainFolder.getName());
     
     // Test creating a folder
     const testDUID = 'TEST_DUID_' + new Date().getTime();
-    const testFolder = getOrCreateDUIDFolder(testDUID);
+    const testFolder = getOrCreateDUIDFolder(mainFolderId, testDUID);
     Logger.log('✅ Test folder created: ' + testFolder.getName());
     
     // Clean up test folder

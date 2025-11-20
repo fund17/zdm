@@ -2,15 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    // Get form data
-    const formData = await request.formData()
-    const file = formData.get('file') as File
-    const duid = formData.get('duid') as string
-    const folderId = formData.get('folderId') as string | null
+    const body = await request.json()
+    const { fileId } = body
 
-    if (!file || !duid) {
+    if (!fileId) {
       return NextResponse.json(
-        { error: 'File and DUID are required' },
+        { error: 'File ID is required' },
         { status: 400 }
       )
     }
@@ -32,35 +29,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Convert file to base64
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-    const base64 = buffer.toString('base64')
-
-    // Send to Apps Script
-    const uploadData: any = {
-      action: 'uploadFile',
-      mainFolderId: mainFolderId,
-      duid: duid,
-      fileName: file.name,
-      mimeType: file.type,
-      fileData: base64,
-    }
-    
-    if (folderId) {
-      uploadData.folderId = folderId
-    }
-    
+    // Call Apps Script to delete file
     const response = await fetch(appsScriptUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(uploadData),
+      body: JSON.stringify({
+        action: 'deleteFile',
+        mainFolderId: mainFolderId,
+        fileId: fileId,
+      }),
     })
 
     if (!response.ok) {
-      throw new Error('Failed to upload file via Apps Script')
+      throw new Error('Failed to delete file via Apps Script')
     }
 
     const data = await response.json()
@@ -68,7 +51,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data)
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to upload file' },
+      { error: error instanceof Error ? error.message : 'Failed to delete file' },
       { status: 500 }
     )
   }

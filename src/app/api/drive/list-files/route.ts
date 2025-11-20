@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_DRIVE_URL
+    const mainFolderId = process.env.GOOGLE_DRIVE_MAIN_FILE_FOLDERID
 
     if (!appsScriptUrl) {
       return NextResponse.json(
@@ -22,8 +23,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Call Apps Script to list files
-    let url = `${appsScriptUrl}?action=listFiles&duid=${encodeURIComponent(duid)}`
+    if (!mainFolderId) {
+      return NextResponse.json(
+        { error: 'Main Folder ID not configured' },
+        { status: 500 }
+      )
+    }
+
+    // Call Apps Script to list files with mainFolderId
+    let url = `${appsScriptUrl}?action=listFiles&duid=${encodeURIComponent(duid)}&mainFolderId=${encodeURIComponent(mainFolderId)}`
     if (folderId) {
       url += `&folderId=${encodeURIComponent(folderId)}`
     }

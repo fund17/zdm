@@ -58,11 +58,11 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, sidebarCollapsed }) =>
   }
 
   return (
-    <nav className="bg-white border-b border-gray-200 px-3 py-2 flex items-center justify-between shadow-sm h-14">
+    <nav className="bg-white border-b border-gray-200 px-3 py-1 flex items-center justify-between shadow-sm h-10">
       <div className="flex items-center space-x-3">
         <button
           onClick={onToggleSidebar}
-          className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
+          className="p-1 rounded-md hover:bg-gray-100 transition-colors"
           aria-label="Toggle sidebar"
         >
           {sidebarCollapsed ? (
@@ -80,12 +80,12 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, sidebarCollapsed }) =>
       <div className="relative">
         <button
           onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-          className="flex items-center space-x-2 p-1.5 rounded-md hover:bg-gray-100 transition-colors"
+          className="flex items-center space-x-2 p-1 rounded-md hover:bg-gray-100 transition-colors"
         >
-          <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-sm">
-            <span className="text-xs font-bold text-white">{getUserInitials()}</span>
+          <div className="w-5 h-5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-sm">
+            <span className="text-[10px] font-bold text-white">{getUserInitials()}</span>
           </div>
-          <span className="text-sm text-gray-700 font-medium hidden md:block">
+          <span className="text-xs text-gray-700 font-medium hidden md:block">
             {loading ? 'Loading...' : user?.name || 'User'}
           </span>
           <ChevronDown className="h-3.5 w-3.5 text-gray-600" />

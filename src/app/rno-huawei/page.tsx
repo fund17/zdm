@@ -1,10 +1,10 @@
 import { HuaweiRolloutPageContent } from '@/components/HuaweiRolloutPageContent'
 
-export default function ItcHuaweiPage() {
+export default function RnoHuaweiPage() {
   return (
     <HuaweiRolloutPageContent 
-      apiBasePath="/api/sheets/itc-huawei"
-      pageTitle="ITC Huawei Rollout"
+      apiBasePath="/api/sheets/rno-huawei"
+      pageTitle="RNO Huawei Rollout"
     />
   )
 }

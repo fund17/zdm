@@ -15,7 +15,7 @@ import {
   ColumnPinningState,
 } from '@tanstack/react-table'
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { Check, X, Edit2, Shield, AlertTriangle, Settings, Eye, EyeOff, Lock, CalendarRange, Filter, XCircle, Activity as ActivityIcon, Download, RefreshCcw } from 'lucide-react'
+import { Check, X, Edit2, Shield, AlertTriangle, Settings, Eye, EyeOff, Lock, CalendarRange, Filter, XCircle, Activity as ActivityIcon, Download, RefreshCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 
 interface ColumnConfig {
   name: string
@@ -1436,6 +1436,25 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
     onColumnPinningChange: setColumnPinning,
   })
 
+  // Pagination UI helper
+  const [goToPageInput, setGoToPageInput] = useState('')
+  const pageCount = table.getPageCount()
+
+  const getVisiblePageRange = (pageIndex: number, pageCount: number, maxButtons = 7) => {
+    const page = pageIndex + 1
+    if (pageCount <= maxButtons) return Array.from({ length: pageCount }, (_, i) => i + 1)
+
+    const half = Math.floor(maxButtons / 2)
+    let start = Math.max(1, page - half)
+    let end = Math.min(pageCount, start + maxButtons - 1)
+
+    if (end - start + 1 < maxButtons) {
+      start = Math.max(1, end - maxButtons + 1)
+    }
+
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+  }
+
   // Update parent with table filtered data (including search filter)
   useEffect(() => {
     if (!onFilteredDataChange || !table) return
@@ -1798,58 +1817,119 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       </div>
 
       {/* Pagination */}
-      <div className="flex-none flex items-center justify-between px-3 py-2 bg-gray-50 border-t">
-        <div className="flex items-center space-x-1">
-          <button
-            onClick={() => table.setPageIndex(0)}
-            disabled={!table.getCanPreviousPage()}
-            className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            First
-          </button>
-          <button
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-            className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Prev
-          </button>
-          <button
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-            className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-          <button
-            onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-            disabled={!table.getCanNextPage()}
-            className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Last
-          </button>
+      <div className="flex-none flex flex-col sm:flex-row items-center justify-between px-3 py-2 bg-gray-50 border-t gap-2">
+        <div className="flex items-center gap-2">
+          {/* Rows per page + record count on the left */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Rows per page</label>
+            <select
+              value={table.getState().pagination.pageSize}
+              onChange={(e) => {
+                const size = Number(e.target.value)
+                table.setPageSize(size)
+              }}
+              className="px-2 py-1 text-sm border border-gray-300 rounded bg-white"
+              aria-label="Rows per page"
+            >
+              {[10, 20, 30, 50, 100].map((pageSize) => (
+                <option key={pageSize} value={pageSize}>{pageSize}</option>
+              ))}
+              <option value={Math.max(100, data.length)}>All</option>
+            </select>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 text-sm text-gray-600 ml-3">
+            <span>Showing</span>
+            <strong className="text-gray-900">{table.getRowModel().rows.length.toLocaleString()}</strong>
+            <span>of</span>
+            <strong className="text-gray-900">{data.length.toLocaleString()}</strong>
+            <span>records</span>
+          </div>
         </div>
 
-        <span className="text-sm text-gray-600">
-          {data.length.toLocaleString()} records
-        </span>
+        <div className="flex items-center gap-2 flex-1 justify-center sm:justify-end">
+          {/* Page navigation moved to the right */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => table.setPageIndex(0)}
+              disabled={!table.getCanPreviousPage()}
+              aria-label="Go to first page"
+              className="p-1 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="First"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+              aria-label="Previous page"
+              className="p-1 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Previous"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
 
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-600">
-            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-          </span>
-          <select
-            value={table.getState().pagination.pageSize}
-            onChange={(e) => table.setPageSize(Number(e.target.value))}
-            className="px-2 py-1 text-sm border border-gray-300 rounded bg-white"
-          >
-            {[10, 20, 30, 40, 50].map((pageSize) => (
-              <option key={pageSize} value={pageSize}>
-                {pageSize}
-              </option>
-            ))}
-          </select>
+            <div className="hidden sm:flex items-center gap-1">
+              {getVisiblePageRange(table.getState().pagination.pageIndex, pageCount).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => table.setPageIndex(p - 1)}
+                  aria-label={`Go to page ${p}`}
+                  className={`px-2 py-1 text-sm rounded ${p - 1 === table.getState().pagination.pageIndex ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 hover:bg-gray-100'}`}
+                >
+                  {p}
+                </button>
+              ))}
+              {pageCount > 7 && table.getState().pagination.pageIndex + 1 < pageCount - 3 && (
+                <span className="px-2 text-gray-500">…</span>
+              )}
+            </div>
+
+            <button
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+              aria-label="Next page"
+              className="p-1 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Next"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => table.setPageIndex(pageCount - 1)}
+              disabled={!table.getCanNextPage()}
+              aria-label="Go to last page"
+              className="p-1 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Last"
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 ml-2">
+            <span className="text-sm text-gray-600">Page</span>
+            <input
+              type="number"
+              min={1}
+              max={pageCount || 1}
+              value={goToPageInput}
+              onChange={(e) => setGoToPageInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const pageNum = Number(goToPageInput)
+                  if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= pageCount) {
+                    table.setPageIndex(pageNum - 1)
+                    setGoToPageInput('')
+                  }
+                }
+              }}
+              placeholder={`${table.getState().pagination.pageIndex + 1}`}
+              className="w-16 px-2 py-1 text-sm border border-gray-300 rounded"
+              aria-label="Go to page"
+            />
+            <span className="text-sm text-gray-600">/ {pageCount}</span>
+          </div>
         </div>
+
+        
       </div>
       
 

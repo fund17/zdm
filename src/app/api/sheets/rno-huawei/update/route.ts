@@ -1,5 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetsClient } from '@/lib/googleSheets'
+import { getSheetsClient, getSheetData } from '@/lib/googleSheets'
+import { RNO_CONFIG, getEnvValues } from '@/lib/huaweiRouteConfig'
+
+// Fetch date columns from settings dynamically
+async function getDateColumnsFromSettings(): Promise<string[]> {
+  try {
+    const { spreadsheetId, settingSheetName } = getEnvValues(RNO_CONFIG)
+    
+    if (!spreadsheetId) {
+      console.error('Spreadsheet ID not configured')
+      return []
+    }
+
+    const settingsData = await getSheetData(spreadsheetId, settingSheetName)
+    
+    if (!settingsData || settingsData.length === 0) {
+      console.error('No settings data found')
+      return []
+    }
+
+    // Extract column names where type is 'date'
+    const dateColumns = settingsData
+      .filter((row: any) => {
+        const type = row.Value || row.value || ''
+        return type.toLowerCase() === 'date'
+      })
+      .map((row: any) => {
+        const columnName = row.Column || row.column || ''
+        return columnName.replace(/\s+/g, '') // Remove spaces for internal name
+      })
+      .filter((name: string) => name !== '')
+
+    console.log('Date columns loaded from settings:', dateColumns)
+    return dateColumns
+  } catch (error) {
+    console.error('Error fetching date columns from settings:', error)
+    return []
+  }
+}
 
 interface SafeUpdateRequest {
   rowId: string | number
@@ -12,43 +50,6 @@ interface SafeUpdateRequest {
   updates?: any[] // Array of Excel rows for bulk import
 }
 
-// Get date columns from settings sheet
-async function getDateColumnsFromSettings(spreadsheetId: string): Promise<string[]> {
-  const settingsSheetName = process.env.GOOGLE_SHEET_NAME_HWROLLOUTITC_SETTING || 'settings'
-  const sheets = await getSheetsClient()
-  
-  try {
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: `${settingsSheetName}!A:C`,
-    })
-
-    const rows = response.data.values
-    if (!rows || rows.length === 0) {
-      return []
-    }
-
-    // Assuming settings format: Column | Type | ...
-    // Header row: columns, value, type (or similar)
-    const dateColumns: string[] = []
-    
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i]
-      const columnName = row[0]
-      const columnType = row[2] // Type is in 3rd column (index 2)
-      
-      if (columnType && columnType.toLowerCase() === 'date' && columnName) {
-        dateColumns.push(columnName)
-      }
-    }
-    
-    return dateColumns
-  } catch (error) {
-    console.error('Error reading settings sheet:', error)
-    return []
-  }
-}
-
 // Handle bulk import with per-cell rules
 async function handleBulkImport(requestBody: SafeUpdateRequest) {
   const { sheetName, updates } = requestBody
@@ -57,18 +58,21 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
     return NextResponse.json({ error: 'No data to import' }, { status: 400 })
   }
 
-  const spreadsheetId = process.env.GOOGLE_SHEET_ID_HWROLLOUTRNO
-  const targetSheetName = sheetName || process.env.GOOGLE_SHEET_NAME_HWROLLOUTRNO || 'ITCHIOH'
+  // Fetch date columns from settings
+  const dateColumns = await getDateColumnsFromSettings()
+  
+  if (dateColumns.length === 0) {
+    console.warn('No date columns found in settings - proceeding without date protection')
+  }
+
+  const { spreadsheetId, defaultSheetName } = getEnvValues(RNO_CONFIG)
+  const targetSheetName = sheetName || defaultSheetName || 'RNOHWIOH'
   
   if (!spreadsheetId) {
     return NextResponse.json({ error: 'Google Sheet ID is not configured' }, { status: 500 })
   }
 
   const sheets = await getSheetsClient()
-
-  // Get date columns from settings sheet
-  const dateColumns = await getDateColumnsFromSettings(spreadsheetId)
-  console.log('[IMPORT] Date columns from settings:', dateColumns)
 
   // Get all data from Google Sheets
   const response = await sheets.spreadsheets.values.get({
@@ -155,27 +159,20 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
         continue
       }
 
-      // Check if this is a date column - check against sheet header name, not Excel key
-      const actualColumnName = headers[targetColumnIndex]
+      // Check if this is a date column (using settings)
+      const normalizedKey = excelKey.replace(/\s+/g, '')
+      const normalizedHeader = headers[targetColumnIndex].replace(/\s+/g, '')
       const isDateColumn = dateColumns.some(dateCol => 
-        actualColumnName === dateCol ||
-        actualColumnName.toLowerCase() === dateCol.toLowerCase() ||
-        actualColumnName.replace(/\s+/g, '').toLowerCase() === dateCol.replace(/\s+/g, '').toLowerCase()
+        normalizedKey.toLowerCase() === dateCol.toLowerCase() ||
+        normalizedHeader.toLowerCase() === dateCol.toLowerCase()
       )
 
-      // Rule 2: Date column with existing value is protected - MUST CHECK BEFORE ANY UPDATE
+      // Rule 2: Date column with existing value is protected
       if (isDateColumn && existingRow) {
         const existingValue = existingRow[targetColumnIndex]
-        // Check if existing value is not empty (trim whitespace too)
-        const hasExistingValue = existingValue !== null && 
-                                 existingValue !== undefined && 
-                                 existingValue !== '' && 
-                                 (typeof existingValue === 'string' ? existingValue.trim() !== '' : true)
-        
-        if (hasExistingValue) {
-          console.log(`[PROTECTED] Date column "${actualColumnName}" has existing value "${existingValue}" - skipping update`)
+        if (existingValue && existingValue !== '' && existingValue !== null) {
           cellsSkipped++
-          continue // Skip this cell - DO NOT UPDATE
+          continue // Skip this cell only
         }
       }
 
@@ -198,7 +195,8 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
         values: [[excelValue]]
       })
       
-      // Track for highlighting - use ACTUAL column name from sheet header (already defined above)
+      // Track for highlighting - use ACTUAL column name from sheet header
+      const actualColumnName = headers[targetColumnIndex]
       importedCellsList.push({
         duid: duid.toString(),
         column: actualColumnName // Use sheet header name, not Excel key
@@ -252,8 +250,8 @@ export async function PUT(request: NextRequest) {
     
     const timestamp = new Date().toISOString()
     
-    const spreadsheetId = process.env.GOOGLE_SHEET_ID_HWROLLOUTRNO
-    const targetSheetName = sheetName || process.env.GOOGLE_SHEET_NAME_HWROLLOUTRNO || 'ITCHIOH'
+    const { spreadsheetId, defaultSheetName } = getEnvValues(RNO_CONFIG)
+    const targetSheetName = sheetName || defaultSheetName || 'RNOHWIOH'
     
     if (!spreadsheetId) {
       return NextResponse.json(

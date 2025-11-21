@@ -109,7 +109,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
       submenu: [
         { label: 'Daily Dashboard', href: '/dashboard/daily' },
         { label: 'ITC Huawei', href: '/dashboard/itc-huawei' },
-        { label: 'PO Huawei', href: '/dashboard/po-huawei' }
+        { label: 'PO Huawei', href: '/dashboard/po-huawei' },
+        { label: 'Team Performance', href: '/dashboard/team-performance' }
       ]
     })
   }
@@ -170,20 +171,20 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
         bg-white border-r border-slate-200 h-full flex flex-col
         transition-all duration-300 ease-out shadow-lg
         ${collapsed && !isHovered ? 'w-16' : 'w-64'}
-        ${collapsed ? 'fixed left-0 top-14 z-40' : 'relative z-auto shadow-none'}
+        ${collapsed ? 'fixed left-0 top-10 z-40' : 'relative z-auto shadow-none'}
       `}
       onMouseEnter={() => collapsed && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* User Profile Section */}
-      <div className={`h-16 flex items-center border-b border-slate-200 px-4 ${!isExpanded ? 'justify-center' : 'justify-start'}`}>
+      <div className={`h-10 flex items-center border-b border-slate-200 px-4 ${!isExpanded ? 'justify-center' : 'justify-start'}`}>
         {!isExpanded ? (
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
             <User className="h-4 w-4 text-white" />
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
               <User className="h-5 w-5 text-white" />
             </div>
             <div className="flex-1 min-w-0">

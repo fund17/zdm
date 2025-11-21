@@ -1101,7 +1101,7 @@ export function HuaweiRolloutTable({
       
       onFilteredDataChange(allFilteredRows)
     }
-  }, [table, columnFilters, globalFilter, sorting, filteredData.length, onFilteredDataChange])
+  }, [columnFilters, globalFilter, sorting, filteredData.length])
 
   // Send export-ready data to parent (visible columns + PO status map)
   useEffect(() => {
@@ -1132,7 +1132,7 @@ export function HuaweiRolloutTable({
         includePOStatus: showPOStatus && columnVisibility['PO_Status'] !== false
       })
     }
-  }, [columnConfigs, columnVisibility, poStatusMap, onExportDataReady])
+  }, [columnConfigs, columnVisibility, poStatusMap, showPOStatus])
 
   // Get unique values for a column
   const getUniqueColumnValues = (columnId: string) => {

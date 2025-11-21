@@ -1,8 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSheetsClient } from '@/lib/googleSheets'
+import { getSheetsClient, getSheetData } from '@/lib/googleSheets'
 
-// Date column names that should be protected if already filled
-const DATE_COLUMN_NAMES = ['Survey', 'MOS', 'Installation', 'Integration', 'ATP Approved', 'ATP CME', 'TSSR Closed', 'BPUJL', 'Inbound']
+// Fetch date columns from settings dynamically
+async function getDateColumnsFromSettings(): Promise<string[]> {
+  try {
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID_HWROLLOUTITC
+    const settingSheetName = process.env.GOOGLE_SHEET_NAME_HWROLLOUTITC_SETTING || 'settings'
+    
+    if (!spreadsheetId) {
+      console.error('Spreadsheet ID not configured')
+      return []
+    }
+
+    const settingsData = await getSheetData(spreadsheetId, settingSheetName)
+    
+    if (!settingsData || settingsData.length === 0) {
+      console.error('No settings data found')
+      return []
+    }
+
+    // Extract column names where type is 'date'
+    const dateColumns = settingsData
+      .filter((row: any) => {
+        const type = row.Value || row.value || ''
+        return type.toLowerCase() === 'date'
+      })
+      .map((row: any) => {
+        const columnName = row.Column || row.column || ''
+        return columnName.replace(/\s+/g, '') // Remove spaces for internal name
+      })
+      .filter((name: string) => name !== '')
+
+    console.log('Date columns loaded from settings:', dateColumns)
+    return dateColumns
+  } catch (error) {
+    console.error('Error fetching date columns from settings:', error)
+    return []
+  }
+}
 
 interface SafeUpdateRequest {
   rowId: string | number
@@ -21,6 +56,13 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
   
   if (!updates || updates.length === 0) {
     return NextResponse.json({ error: 'No data to import' }, { status: 400 })
+  }
+
+  // Fetch date columns from settings
+  const dateColumns = await getDateColumnsFromSettings()
+  
+  if (dateColumns.length === 0) {
+    console.warn('No date columns found in settings - proceeding without date protection')
   }
 
   const spreadsheetId = process.env.GOOGLE_SHEET_ID_HWROLLOUTITC
@@ -117,10 +159,12 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
         continue
       }
 
-      // Check if this is a date column
-      const isDateColumn = DATE_COLUMN_NAMES.some(dateCol => 
-        excelKey.toLowerCase().includes(dateCol.toLowerCase()) ||
-        dateCol.toLowerCase().includes(excelKey.toLowerCase())
+      // Check if this is a date column (using settings)
+      const normalizedKey = excelKey.replace(/\s+/g, '')
+      const normalizedHeader = headers[targetColumnIndex].replace(/\s+/g, '')
+      const isDateColumn = dateColumns.some(dateCol => 
+        normalizedKey.toLowerCase() === dateCol.toLowerCase() ||
+        normalizedHeader.toLowerCase() === dateCol.toLowerCase()
       )
 
       // Rule 2: Date column with existing value is protected

@@ -1721,9 +1721,18 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                               setFilterDropdownPosition(null)
                             } else {
                               const rect = e.currentTarget.getBoundingClientRect()
+                              // Calculate a left position so the dropdown never overflows the viewport
+                              const DROPDOWN_WIDTH = 280
+                              const MARGIN = 8
+                              let left = rect.left
+                              if (typeof window !== 'undefined') {
+                                const maxLeft = window.innerWidth - DROPDOWN_WIDTH - MARGIN
+                                if (left > maxLeft) left = Math.max(MARGIN, maxLeft)
+                                if (left < MARGIN) left = MARGIN
+                              }
                               setFilterDropdownPosition({
                                 top: rect.bottom + 4,
-                                left: rect.left
+                                left
                               })
                               setActiveFilterColumn(columnId)
                             }

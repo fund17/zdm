@@ -23,7 +23,7 @@ interface SheetListItem {
   title: string
 }
 
-type PeriodFilter = 'all' | 'year' | 'sixmonths' | 'month' | 'week'
+type PeriodFilter = 'all' | 'year' | 'sixmonths' | 'month' | 'week' | 'lastweek'
 
 export default function ItcHuaweiDashboard() {
   const [allData, setAllData] = useState<any[]>([]) // Combined data from all sheets
@@ -389,31 +389,66 @@ export default function ItcHuaweiDashboard() {
     
     const now = new Date()
     now.setHours(23, 59, 59, 999)
-    const filterDate = new Date()
-
+    let startDate = new Date()
+    let endDate = new Date(now)
     switch (periodFilter) {
       case 'year':
-        filterDate.setMonth(0, 1)
-        filterDate.setHours(0, 0, 0, 0)
+        startDate = new Date(now.getFullYear(), 0, 1)
+        startDate.setHours(0, 0, 0, 0)
+        endDate = new Date(now)
+        endDate.setHours(23, 59, 59, 999)
         break
       case 'sixmonths':
-        filterDate.setMonth(now.getMonth() - 6)
-        filterDate.setHours(0, 0, 0, 0)
+        startDate = new Date(now)
+        startDate.setMonth(now.getMonth() - 6)
+        startDate.setHours(0, 0, 0, 0)
+        endDate = new Date(now)
+        endDate.setHours(23, 59, 59, 999)
         break
       case 'month':
-        filterDate.setDate(1)
-        filterDate.setHours(0, 0, 0, 0)
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+        startDate.setHours(0, 0, 0, 0)
+        endDate = new Date(now)
+        endDate.setHours(23, 59, 59, 999)
         break
       case 'week':
-        filterDate.setDate(now.getDate() - 7)
-        filterDate.setHours(0, 0, 0, 0)
+        // Last 7 days (including today)
+        startDate = new Date(now)
+        startDate.setDate(now.getDate() - 7)
+        startDate.setHours(0, 0, 0, 0)
+        endDate = new Date(now)
+        endDate.setHours(23, 59, 59, 999)
+        break
+      case 'lastweek':
+        // Previous calendar week (Monday - Sunday)
+        const day = now.getDay()
+        const currentMonday = new Date(now)
+        // move to Monday of this week
+        const diff = currentMonday.getDate() - day + (day === 0 ? -6 : 1)
+        currentMonday.setDate(diff)
+        currentMonday.setHours(0, 0, 0, 0)
+
+        const lastWeekStart = new Date(currentMonday)
+        lastWeekStart.setDate(currentMonday.getDate() - 7)
+        lastWeekStart.setHours(0, 0, 0, 0)
+
+        const lastWeekEnd = new Date(currentMonday)
+        lastWeekEnd.setDate(currentMonday.getDate() - 1)
+        lastWeekEnd.setHours(23, 59, 59, 999)
+
+        // Replace filterDate (start-of-range) and now (end-of-range) with last week bounds
+        startDate = lastWeekStart
+        endDate = lastWeekEnd
         break
     }
-
-    const rowDate = parseDate(dateStr)
+      const rowDate = parseDate(dateStr)
     if (!rowDate) return false
-    
-    return rowDate >= filterDate && rowDate <= now
+      // Normalize row date to day precision
+      const rowDateOnly = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate())
+      // Compare with start/end (inclusive)
+      const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
+      const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
+      return rowDateOnly.getTime() >= startDateOnly.getTime() && rowDateOnly.getTime() <= endDateOnly.getTime()
   }, [periodFilter, parseDate])
 
   // Apply filters to data
@@ -935,6 +970,7 @@ export default function ItcHuaweiDashboard() {
     { value: 'sixmonths' as PeriodFilter, label: 'Last 6 Months' },
     { value: 'month' as PeriodFilter, label: 'This Month' },
     { value: 'week' as PeriodFilter, label: 'This Week' },
+    { value: 'lastweek' as PeriodFilter, label: 'Last Week' },
   ]
 
   // Function to open site list modal

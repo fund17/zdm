@@ -63,6 +63,8 @@ export const getSheetData = async (
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range,
+      // Use UNFORMATTED_VALUE to get raw values including serial dates
+      valueRenderOption: 'UNFORMATTED_VALUE',
     })
 
     const rows = response.data.values
@@ -75,13 +77,21 @@ export const getSheetData = async (
     const dataRows = rows.slice(1)
 
     // Convert to array of objects
-    const data: SheetData[] = dataRows.map((row: any[]) => {
-      const rowData: SheetData = {}
-      headers.forEach((header, index) => {
-        rowData[header] = row[index] || ''
+    const data: SheetData[] = dataRows
+      .filter((row: any[]) => {
+        // Skip completely empty rows
+        return row && row.some(cell => cell !== undefined && cell !== null && cell !== '')
       })
-      return rowData
-    })
+      .map((row: any[]) => {
+        const rowData: SheetData = {}
+        headers.forEach((header, index) => {
+          // Ensure each column gets its value, even if empty
+          // This preserves the column alignment
+          const cellValue = row[index]
+          rowData[header] = cellValue !== undefined && cellValue !== null ? cellValue : ''
+        })
+        return rowData
+      })
 
     return data
   } catch (error) {

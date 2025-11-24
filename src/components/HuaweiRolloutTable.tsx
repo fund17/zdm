@@ -228,15 +228,10 @@ export function HuaweiRolloutTable({
   // Refs for virtualization
   const tableContainerRef = useRef<HTMLDivElement>(null)
   
-  // Date range filter state
-  const [dateFilter, setDateFilter] = useState<DateFilter>(() => {
-    const today = new Date()
-    const oneMonthAgo = new Date(today)
-    oneMonthAgo.setMonth(today.getMonth() - 1)
-    return {
-      startDate: oneMonthAgo.toISOString().split('T')[0],
-      endDate: today.toISOString().split('T')[0]
-    }
+  // Date range filter state - no default filter
+  const [dateFilter, setDateFilter] = useState<DateFilter>({
+    startDate: '',
+    endDate: ''
   })
   
   // Filter dropdown states
@@ -426,6 +421,12 @@ export function HuaweiRolloutTable({
         
         // Don't trigger PO data fetch by default
         setPoColumnVisible(false)
+
+        // Set default sorting: find first date column and sort descending (newest first)
+        const firstDateColumn = configs.find(config => config.type === 'date')
+        if (firstDateColumn && sorting.length === 0) {
+          setSorting([{ id: firstDateColumn.name, desc: true }])
+        }
 
       } catch (error) {
       }
@@ -641,27 +642,74 @@ export function HuaweiRolloutTable({
             const { startDate, endDate } = filterValue as DateRangeFilterValue
             if (!cellValue) return false
 
-            // Parse date from DD/MM/YYYY or DD-MM-YYYY format
+            // Parse date - support multiple formats including Excel serial numbers
             let parsed: Date | null = null
-            if (typeof cellValue === 'string') {
-              const parts = cellValue.split(/[\/\-]/)
-              if (parts.length === 3) {
-                const day = parseInt(parts[0], 10)
-                const month = parseInt(parts[1], 10) - 1
-                const year = parseInt(parts[2], 10)
-                parsed = new Date(year, month, day)
+            
+            if (typeof cellValue === 'number') {
+              // Handle Excel serial date number (e.g., 45981)
+              if (cellValue >= 1 && cellValue <= 60000) {
+                let days = cellValue - 1
+                if (cellValue > 60) {
+                  days = days - 1
+                }
+                const excelEpoch = Date.UTC(1900, 0, 1)
+                parsed = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
+              }
+            } else if (typeof cellValue === 'string') {
+              // Check if string is a serial number
+              const serialNumberMatch = cellValue.match(/^\d+$/)
+              if (serialNumberMatch) {
+                const serialNumber = parseInt(cellValue, 10)
+                if (serialNumber >= 1 && serialNumber <= 60000) {
+                  let days = serialNumber - 1
+                  if (serialNumber > 60) {
+                    days = days - 1
+                  }
+                  const excelEpoch = Date.UTC(1900, 0, 1)
+                  parsed = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
+                }
+              } else {
+                // Handle DD/MM/YYYY, DD-MM-YYYY, or dd-MMM-yyyy formats
+                // First try dd-MMM-yyyy (like 24-Nov-2025)
+                const ddMmmYyyyMatch = cellValue.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/)
+                if (ddMmmYyyyMatch) {
+                  const day = parseInt(ddMmmYyyyMatch[1], 10)
+                  const monthStr = ddMmmYyyyMatch[2].toLowerCase()
+                  const year = parseInt(ddMmmYyyyMatch[3], 10)
+                  const monthMap: Record<string, number> = {
+                    'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+                    'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+                  }
+                  const month = monthMap[monthStr]
+                  if (month !== undefined) {
+                    parsed = new Date(year, month, day)
+                  }
+                } else {
+                  // Try DD/MM/YYYY or DD-MM-YYYY format
+                  const parts = cellValue.split(/[\/\-]/)
+                  if (parts.length === 3) {
+                    const day = parseInt(parts[0], 10)
+                    const month = parseInt(parts[1], 10) - 1
+                    const year = parseInt(parts[2], 10)
+                    parsed = new Date(year, month, day)
+                  }
+                }
               }
             } else if (cellValue instanceof Date) {
               parsed = cellValue
-            } else if (typeof cellValue === 'number') {
-              parsed = new Date(cellValue)
             }
+            
             if (!parsed || isNaN(parsed.getTime())) return false
+            
             const start = new Date(startDate)
             const end = new Date(endDate)
-            const p = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()).getTime()
-            return p >= new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime() &&
-                   p <= new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime()
+            end.setHours(23, 59, 59, 999) // Ensure end date includes the entire day
+            
+            const p = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
+            const s = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+            const e = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+            
+            return p.getTime() >= s.getTime() && p.getTime() <= e.getTime()
           }
           
           // Default string contains
@@ -733,17 +781,42 @@ export function HuaweiRolloutTable({
           if (config.type === 'date' && displayValue) {
             let dateValue: Date | null = null
             
-            if (typeof displayValue === 'string') {
-              // Handle DD/MM/YYYY or DD-MM-YYYY format
-              const parts = displayValue.split(/[\/\-]/)
-              if (parts.length === 3) {
-                const day = parseInt(parts[0], 10)
-                const month = parseInt(parts[1], 10) - 1
-                const year = parseInt(parts[2], 10)
-                dateValue = new Date(year, month, day)
+            if (typeof displayValue === 'number') {
+              // Handle Excel serial date number (e.g., 45981)
+              if (displayValue >= 1 && displayValue <= 60000) {
+                // Excel date calculation: days since 1900-01-01
+                // Use UTC to avoid timezone issues
+                let days = displayValue - 1
+                // Adjust for Excel's leap year bug (1900 is not a leap year but Excel thinks it is)
+                if (displayValue > 60) {
+                  days = days - 1
+                }
+                const excelEpoch = Date.UTC(1900, 0, 1)
+                dateValue = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
               }
-            } else {
-              dateValue = new Date(displayValue)
+            } else if (typeof displayValue === 'string') {
+              // Check if it's a string representation of Excel serial number
+              const serialNumberMatch = displayValue.match(/^\d+$/)
+              if (serialNumberMatch) {
+                const serialNumber = parseInt(displayValue, 10)
+                if (serialNumber >= 1 && serialNumber <= 60000) {
+                  let days = serialNumber - 1
+                  if (serialNumber > 60) {
+                    days = days - 1
+                  }
+                  const excelEpoch = Date.UTC(1900, 0, 1)
+                  dateValue = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
+                }
+              } else {
+                // Handle DD/MM/YYYY or DD-MM-YYYY format
+                const parts = displayValue.split(/[\/\-]/)
+                if (parts.length === 3) {
+                  const day = parseInt(parts[0], 10)
+                  const month = parseInt(parts[1], 10) - 1
+                  const year = parseInt(parts[2], 10)
+                  dateValue = new Date(year, month, day)
+                }
+              }
             }
             
             if (dateValue && !isNaN(dateValue.getTime())) {
@@ -1013,7 +1086,9 @@ export function HuaweiRolloutTable({
     if (!dateFilter.startDate || !dateFilter.endDate) return data
     
     const startDate = new Date(dateFilter.startDate)
+    startDate.setHours(0, 0, 0, 0)
     const endDate = new Date(dateFilter.endDate)
+    endDate.setHours(23, 59, 59, 999)
     
     return data.filter(row => {
       const dateColumns = columnConfigs.filter(config => config.type === 'date')
@@ -1024,20 +1099,63 @@ export function HuaweiRolloutTable({
         if (!cellValue) return false
         
         let rowDate: Date | null = null
-        if (typeof cellValue === 'string') {
-          const parts = cellValue.split(/[\/\-]/)
-          if (parts.length === 3) {
-            const day = parseInt(parts[0], 10)
-            const month = parseInt(parts[1], 10) - 1
-            const year = parseInt(parts[2], 10)
-            rowDate = new Date(year, month, day)
+        
+        // Handle Excel serial date number
+        if (typeof cellValue === 'number' && cellValue >= 1 && cellValue <= 60000) {
+          let days = cellValue - 1
+          if (cellValue > 60) {
+            days = days - 1
+          }
+          const excelEpoch = Date.UTC(1900, 0, 1)
+          rowDate = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
+        } else if (typeof cellValue === 'string') {
+          // Check if string is Excel serial number
+          const serialNumberMatch = cellValue.match(/^\d+$/)
+          if (serialNumberMatch) {
+            const serialNumber = parseInt(cellValue, 10)
+            if (serialNumber >= 1 && serialNumber <= 60000) {
+              let days = serialNumber - 1
+              if (serialNumber > 60) {
+                days = days - 1
+              }
+              const excelEpoch = Date.UTC(1900, 0, 1)
+              rowDate = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
+            }
+          } else {
+            // Try dd-MMM-yyyy format first (24-Nov-2025)
+            const ddMmmYyyyMatch = cellValue.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/)
+            if (ddMmmYyyyMatch) {
+              const day = parseInt(ddMmmYyyyMatch[1], 10)
+              const monthStr = ddMmmYyyyMatch[2].toLowerCase()
+              const year = parseInt(ddMmmYyyyMatch[3], 10)
+              const monthMap: Record<string, number> = {
+                'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+                'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+              }
+              const month = monthMap[monthStr]
+              if (month !== undefined) {
+                rowDate = new Date(year, month, day)
+              }
+            } else {
+              // Try DD/MM/YYYY or DD-MM-YYYY format
+              const parts = cellValue.split(/[\/\-]/)
+              if (parts.length === 3) {
+                const day = parseInt(parts[0], 10)
+                const month = parseInt(parts[1], 10) - 1
+                const year = parseInt(parts[2], 10)
+                rowDate = new Date(year, month, day)
+              }
+            }
           }
         } else {
           rowDate = new Date(cellValue)
         }
         
         if (!rowDate || isNaN(rowDate.getTime())) return false
-        return rowDate >= startDate && rowDate <= endDate
+        
+        // Normalize to day precision for comparison
+        const normalized = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate())
+        return normalized >= startDate && normalized <= endDate
       })
     })
   }, [data, dateFilter, columnConfigs])
@@ -1290,12 +1408,14 @@ export function HuaweiRolloutTable({
   // Date preset filtering
   const handleDatePresetFilter = (columnId: string, preset: string) => {
     const now = new Date()
+    now.setHours(23, 59, 59, 999) // Set to end of today
     let start: Date
     let end: Date
 
     const startOfWeek = (date: Date) => {
       const d = new Date(date)
       const day = d.getDay()
+      // Monday = 1, Sunday = 0. If Sunday, go back 6 days; otherwise go back (day - 1) days
       const diff = day === 0 ? -6 : 1 - day
       d.setDate(d.getDate() + diff)
       d.setHours(0, 0, 0, 0)
@@ -1303,28 +1423,44 @@ export function HuaweiRolloutTable({
     }
     const endOfWeek = (date: Date) => {
       const d = startOfWeek(date)
-      d.setDate(d.getDate() + 6)
+      d.setDate(d.getDate() + 6) // Sunday
       d.setHours(23, 59, 59, 999)
       return d
     }
-    const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1)
+    const startOfMonth = (date: Date) => {
+      const d = new Date(date.getFullYear(), date.getMonth(), 1)
+      d.setHours(0, 0, 0, 0)
+      return d
+    }
     const endOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999)
 
     switch (preset) {
       case 'thisweek':
+        // This week: Monday of this week to today
         start = startOfWeek(now)
-        end = endOfWeek(now)
+        end = new Date(now) // Today, not end of week
         break
       case 'lastweek': {
-        const lastWeekRef = new Date(now)
-        lastWeekRef.setDate(lastWeekRef.getDate() - 7)
-        start = startOfWeek(lastWeekRef)
-        end = endOfWeek(lastWeekRef)
+        // Last week: Monday to Sunday of previous calendar week
+        const currentDay = now.getDay()
+        const thisMonday = new Date(now)
+        const daysToThisMonday = currentDay === 0 ? 6 : currentDay - 1
+        thisMonday.setDate(now.getDate() - daysToThisMonday)
+        thisMonday.setHours(0, 0, 0, 0)
+        
+        start = new Date(thisMonday)
+        start.setDate(thisMonday.getDate() - 7) // Last Monday
+        start.setHours(0, 0, 0, 0)
+        
+        end = new Date(thisMonday)
+        end.setDate(thisMonday.getDate() - 1) // Last Sunday
+        end.setHours(23, 59, 59, 999)
         break
       }
       case 'thismonth':
+        // This month: 1st of month to today
         start = startOfMonth(now)
-        end = endOfMonth(now)
+        end = new Date(now) // Today, not end of month
         break
       case 'lastmonth': {
         const lastMonthRef = new Date(now.getFullYear(), now.getMonth() - 1, 15)
@@ -1334,7 +1470,8 @@ export function HuaweiRolloutTable({
       }
       case 'thisyear':
         start = new Date(now.getFullYear(), 0, 1)
-        end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
+        start.setHours(0, 0, 0, 0)
+        end = new Date(now) // Today, not end of year
         break
       default:
         return

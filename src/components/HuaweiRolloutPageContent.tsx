@@ -275,11 +275,23 @@ export function HuaweiRolloutPageContent({ apiBasePath, pageTitle }: HuaweiRollo
     if (!value) return null
 
     if (typeof value === 'number') {
-      const date = new Date((value - 25569) * 86400 * 1000)
-      const day = String(date.getDate()).padStart(2, '0')
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const year = date.getFullYear()
-      return `${day}/${month}/${year}`
+      // Excel serial date conversion (same as other components)
+      // Excel epoch starts at 1900-01-01
+      // Use UTC to avoid timezone offset issues
+      if (value >= 1 && value <= 60000) {
+        let days = value - 1
+        if (value > 60) {
+          days = days - 1
+        }
+        const excelEpoch = Date.UTC(1900, 0, 1)
+        const date = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
+        
+        const day = String(date.getUTCDate()).padStart(2, '0')
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+        const year = date.getUTCFullYear()
+        return `${day}/${month}/${year}`
+      }
+      return null
     }
 
     if (typeof value === 'string') {

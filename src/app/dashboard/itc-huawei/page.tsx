@@ -15,7 +15,8 @@ import {
   Calendar,
   Users,
   Download,
-  X
+  X,
+  FileCheck
 } from 'lucide-react'
 
 interface SheetListItem {
@@ -302,10 +303,45 @@ export default function ItcHuaweiDashboard() {
     if (!dateStr || dateStr === 'N/A' || dateStr === '#REF!' || dateStr === '-') return null
     
     try {
-      // IMPORTANT: Server returns DD/MM/YYYY format
-      // We must parse day and month correctly (NOT month/day)
+      // Check if it's an Excel serial date number (e.g., 45982)
+      // Excel stores dates as number of days since 1900-01-01
+      const serialNumberMatch = dateStr.toString().match(/^\d+$/)
+      if (serialNumberMatch) {
+        const serialNumber = parseInt(dateStr, 10)
+        // Excel serial dates are typically between 1 (1900-01-01) and 60000 (year 2064)
+        if (serialNumber >= 1 && serialNumber <= 60000) {
+          // Excel epoch starts at 1900-01-01, but Excel incorrectly treats 1900 as a leap year
+          // So we need to account for this: day 60 is 1900-02-29 (which doesn't exist)
+          // Use UTC to avoid timezone offset issues
+          let days = serialNumber - 1
+          if (serialNumber > 60) {
+            days = days - 1
+          }
+          const excelEpoch = Date.UTC(1900, 0, 1)
+          return new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
+        }
+      }
       
-      // Try DD/MM/YYYY format (02/11/2025) - PRIMARY FORMAT FROM SERVER
+      // Try dd-MMM-yyyy format FIRST (like 24-Nov-2025) - PRIMARY FORMAT FROM DISPLAY
+      const ddMmmYyyyMatch = dateStr.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/)
+      if (ddMmmYyyyMatch) {
+        const day = parseInt(ddMmmYyyyMatch[1], 10)
+        const monthStr = ddMmmYyyyMatch[2].toLowerCase()
+        const year = parseInt(ddMmmYyyyMatch[3], 10)
+        const monthMap: Record<string, number> = {
+          'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+          'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+        }
+        const month = monthMap[monthStr]
+        if (month !== undefined && day >= 1 && day <= 31) {
+          const date = new Date(year, month, day)
+          if (date.getDate() === day && date.getMonth() === month && date.getFullYear() === year) {
+            return date
+          }
+        }
+      }
+      
+      // Try DD/MM/YYYY format (02/11/2025)
       const ddmmyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
       if (ddmmyyyyMatch) {
         const day = parseInt(ddmmyyyyMatch[1], 10)
@@ -412,31 +448,38 @@ export default function ItcHuaweiDashboard() {
         endDate.setHours(23, 59, 59, 999)
         break
       case 'week':
-        // Last 7 days (including today)
-        startDate = new Date(now)
-        startDate.setDate(now.getDate() - 7)
-        startDate.setHours(0, 0, 0, 0)
+        // Current calendar week (Monday - Sunday)
+        const currentDay = now.getDay()
+        const currentMonday = new Date(now)
+        // Calculate days to subtract to get to Monday
+        // If Sunday (0), go back 6 days; otherwise go back (day - 1) days
+        const daysToMonday = currentDay === 0 ? 6 : currentDay - 1
+        currentMonday.setDate(now.getDate() - daysToMonday)
+        currentMonday.setHours(0, 0, 0, 0)
+        
+        startDate = currentMonday
         endDate = new Date(now)
         endDate.setHours(23, 59, 59, 999)
         break
       case 'lastweek':
         // Previous calendar week (Monday - Sunday)
         const day = now.getDay()
-        const currentMonday = new Date(now)
-        // move to Monday of this week
-        const diff = currentMonday.getDate() - day + (day === 0 ? -6 : 1)
-        currentMonday.setDate(diff)
-        currentMonday.setHours(0, 0, 0, 0)
+        const thisMonday = new Date(now)
+        // Calculate days to subtract to get to this Monday
+        const daysToThisMonday = day === 0 ? 6 : day - 1
+        thisMonday.setDate(now.getDate() - daysToThisMonday)
+        thisMonday.setHours(0, 0, 0, 0)
 
-        const lastWeekStart = new Date(currentMonday)
-        lastWeekStart.setDate(currentMonday.getDate() - 7)
+        // Last week Monday = this Monday - 7 days
+        const lastWeekStart = new Date(thisMonday)
+        lastWeekStart.setDate(thisMonday.getDate() - 7)
         lastWeekStart.setHours(0, 0, 0, 0)
 
-        const lastWeekEnd = new Date(currentMonday)
-        lastWeekEnd.setDate(currentMonday.getDate() - 1)
+        // Last week Sunday = this Monday - 1 day
+        const lastWeekEnd = new Date(thisMonday)
+        lastWeekEnd.setDate(thisMonday.getDate() - 1)
         lastWeekEnd.setHours(23, 59, 59, 999)
 
-        // Replace filterDate (start-of-range) and now (end-of-range) with last week bounds
         startDate = lastWeekStart
         endDate = lastWeekEnd
         break
@@ -980,12 +1023,26 @@ export default function ItcHuaweiDashboard() {
       return getFilteredValue(value)
     })
 
+    // Helper function to format date for display
+    const formatDateForDisplay = (dateValue: any): string => {
+      if (!dateValue) return '-'
+      
+      const dateObj = parseDate(dateValue.toString())
+      if (!dateObj) return dateValue.toString()
+      
+      // Format as dd-MMM-yyyy using UTC to avoid timezone offset
+      const day = dateObj.getUTCDate().toString().padStart(2, '0')
+      const month = dateObj.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })
+      const year = dateObj.getUTCFullYear()
+      return `${day}-${month}-${year}`
+    }
+
     // Map all sites with correct column names (DUID, DU Name)
     const allSites = filteredRows.map(row => ({
       duid: row['DUID'] || row['DU ID'] || '-',
       duName: row['DU Name'] || row['DUName'] || '-',
-      date: row[fieldName] || '-',
-      dateObj: parseDate(row[fieldName])
+      date: formatDateForDisplay(row[fieldName]),
+      dateObj: parseDate(row[fieldName]?.toString())
     }))
 
     // Sort by date (newest first) and take only 15 most recent for display
@@ -1418,7 +1475,7 @@ export default function ItcHuaweiDashboard() {
                 <div className={`grid gap-3 md:gap-4 ${
                   metrics.hasCMEColumns 
                     ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5' 
-                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7'
+                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8'
                 }`}>
             {/* Total Sites */}
             <div className="group bg-white rounded-xl border border-slate-200/60 p-3 md:p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
@@ -1508,6 +1565,23 @@ export default function ItcHuaweiDashboard() {
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-purple-500 to-violet-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <TrendingUp className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            {/* ATP Submit */}
+            <div 
+              onClick={() => openSiteListModal('ATP Submit', 'ATP Submit')}
+              className="bg-white rounded-xl border border-slate-200/60 p-4 group shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">ATP Submit</p>
+                  <p className="text-2xl font-bold text-cyan-600 mt-1">{metrics.atpSubmit}</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.atpSubmitProgress}% of Integrated</p>
+                </div>
+                <div className="w-11 h-11 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <FileCheck className="h-5 w-5 text-white" />
                 </div>
               </div>
             </div>

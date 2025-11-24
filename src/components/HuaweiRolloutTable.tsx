@@ -117,7 +117,7 @@ export function HuaweiRolloutTable({
 
   // Helper: resolve value for a column from a row with robust matching
   const resolveRowValue = (row: Record<string, any>, config: ColumnConfig) => {
-    if (!row || !config) return ''
+    if (!row || !config) return null
     let value = row[config.name]
     if (value === undefined || value === null) {
       value = row[config.displayName]
@@ -143,7 +143,51 @@ export function HuaweiRolloutTable({
       )
       if (matchingKey) value = row[matchingKey]
     }
-    return value === undefined || value === null ? '' : value
+    
+    // Return null for empty values to ensure proper Excel handling
+    if (value === undefined || value === null || value === '') return null
+    
+    // Format date values for export
+    if (config.type === 'date' && value) {
+      // Handle Excel serial date number
+      if (typeof value === 'number' && value >= 1 && value <= 60000) {
+        let days = value - 1
+        if (value > 60) {
+          days = days - 1
+        }
+        const excelEpoch = Date.UTC(1900, 0, 1)
+        const date = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
+        const day = date.getUTCDate().toString().padStart(2, '0')
+        const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
+        const year = date.getUTCFullYear()
+        return `${day}-${month}-${year}`
+      }
+      
+      // Handle string serial number
+      if (typeof value === 'string') {
+        const serialNumberMatch = value.match(/^\d+$/)
+        if (serialNumberMatch) {
+          const serialNumber = parseInt(value, 10)
+          if (serialNumber >= 1 && serialNumber <= 60000) {
+            let days = serialNumber - 1
+            if (serialNumber > 60) {
+              days = days - 1
+            }
+            const excelEpoch = Date.UTC(1900, 0, 1)
+            const date = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
+            const day = date.getUTCDate().toString().padStart(2, '0')
+            const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
+            const year = date.getUTCFullYear()
+            return `${day}-${month}-${year}`
+          }
+        }
+      }
+      
+      // Already formatted date, return as is
+      return value
+    }
+    
+    return value
   }
 
   // Export filtered data to Excel (using local data, no server fetch)
@@ -189,7 +233,8 @@ export function HuaweiRolloutTable({
       const dataRows = filteredRows.map(row => {
         const rowData = visibleColumns.map(config => {
           const value = resolveRowValue(row, config)
-          return value === null || value === undefined ? '' : value
+          // Return null for truly empty cells (not empty string) for proper Excel pivot handling
+          return value
         })
         
         // Add PO Status if visible
@@ -197,7 +242,7 @@ export function HuaweiRolloutTable({
           const duid = row['DUID'] || row['duid']
           const poKey = Object.keys(poStatusMap).find(k => k.toLowerCase() === (duid || '').toString().toLowerCase())
           const status = poKey ? poStatusMap[poKey] : null
-          rowData.push(status?.display || 'No PO')
+          rowData.push(status?.display || null)
         }
         
         return rowData

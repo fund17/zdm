@@ -20,6 +20,8 @@ export default function TeamPerformancePage() {
   const [sheets, setSheets] = useState<ClockSheet[]>([])
   const [selectedSheet, setSelectedSheet] = useState<string>('')
   const [selectedRegion, setSelectedRegion] = useState<string>('all')
+  const [startDate, setStartDate] = useState<string>('')
+  const [endDate, setEndDate] = useState<string>('')
   const [data, setData] = useState<ClockRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -84,6 +86,26 @@ export default function TeamPerformancePage() {
 
     fetchData()
   }, [selectedSheet])
+
+  // Initialize date filters when data changes
+  useEffect(() => {
+    if (data.length > 0 && !startDate && !endDate) {
+      const dateRange = data.reduce((acc, record) => {
+        const clockTime = record['Clock Time'] || ''
+        const date = clockTime.split(' ')[0]
+        if (date) {
+          if (!acc.min || date < acc.min) acc.min = date
+          if (!acc.max || date > acc.max) acc.max = date
+        }
+        return acc
+      }, { min: '', max: '' })
+
+      if (dateRange.min && dateRange.max) {
+        setStartDate(dateRange.min)
+        setEndDate(dateRange.max)
+      }
+    }
+  }, [data])
 
   // Get unique regions from data
   const uniqueRegions = Array.from(
@@ -156,6 +178,29 @@ export default function TeamPerformancePage() {
                 ))}
               </select>
             </div>
+            
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <label className="text-xs font-medium text-white whitespace-nowrap">
+                Date:
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                max={endDate || undefined}
+                className="px-2 py-1.5 text-sm border border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+                disabled={loading}
+              />
+              <span className="text-white text-xs">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                min={startDate || undefined}
+                className="px-2 py-1.5 text-sm border border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+                disabled={loading}
+              />
+            </div>
           </div>
         </div>
 
@@ -176,7 +221,12 @@ export default function TeamPerformancePage() {
 
         {/* Data Table */}
         {!loading && !error && data.length > 0 && (
-          <TeamPerformanceTable data={data} selectedRegion={selectedRegion} />
+          <TeamPerformanceTable 
+            data={data} 
+            selectedRegion={selectedRegion}
+            startDate={startDate}
+            endDate={endDate}
+          />
         )}
 
         {/* Empty State */}

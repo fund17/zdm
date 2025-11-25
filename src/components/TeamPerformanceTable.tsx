@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 
 interface ClockRecord {
   _sheet: string
@@ -10,6 +10,8 @@ interface ClockRecord {
 interface TeamPerformanceTableProps {
   data: ClockRecord[]
   selectedRegion: string
+  startDate?: string
+  endDate?: string
 }
 
 interface EmployeeStats {
@@ -29,12 +31,29 @@ interface EmployeeStats {
   avgSitesPerDay: number
 }
 
-export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerformanceTableProps) {
-  const [searchTerm, setSearchTerm] = useState('')
+export default function TeamPerformanceTable({ data, selectedRegion, startDate, endDate }: TeamPerformanceTableProps) {
   const [sortBy, setSortBy] = useState<keyof EmployeeStats>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [filterType, setFilterType] = useState<'all' | 'ontime' | 'late' | 'before7am' | 'before6am'>('all')
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null)
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
+  const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false)
+  const [employeeSearchTerm, setEmployeeSearchTerm] = useState('')
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target.closest('.employee-dropdown-container')) {
+        setShowEmployeeDropdown(false)
+      }
+    }
+
+    if (showEmployeeDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showEmployeeDropdown])
 
   // Helper function to check clock in time
   const checkClockInTime = (clockTimeStr: string): { isBefore6am: boolean; isBefore7am: boolean; isOntime: boolean } => {
@@ -132,7 +151,16 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
     const employeeClockPairs = new Map<string, Array<{ clockIn: string; clockOut: string | null }>>()
 
     // First pass: collect all records and pair clock in/out
+    // Track first clock in per employee per day
+    const employeeFirstClockInPerDay = new Map<string, Set<string>>()
+    
     data.forEach((record) => {
+      // Apply date filter
+      const recordClockTime = record['Clock Time'] || ''
+      const recordDate = recordClockTime.split(' ')[0]
+      if (startDate && recordDate < startDate) return
+      if (endDate && recordDate > endDate) return
+
       const name = record['Name'] || record['Employee'] || record['Employee Name'] || 
                    record['name'] || record['employee'] || record['Nama'] || 'Unknown'
       
@@ -166,8 +194,18 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
       const pairs = employeeClockPairs.get(name)!
       
       if (clockType.toLowerCase().includes('in')) {
-        // Clock In - create new pair
-        pairs.push({ clockIn: clockTime, clockOut: null })
+        // Check if this is the first clock in for this day
+        if (!employeeFirstClockInPerDay.has(name)) {
+          employeeFirstClockInPerDay.set(name, new Set())
+        }
+        const daysSet = employeeFirstClockInPerDay.get(name)!
+        
+        // Only count first clock in of the day
+        if (!daysSet.has(recordDate)) {
+          daysSet.add(recordDate)
+          // Clock In - create new pair
+          pairs.push({ clockIn: clockTime, clockOut: null })
+        }
       } else if (clockType.toLowerCase().includes('out')) {
         // Clock Out - match with last unpaired clock in
         const lastPair = pairs.length > 0 ? pairs[pairs.length - 1] : null
@@ -221,8 +259,8 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
             stats.lateDays++
           }
 
-          // Calculate work hours - use 9 PM as default if no clock out
-          const clockOut = pair.clockOut || '21:00:00'
+          // Calculate work hours - use 6 PM (18:00) as default if no clock out
+          const clockOut = pair.clockOut || '18:00:00'
           const workHours = calculateWorkHours(pair.clockIn, clockOut)
           stats.totalWorkHours += workHours
         }
@@ -246,7 +284,7 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
     })
 
     return Array.from(statsMap.values())
-  }, [data, checkClockInTime])
+  }, [data, startDate, endDate])
 
   // Get employee clock details
   const getEmployeeDetails = (employeeName: string) => {
@@ -254,12 +292,22 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
     const employeeRecords = data.filter((record) => {
       const name = record['Name'] || record['Employee'] || record['Employee Name'] || 
                    record['name'] || record['employee'] || record['Nama'] || ''
-      return name === employeeName
+      if (name !== employeeName) return false
+      
+      // Apply date filter
+      const clockTime = record['Clock Time'] || ''
+      const recordDate = clockTime.split(' ')[0]
+      if (startDate && recordDate < startDate) return false
+      if (endDate && recordDate > endDate) return false
+      
+      return true
     })
 
-    // Pair clock in and clock out records
-    const pairs: Array<{
+    // First, create all records with type info
+    const allRecords: Array<{
       date: string
+      time: string
+      type: string
       clockIn: string
       clockOut: string | null
       workHours: number
@@ -269,69 +317,126 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
       isBefore6am: boolean
       isBefore7am: boolean
       isOntime: boolean
+      fullClockTime: string
     }> = []
 
-    let tempClockIn: any = null
+    // Track first clock in per day
+    const firstClockInPerDay = new Set<string>()
 
     employeeRecords.forEach((record) => {
       const clockType = record['Clock In/Out'] || record['ClockInOut'] || record['Type'] || ''
       const clockTime = record['Clock Time'] || ''
+      const fullTime = clockTime.split(' ')
+      const date = fullTime[0] || ''
+      const time = fullTime[1] || ''
 
-      if (clockType.toLowerCase().includes('in')) {
-        // Clock In - save for pairing
-        tempClockIn = {
-          clockTime,
-          duid: record['DU ID'] || record['DUID'] || record['du_id'] || '-',
-          duName: record['DU Name'] || record['DUName'] || record['du_name'] || '-',
-          siteName: record['Customer Site Name'] || record['Site Name'] || '-',
-        }
-      } else if (clockType.toLowerCase().includes('out') && tempClockIn) {
-        // Clock Out - pair with previous clock in
-        const timeCheck = checkClockInTime(tempClockIn.clockTime)
-        const workHours = calculateWorkHours(tempClockIn.clockTime, clockTime)
+      const isClockIn = clockType.toLowerCase().includes('in')
+      const timeCheck = isClockIn ? checkClockInTime(clockTime) : { isBefore6am: false, isBefore7am: false, isOntime: false }
 
-        pairs.push({
-          date: tempClockIn.clockTime.split(' ')[0],
-          clockIn: tempClockIn.clockTime.split(' ')[1],
-          clockOut: clockTime.split(' ')[1],
-          workHours,
-          duid: tempClockIn.duid,
-          duName: tempClockIn.duName,
-          siteName: tempClockIn.siteName,
-          isBefore6am: timeCheck.isBefore6am,
-          isBefore7am: timeCheck.isBefore7am,
-          isOntime: timeCheck.isOntime,
-        })
-
-        tempClockIn = null
+      // For clock in, only add first one per day
+      if (isClockIn && firstClockInPerDay.has(date)) {
+        return // Skip subsequent clock ins on same day
       }
-    })
 
-    // Add unpaired clock in (no clock out yet)
-    if (tempClockIn) {
-      const timeCheck = checkClockInTime(tempClockIn.clockTime)
-      pairs.push({
-        date: tempClockIn.clockTime.split(' ')[0],
-        clockIn: tempClockIn.clockTime.split(' ')[1],
-        clockOut: null,
+      if (isClockIn) {
+        firstClockInPerDay.add(date)
+      }
+
+      allRecords.push({
+        date,
+        time,
+        type: clockType,
+        clockIn: isClockIn ? time : '',
+        clockOut: !isClockIn ? time : null,
         workHours: 0,
-        duid: tempClockIn.duid,
-        duName: tempClockIn.duName,
-        siteName: tempClockIn.siteName,
+        duid: record['DU ID'] || record['DUID'] || record['du_id'] || '-',
+        duName: record['DU Name'] || record['DUName'] || record['du_name'] || '-',
+        siteName: record['Customer Site Name'] || record['Site Name'] || '-',
         isBefore6am: timeCheck.isBefore6am,
         isBefore7am: timeCheck.isBefore7am,
         isOntime: timeCheck.isOntime,
+        fullClockTime: clockTime,
       })
+    })
+
+    // Sort by date and time first
+    allRecords.sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date)
+      if (dateCompare !== 0) return dateCompare
+      return a.time.localeCompare(b.time)
+    })
+
+    // Now calculate work hours by pairing clock in with next clock out
+    for (let i = 0; i < allRecords.length; i++) {
+      const record = allRecords[i]
+      
+      if (record.type.toLowerCase().includes('in')) {
+        // Look for next clock out
+        let foundClockOut = false
+        for (let j = i + 1; j < allRecords.length; j++) {
+          if (allRecords[j].type.toLowerCase().includes('out')) {
+            // Found clock out, calculate work hours
+            const workHours = calculateWorkHours(record.fullClockTime, allRecords[j].fullClockTime)
+            record.workHours = workHours
+            record.clockOut = allRecords[j].time
+            foundClockOut = true
+            break
+          } else {
+            // Another clock in before clock out, stop looking
+            break
+          }
+        }
+        
+        // If no clock out found, use default 6 PM
+        if (!foundClockOut) {
+          const defaultClockOut = `${record.date} 18:00:00`
+          const workHours = calculateWorkHours(record.fullClockTime, defaultClockOut)
+          record.workHours = workHours
+        }
+      }
     }
 
-    return pairs
+    return allRecords
   }
+
+  // Get employee names filtered by region and date range (for dropdown)
+  const availableEmployeeNames = useMemo(() => {
+    let filtered = employeeStats
+    
+    // Apply region filter
+    if (selectedRegion !== 'all') {
+      filtered = filtered.filter(stats => stats.region === selectedRegion)
+    }
+    
+    // Note: Date filter is already applied in employeeStats calculation
+    return Array.from(new Set(filtered.map(stats => stats.name))).sort()
+  }, [employeeStats, selectedRegion])
+
+  // Filter employee names based on search term
+  const filteredEmployeeNames = useMemo(() => {
+    if (!employeeSearchTerm.trim()) return availableEmployeeNames
+    const searchLower = employeeSearchTerm.toLowerCase()
+    return availableEmployeeNames.filter(name => name.toLowerCase().includes(searchLower))
+  }, [availableEmployeeNames, employeeSearchTerm])
+
+  // Cleanup selected employees when available employees change
+  useEffect(() => {
+    if (selectedEmployees.length > 0) {
+      const validSelections = selectedEmployees.filter(name => availableEmployeeNames.includes(name))
+      if (validSelections.length !== selectedEmployees.length) {
+        setSelectedEmployees(validSelections)
+      }
+    }
+  }, [availableEmployeeNames, selectedEmployees])
 
   // Filter and sort data
   const filteredAndSortedStats = useMemo(() => {
-    let filtered = employeeStats.filter((stats) =>
-      stats.name.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    let filtered = employeeStats
+    
+    // Multi-select employee filter
+    if (selectedEmployees.length > 0) {
+      filtered = filtered.filter((stats) => selectedEmployees.includes(stats.name))
+    }
 
     // Apply region filter
     if (selectedRegion !== 'all') {
@@ -365,7 +470,7 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
     })
 
     return filtered
-  }, [employeeStats, searchTerm, sortBy, sortOrder, filterType, selectedRegion])
+  }, [employeeStats, sortBy, sortOrder, filterType, selectedRegion, selectedEmployees])
 
   // Calculate summary statistics (filtered by region, search, and filter type)
   const summaryStats = useMemo(() => {
@@ -405,6 +510,7 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
           filteredStats.length
         )
       : 0
+    const totalOntimeDays = filteredStats.reduce((sum, stats) => sum + stats.ontimeDays, 0)
     const totalLateDays = filteredStats.reduce((sum, stats) => sum + stats.lateDays, 0)
     const totalBefore7amDays = filteredStats.reduce(
       (sum, stats) => sum + stats.before7amDays,
@@ -448,6 +554,7 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
       totalEmployees,
       avgAttendance,
       avgOntimeRate,
+      totalOntimeDays,
       totalLateDays,
       totalBefore7amDays,
       totalBefore6amDays,
@@ -459,7 +566,7 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
       needsAttention,
       avgVisitsPerDuid,
     }
-  }, [filteredAndSortedStats, data, selectedRegion])
+  }, [filteredAndSortedStats, data, selectedRegion, startDate, endDate])
 
   const handleSort = (column: keyof EmployeeStats) => {
     if (sortBy === column) {
@@ -473,7 +580,7 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
   return (
     <div className="space-y-4">
       {/* Summary Cards Row 1 - Main Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <button
           onClick={() => setFilterType(filterType === 'all' ? 'all' : 'all')}
           className={`bg-blue-50 rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
@@ -497,6 +604,14 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
             {summaryStats.avgOntimeRate}%
           </p>
         </button>
+
+        <div className="bg-emerald-50 rounded-lg border-2 border-emerald-200 p-3">
+          <p className="text-emerald-600 text-xs font-medium">Total On-Time</p>
+          <p className="text-2xl font-bold text-emerald-900 mt-1">
+            {summaryStats.totalOntimeDays}
+          </p>
+          <p className="text-xs text-emerald-700">days</p>
+        </div>
 
         <button
           onClick={() => setFilterType(filterType === 'late' ? 'all' : 'late')}
@@ -597,32 +712,104 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
 
       {/* Search and Filter Status */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
-        <div className="flex flex-col sm:flex-row gap-2 items-center">
-          <input
-            type="text"
-            placeholder="Search by employee name..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <div className="flex gap-2 w-full sm:w-auto">
-            {filterType !== 'all' && (
+        <div className="flex flex-col gap-2">
+          {/* Row 1: Multi-select Employee Filter */}
+          <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+            <div className="relative flex-1 w-full employee-dropdown-container">
+              <button
+                onClick={() => setShowEmployeeDropdown(!showEmployeeDropdown)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left flex items-center justify-between"
+              >
+                <span className={selectedEmployees.length === 0 ? 'text-gray-500' : 'text-gray-900'}>
+                  {selectedEmployees.length === 0 
+                    ? 'Select employees to filter...' 
+                    : `${selectedEmployees.length} employee${selectedEmployees.length > 1 ? 's' : ''} selected`}
+                </span>
+                <svg className={`w-4 h-4 transition-transform ${showEmployeeDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {showEmployeeDropdown && (
+                <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-hidden flex flex-col">
+                  <div className="sticky top-0 bg-gray-50 p-2 border-b border-gray-200">
+                    <input
+                      type="text"
+                      placeholder="Search employees..."
+                      value={employeeSearchTerm}
+                      onChange={(e) => setEmployeeSearchTerm(e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedEmployees(filteredEmployeeNames)
+                        }}
+                        className="flex-1 px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                      >
+                        Select All {employeeSearchTerm && `(${filteredEmployeeNames.length})`}
+                      </button>
+                      <button
+                        onClick={() => setSelectedEmployees([])}
+                        className="flex-1 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="overflow-y-auto flex-1">
+                    {filteredEmployeeNames.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-gray-500 text-center">
+                        No employees found
+                      </div>
+                    ) : (
+                      filteredEmployeeNames.map((name) => (
+                    <label
+                      key={name}
+                      className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployees.includes(name)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedEmployees([...selectedEmployees, name])
+                          } else {
+                            setSelectedEmployees(selectedEmployees.filter(n => n !== name))
+                          }
+                        }}
+                        className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="truncate">{name}</span>
+                    </label>
+                  )))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {selectedEmployees.length > 0 && (
+              <button
+                onClick={() => setSelectedEmployees([])}
+                className="px-3 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors whitespace-nowrap"
+              >
+                Clear Selection
+              </button>
+            )}
+          </div>
+
+          {/* Row 2: Filter Buttons */}
+          {filterType !== 'all' && (
+            <div className="flex gap-2">
               <button
                 onClick={() => setFilterType('all')}
                 className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-200 transition-colors"
               >
                 Clear Filter
               </button>
-            )}
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors"
-              >
-                Clear Search
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         {filterType !== 'all' && (
           <p className="text-xs text-gray-600 mt-2">
@@ -808,10 +995,10 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Date</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Clock In</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Clock Out</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Work Hours</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Time</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Type</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Status</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Work Hours</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">DU ID</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">DU Name</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Site Name</th>
@@ -821,34 +1008,46 @@ export default function TeamPerformanceTable({ data, selectedRegion }: TeamPerfo
                   {getEmployeeDetails(selectedEmployee).map((detail, idx) => (
                     <tr key={idx} className="hover:bg-gray-50">
                       <td className="px-3 py-2 text-sm text-gray-900">{detail.date}</td>
-                      <td className="px-3 py-2 text-sm text-gray-900 font-medium">{detail.clockIn}</td>
-                      <td className="px-3 py-2 text-sm text-gray-900">
-                        {detail.clockOut || <span className="text-gray-400">-</span>}
+                      <td className="px-3 py-2 text-sm text-gray-900 font-medium">{detail.time}</td>
+                      <td className="px-3 py-2 text-sm">
+                        {detail.type.toLowerCase().includes('in') ? (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                            Clock In
+                          </span>
+                        ) : (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
+                            Clock Out
+                          </span>
+                        )}
                       </td>
-                      <td className="px-3 py-2 text-sm text-gray-900 font-medium">
-                        {detail.workHours > 0 ? (
-                          <span className="text-cyan-600">{detail.workHours.toFixed(1)}h</span>
+                      <td className="px-3 py-2 text-sm">
+                        {detail.type.toLowerCase().includes('in') ? (
+                          detail.isBefore6am ? (
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
+                              Before 6AM
+                            </span>
+                          ) : detail.isBefore7am ? (
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+                              Before 7AM
+                            </span>
+                          ) : detail.isOntime ? (
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                              On-Time
+                            </span>
+                          ) : (
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                              Late
+                            </span>
+                          )
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-sm">
-                        {detail.isBefore6am ? (
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
-                            Before 6AM
-                          </span>
-                        ) : detail.isBefore7am ? (
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
-                            Before 7AM
-                          </span>
-                        ) : detail.isOntime ? (
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
-                            On-Time
-                          </span>
+                      <td className="px-3 py-2 text-sm text-gray-900 font-medium">
+                        {detail.type.toLowerCase().includes('in') && detail.workHours > 0 ? (
+                          <span className="text-cyan-600">{detail.workHours.toFixed(1)}h</span>
                         ) : (
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
-                            Late
-                          </span>
+                          <span className="text-gray-400">-</span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-sm text-gray-700">{detail.duid}</td>

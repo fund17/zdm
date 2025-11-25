@@ -44,13 +44,18 @@ function doGet(e) {
 
     if (action === 'listFilesInFolder') {
       const folderId = e.parameter.folderId;
+      const includeSubfolders = e.parameter.includeSubfolders === 'true';
+      
       if (!folderId) {
         return ContentService.createTextOutput(
           JSON.stringify({ error: 'folderId parameter is required' })
         ).setMimeType(ContentService.MimeType.JSON);
       }
 
-      const result = listFilesInFolder(folderId);
+      const result = includeSubfolders 
+        ? listFilesInFolderRecursive(folderId)
+        : listFilesInFolder(folderId);
+      
       return ContentService.createTextOutput(
         JSON.stringify({ success: true, files: result })
       ).setMimeType(ContentService.MimeType.JSON);
@@ -291,6 +296,64 @@ function listFilesInFolder(folderId) {
     return fileList;
   } catch (error) {
     Logger.log('Error listing files in folder: ' + error.toString());
+    throw error;
+  }
+}
+
+/**
+ * List all files in a specific folder including subfolders (recursive)
+ */
+function listFilesInFolderRecursive(folderId, parentPath) {
+  try {
+    const targetFolder = DriveApp.getFolderById(folderId);
+    const folderName = targetFolder.getName();
+    const currentPath = parentPath ? parentPath + ' / ' + folderName : folderName;
+    const fileList = [];
+
+    // Get files in current folder
+    const files = targetFolder.getFiles();
+    while (files.hasNext()) {
+      const file = files.next();
+      
+      // Get thumbnail URL (only for images)
+      let thumbnailUrl = null;
+      const mimeType = file.getMimeType();
+      if (mimeType.startsWith('image/')) {
+        thumbnailUrl = 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w200';
+      }
+      
+      fileList.push({
+        id: file.getId(),
+        name: file.getName(),
+        mimeType: mimeType,
+        size: file.getSize(),
+        createdTime: file.getDateCreated().toISOString(),
+        modifiedTime: file.getLastUpdated().toISOString(),
+        url: file.getUrl(),
+        downloadUrl: file.getDownloadUrl(),
+        thumbnailUrl: thumbnailUrl,
+        webViewLink: file.getUrl(),
+        webContentLink: file.getDownloadUrl(),
+        folderPath: currentPath,
+        parentFolder: folderName,
+      });
+    }
+
+    // Recursively get files from subfolders
+    const subfolders = targetFolder.getFolders();
+    while (subfolders.hasNext()) {
+      const subfolder = subfolders.next();
+      const subfolderFiles = listFilesInFolderRecursive(subfolder.getId(), currentPath);
+      fileList.push(...subfolderFiles);
+    }
+
+    if (!parentPath) {
+      Logger.log('Found ' + fileList.length + ' files in folder ' + folderId + ' (including subfolders)');
+    }
+    
+    return fileList;
+  } catch (error) {
+    Logger.log('Error listing files in folder recursively: ' + error.toString());
     throw error;
   }
 }

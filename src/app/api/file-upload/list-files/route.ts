@@ -4,6 +4,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const folderId = searchParams.get('folderId')
+    const includeSubfolders = searchParams.get('includeSubfolders') === 'true'
 
     if (!folderId) {
       return NextResponse.json(
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Call Google Apps Script to list files in the folder directly
-    const url = `${scriptUrl}?action=listFilesInFolder&folderId=${folderId}&mainFolderId=${mainFolderId}`
+    const url = `${scriptUrl}?action=listFilesInFolder&folderId=${folderId}&mainFolderId=${mainFolderId}&includeSubfolders=${includeSubfolders}`
     
     const response = await fetch(url, {
       method: 'GET',

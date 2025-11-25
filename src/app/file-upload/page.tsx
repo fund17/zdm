@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Upload, FileText, Folder, CheckCircle, AlertCircle, X, Loader2, FolderOpen, Image, FileSpreadsheet, File, Trash2 } from 'lucide-react'
+import { Upload, FileText, Folder, CheckCircle, AlertCircle, X, Loader2, FolderOpen, Image, FileSpreadsheet, File, Trash2, Clock, Database } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
+
+type TabType = 'po-update' | 'isdp-update' | 'clock-report'
 
 interface UploadFolder {
   id: string
@@ -12,16 +14,19 @@ interface UploadFolder {
   icon: typeof Folder
   color: string
   folderId: string
+  category: TabType
 }
 
 const UPLOAD_FOLDERS: UploadFolder[] = [
+  // PO Update Category
   {
     id: 'HWPOXLS_UPDATE',
     name: 'Huawei PO XLS Update',
     description: 'Upload files for XLS PO updates',
     icon: FileSpreadsheet,
     color: 'blue',
-    folderId: '142ti_4bDTEOY7x5bYIFj3nAGcnLnTvTP'
+    folderId: '142ti_4bDTEOY7x5bYIFj3nAGcnLnTvTP',
+    category: 'po-update'
   },
   {
     id: 'HWPOTSEL_UPDATE',
@@ -29,7 +34,8 @@ const UPLOAD_FOLDERS: UploadFolder[] = [
     description: 'Upload files for TSEL PO updates',
     icon: FileSpreadsheet,
     color: 'green',
-    folderId: '1acCyxmCDDARCknQohSsRwlWxZh8c7qHX'
+    folderId: '1acCyxmCDDARCknQohSsRwlWxZh8c7qHX',
+    category: 'po-update'
   },
   {
     id: 'HWPOIOH_UPDATE',
@@ -37,7 +43,28 @@ const UPLOAD_FOLDERS: UploadFolder[] = [
     description: 'Upload files for IOH PO updates',
     icon: FileSpreadsheet,
     color: 'purple',
-    folderId: '1flu7jHcddGUWXCUQKyPB_xKSX83U8c4W'
+    folderId: '1flu7jHcddGUWXCUQKyPB_xKSX83U8c4W',
+    category: 'po-update'
+  },
+  // ISDP Update Category
+  {
+    id: 'ISDP_UPDATE',
+    name: 'ISDP Update',
+    description: 'Upload ISDP update files',
+    icon: Database,
+    color: 'indigo',
+    folderId: '1tMyzbGFSWjaZ4JY7VRkz_IQqKBEo-pxb',
+    category: 'isdp-update'
+  },
+  // Clock Report Category
+  {
+    id: 'CLOCK_REPORT',
+    name: 'Clock Report',
+    description: 'Upload clock report files',
+    icon: Clock,
+    color: 'orange',
+    folderId: '1qQorUzpvBvrk_BuBaMMmrG8_aaWYnq2M',
+    category: 'clock-report'
   },
 ]
 
@@ -59,10 +86,13 @@ interface DriveFile {
   webContentLink: string
   createdTime: string
   modifiedTime: string
+  folderPath?: string
+  parentFolder?: string
 }
 
 function FileUploadPage() {
   const router = useRouter()
+  const [activeTab, setActiveTab] = useState<TabType>('po-update')
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [dragActive, setDragActive] = useState(false)
@@ -102,8 +132,10 @@ function FileUploadPage() {
 
     setLoadingFiles(true)
     try {
+      // Add includeSubfolders parameter for ISDP and Clock Report categories
+      const includeSubfolders = (folderConfig.category === 'isdp-update' || folderConfig.category === 'clock-report') ? 'true' : 'false'
       const response = await fetch(
-        `/api/file-upload/list-files?folderId=${folderConfig.folderId}`
+        `/api/file-upload/list-files?folderId=${folderConfig.folderId}&includeSubfolders=${includeSubfolders}`
       )
 
       if (response.ok) {
@@ -305,6 +337,9 @@ function FileUploadPage() {
     return <File className="h-5 w-5 text-gray-600" />
   }
 
+  // Filter folders based on active tab
+  const filteredFolders = UPLOAD_FOLDERS.filter(folder => folder.category === activeTab)
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
       <div className="max-w-6xl mx-auto">
@@ -312,6 +347,63 @@ function FileUploadPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">File Upload Center</h1>
           <p className="text-gray-600">Upload files to specific folders in Google Drive</p>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-2 mb-6">
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setActiveTab('po-update')
+                setSelectedFolder(null)
+                setFiles([])
+              }}
+              className={`flex-1 px-4 py-3 rounded-lg text-sm font-semibold transition-all ${
+                activeTab === 'po-update'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <FileSpreadsheet className="h-4 w-4" />
+                <span>PO Update</span>
+              </div>
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab('isdp-update')
+                setSelectedFolder(null)
+                setFiles([])
+              }}
+              className={`flex-1 px-4 py-3 rounded-lg text-sm font-semibold transition-all ${
+                activeTab === 'isdp-update'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Database className="h-4 w-4" />
+                <span>ISDP Update</span>
+              </div>
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab('clock-report')
+                setSelectedFolder(null)
+                setFiles([])
+              }}
+              className={`flex-1 px-4 py-3 rounded-lg text-sm font-semibold transition-all ${
+                activeTab === 'clock-report'
+                  ? 'bg-orange-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Clock className="h-4 w-4" />
+                <span>Clock Report</span>
+              </div>
+            </button>
+          </div>
         </div>
 
         {/* Folder Selection */}
@@ -322,7 +414,7 @@ function FileUploadPage() {
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {UPLOAD_FOLDERS.map((folder) => {
+            {filteredFolders.map((folder) => {
               const Icon = folder.icon
               const isSelected = selectedFolder === folder.id
               
@@ -338,6 +430,8 @@ function FileUploadPage() {
                       ? folder.color === 'blue' ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
                       : folder.color === 'green' ? 'border-green-500 bg-green-50 ring-2 ring-green-200'
                       : folder.color === 'purple' ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
+                      : folder.color === 'indigo' ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200'
+                      : folder.color === 'orange' ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200'
                       : 'border-gray-500 bg-gray-50'
                       : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
                   }`}
@@ -348,6 +442,8 @@ function FileUploadPage() {
                         ? folder.color === 'blue' ? 'bg-blue-100'
                         : folder.color === 'green' ? 'bg-green-100'
                         : folder.color === 'purple' ? 'bg-purple-100'
+                        : folder.color === 'indigo' ? 'bg-indigo-100'
+                        : folder.color === 'orange' ? 'bg-orange-100'
                         : 'bg-gray-100'
                         : 'bg-gray-100'
                     }`}>
@@ -356,6 +452,8 @@ function FileUploadPage() {
                           ? folder.color === 'blue' ? 'text-blue-600'
                           : folder.color === 'green' ? 'text-green-600'
                           : folder.color === 'purple' ? 'text-purple-600'
+                          : folder.color === 'indigo' ? 'text-indigo-600'
+                          : folder.color === 'orange' ? 'text-orange-600'
                           : 'text-gray-600'
                           : 'text-gray-600'
                       }`} />
@@ -544,9 +642,16 @@ function FileUploadPage() {
                     {/* File Info */}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
-                      <p className="text-xs text-gray-600">
-                        {formatFileSize(file.size)} • {new Date(file.modifiedTime).toLocaleDateString()}
-                      </p>
+                      <div className="flex flex-col gap-0.5">
+                        {file.folderPath && (
+                          <p className="text-xs text-blue-600 font-medium">
+                            📁 {file.folderPath}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-600">
+                          {formatFileSize(file.size)} • {new Date(file.modifiedTime).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
 
                     {/* Actions */}

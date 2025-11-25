@@ -1245,10 +1245,11 @@ export default function ItcHuaweiDashboard() {
       return `${day}-${month}-${year}`
     }
 
-    // Map all sites with correct column names (DUID, DU Name)
+    // Map all sites with correct column names (DUID, DU Name, Project)
     const allSites = filteredRows.map(row => ({
       duid: row['DUID'] || row['DU ID'] || '-',
       duName: row['DU Name'] || row['DUName'] || '-',
+      project: row['_project'] || '-',
       date: formatDateForDisplay(row[fieldName]),
       dateObj: parseDate(row[fieldName]?.toString())
     }))
@@ -1276,6 +1277,7 @@ export default function ItcHuaweiDashboard() {
     const excelData = modalData.allSites.map(site => ({
       'DUID': site.duid,
       'DU Name': site.duName,
+      'Project': site.project,
       'Date': site.date
     }))
 
@@ -1286,6 +1288,7 @@ export default function ItcHuaweiDashboard() {
     const colWidths = [
       { wch: 20 },
       { wch: 40 },
+      { wch: 30 },
       { wch: 15 }
     ]
     ws['!cols'] = colWidths
@@ -2406,6 +2409,7 @@ export default function ItcHuaweiDashboard() {
                         <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">No</th>
                         <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DUID</th>
                         <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DU Name</th>
+                        <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Project</th>
                         <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Date</th>
                       </tr>
                     </thead>
@@ -2418,6 +2422,7 @@ export default function ItcHuaweiDashboard() {
                           <td className="px-4 py-3 text-slate-600 font-medium">{index + 1}</td>
                           <td className="px-4 py-3 font-mono text-slate-900 font-medium">{site.duid}</td>
                           <td className="px-4 py-3 text-slate-900">{site.duName}</td>
+                          <td className="px-4 py-3 text-blue-600 font-medium">{site.project}</td>
                           <td className="px-4 py-3 text-slate-600 font-medium">{site.date}</td>
                         </tr>
                       ))}

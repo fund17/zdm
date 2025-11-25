@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, getSheetMetadata } from '@/lib/googleSheets'
 
+// Cache for 5 minutes to reduce bandwidth
+export const revalidate = 300
+
 export async function GET(request: NextRequest) {
   try {
     const spreadsheetId = process.env.GOOGLE_SHEET_ID_DAILYPLAN

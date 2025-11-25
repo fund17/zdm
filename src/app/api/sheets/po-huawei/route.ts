@@ -1,10 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { google } from 'googleapis'
 
+// Cache for 1 week (604800 seconds) - Update every Wednesday
+// This dramatically reduces bandwidth as PO data doesn't change frequently
+export const revalidate = 604800 // 7 days = 7 * 24 * 60 * 60
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
+    // Check if today is Wednesday (3 = Wednesday in JavaScript Date.getDay())
+    const today = new Date()
+    const isWednesday = today.getDay() === 3
+    
+    // Force bypass cache on Wednesday morning (optional: only 8-10 AM Jakarta time)
+    const jakartaHour = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })).getHours()
+    const shouldForceRefresh = isWednesday && jakartaHour >= 8 && jakartaHour < 10
+    
+    if (shouldForceRefresh) {
+      console.log('🔄 Wednesday morning: Forcing cache refresh for PO Huawei data')
+    }
     // Get all PO Huawei spreadsheet IDs from environment
     const spreadsheetIds = [
       // ITC spreadsheets
@@ -154,6 +168,12 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Calculate next cache refresh (next Wednesday)
+    const nextWednesday = new Date(today)
+    const daysUntilWednesday = (3 - today.getDay() + 7) % 7
+    nextWednesday.setDate(today.getDate() + (daysUntilWednesday || 7))
+    nextWednesday.setHours(8, 0, 0, 0)
+
     return NextResponse.json(
       {
         success: true,
@@ -162,8 +182,27 @@ export async function GET(request: NextRequest) {
         spreadsheets: spreadsheetIds.length,
         count: allData.length,
         lastUpdated,
+        cacheInfo: {
+          cachedUntil: nextWednesday.toLocaleString('id-ID', {
+            weekday: 'long',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          nextRefresh: 'Rabu pagi (08:00 WIB)'
+        }
       },
-      { status: 200 }
+      { 
+        status: 200,
+        headers: {
+          // Cache for 1 week on Vercel Edge
+          'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=86400',
+          'X-Cache-Strategy': 'weekly-wednesday',
+          'X-Next-Refresh': nextWednesday.toISOString()
+        }
+      }
     )
   } catch (error) {
     return NextResponse.json(

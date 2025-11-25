@@ -10,6 +10,15 @@ const nextConfig = {
     // your project has ESLint errors.
     ignoreDuringBuilds: true,
   },
+  // Enable caching to reduce bandwidth
+  experimental: {
+    staleTimes: {
+      dynamic: 0,
+      static: 300, // Cache static data for 5 minutes
+    },
+  },
+  // Compress responses
+  compress: true,
 }
 
 module.exports = nextConfig

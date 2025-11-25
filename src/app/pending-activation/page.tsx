@@ -135,7 +135,6 @@ export default function PendingActivationPage() {
                     <ul className="text-xs text-blue-700 space-y-1">
                       <li>• Administrator will review your registration</li>
                       <li>• You&apos;ll receive an email once your account is activated</li>
-                      <li>• This usually takes 1-2 business days</li>
                     </ul>
                   </div>
                 </div>

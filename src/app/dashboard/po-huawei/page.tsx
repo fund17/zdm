@@ -68,14 +68,12 @@ const safeSetItem = (key: string, value: string): boolean => {
     // Check if storage would exceed 4MB (safe limit)
     const estimatedSize = value.length + key.length
     if (estimatedSize > 4 * 1024 * 1024) {
-      console.warn('Data too large for localStorage, skipping cache')
       return false
     }
     localStorage.setItem(key, value)
     return true
   } catch (e) {
     if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-      console.warn('localStorage quota exceeded, clearing old cache')
       // Try to clear old PO caches and retry
       localStorage.removeItem('po_huawei_full_data_cache')
       localStorage.removeItem('po_huawei_dashboard_cache')
@@ -83,11 +81,9 @@ const safeSetItem = (key: string, value: string): boolean => {
         localStorage.setItem(key, value)
         return true
       } catch (retryError) {
-        console.error('Still failed after clearing cache')
         return false
       }
     }
-    console.error('Error setting localStorage:', e)
     return false
   }
 }
@@ -251,15 +247,12 @@ export default function POHuaweiDashboard() {
         
         if (cacheSaved) {
           safeSetItem(cacheTimestampKey, Date.now().toString())
-        } else {
-          console.warn('Cache not saved due to size limitations')
         }
       } else {
         setError(data.message || 'Failed to load data')
       }
     } catch (err) {
       setError('Failed to connect to server')
-      console.error('Error fetching data:', err)
     } finally {
       setLoading(false)
     }
@@ -444,7 +437,7 @@ export default function POHuaweiDashboard() {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-2">
+    <div className="h-full overflow-y-auto bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-2 px-4 pt-4">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-2">
         <div className="flex flex-col space-y-3">

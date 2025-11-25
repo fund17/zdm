@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Verify reset code error:', error)
+
     return NextResponse.json(
       { error: 'Failed to verify code' },
       { status: 500 }

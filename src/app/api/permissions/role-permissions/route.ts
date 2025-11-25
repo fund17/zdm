@@ -44,7 +44,7 @@ async function checkUserPermission(userRole: string): Promise<boolean> {
     const permission = (roleRow[userManagementIndex] || 'no').toLowerCase()
     return permission === 'edit'
   } catch (error) {
-    console.error('Error checking permission:', error)
+
     return false
   }
 }
@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
       permissions,
     })
   } catch (error) {
-    console.error('Error fetching role permissions:', error)
+
     return NextResponse.json(
       { success: false, message: 'Failed to fetch role permissions' },
       { status: 500 }
@@ -242,7 +242,7 @@ export async function PATCH(request: NextRequest) {
       message: 'Permission updated successfully',
     })
   } catch (error) {
-    console.error('Error updating role permission:', error)
+
     return NextResponse.json(
       { success: false, message: 'Failed to update role permission' },
       { status: 500 }

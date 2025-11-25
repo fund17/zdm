@@ -81,7 +81,7 @@ function FileUploadPage() {
           setUserRole(data.user?.role || null)
         }
       } catch (error) {
-        console.error('Failed to fetch user session:', error)
+
       }
     }
     fetchUserSession()
@@ -110,11 +110,11 @@ function FileUploadPage() {
         const data = await response.json()
         setFolderFiles(data.files || [])
       } else {
-        console.error('Failed to fetch folder files')
+
         setFolderFiles([])
       }
     } catch (error) {
-      console.error('Error fetching folder files:', error)
+
       setFolderFiles([])
     } finally {
       setLoadingFiles(false)
@@ -259,7 +259,7 @@ function FileUploadPage() {
         alert('Failed to delete file')
       }
     } catch (error) {
-      console.error('Error deleting file:', error)
+
       alert('Error deleting file')
     }
   }
@@ -370,7 +370,6 @@ function FileUploadPage() {
             })}
           </div>
         </div>
-
 
 
         {/* File List */}

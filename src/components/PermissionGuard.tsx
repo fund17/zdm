@@ -65,7 +65,7 @@ export const PermissionGuard: React.FC<PermissionGuardProps> = ({
           setHasAccess(userLevel === 'read' || userLevel === 'edit')
         }
       } catch (error) {
-        console.error('Error checking permissions:', error)
+
         setHasAccess(false)
       } finally {
         setLoading(false)
@@ -134,7 +134,7 @@ export const useCanEdit = (menuKey: keyof UserPermissions): boolean => {
           setCanEdit(userLevel === 'edit')
         }
       } catch (error) {
-        console.error('Error checking edit permission:', error)
+
       }
     }
 
@@ -159,7 +159,7 @@ export const usePermissionLevel = (menuKey: keyof UserPermissions): PermissionLe
           setLevel(data.permissions[menuKey] as PermissionLevel)
         }
       } catch (error) {
-        console.error('Error fetching permission level:', error)
+
       }
     }
 

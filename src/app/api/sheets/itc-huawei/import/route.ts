@@ -75,9 +75,6 @@ export async function POST(request: NextRequest) {
 
     const headers = existingRows[0]
     
-    console.log('Google Sheets headers:', headers)
-    console.log('Excel row keys:', Object.keys(rows[0]))
-    
     // Check for duplicates in existing data first
     const duidColumnIndex = headers.findIndex((h: string) => 
       h && h.toString().toLowerCase().replace(/\s+/g, '') === 'duid'
@@ -130,13 +127,9 @@ export async function POST(request: NextRequest) {
         
         if (sheetColIndex !== -1) {
           rowArray[sheetColIndex] = excelValue
-          console.log(`Mapped "${excelColName}" -> column ${sheetColIndex} (${headers[sheetColIndex]}): ${excelValue}`)
-        } else {
-          console.log(`No match found for Excel column: "${excelColName}"`)
         }
       })
       
-      console.log('Final row array:', rowArray)
       return rowArray
     })
 
@@ -144,9 +137,6 @@ export async function POST(request: NextRequest) {
     // Skip first column (index 0) if it's empty by starting from column B
     const firstNonEmptyColIndex = headers.findIndex((h: string) => h && h.toString().trim())
     const startColumn = firstNonEmptyColIndex === 0 ? 'A' : String.fromCharCode(65 + firstNonEmptyColIndex) // A=65 in ASCII
-    
-    console.log(`Appending to range: ${sheetName}!${startColumn}:Z`)
-    console.log(`First non-empty column index: ${firstNonEmptyColIndex}`)
     
     // Remove empty columns from the beginning of each row
     const cleanedRows = valuesToAppend.map(row => row.slice(firstNonEmptyColIndex))

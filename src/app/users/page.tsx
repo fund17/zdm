@@ -98,7 +98,7 @@ export default function UserManagementPage() {
         setUsers(data.data)
       }
     } catch (error) {
-      console.error('Failed to fetch users:', error)
+
     } finally {
       setLoading(false)
     }
@@ -120,7 +120,7 @@ export default function UserManagementPage() {
         setAvailableRoles(['admin', 'user', 'pic', 'dc', 'rpm', 'pd', 'hr'])
       }
     } catch (error) {
-      console.error('Failed to fetch roles:', error)
+
       // Fallback to default roles if API fails
       setAvailableRoles(['admin', 'user', 'pic', 'dc', 'rpm', 'pd', 'hr'])
     }
@@ -137,7 +137,7 @@ export default function UserManagementPage() {
         }
       }
     } catch (error) {
-      console.error('Failed to fetch role permissions:', error)
+
     } finally {
       setLoadingPermissions(false)
     }
@@ -157,7 +157,7 @@ export default function UserManagementPage() {
         setEditingPermission(null)
       }
     } catch (error) {
-      console.error('Failed to update permission:', error)
+
     } finally {
       setSavingPermission(false)
     }
@@ -208,7 +208,7 @@ export default function UserManagementPage() {
         await fetchUsers()
       }
     } catch (error) {
-      console.error('Failed to update user:', error)
+
     } finally {
       setUpdating(null)
     }

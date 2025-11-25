@@ -225,7 +225,7 @@ export const createUser = async (
     })
 
   } catch (error) {
-    console.error('Error creating user:', error)
+
     throw new Error(`Failed to create user: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }

@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('Google Apps Script error:', errorText)
+
       return NextResponse.json(
         { success: false, error: 'Failed to fetch files from Google Drive' },
         { status: 500 }
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       )
     }
   } catch (error) {
-    console.error('Error in list-files route:', error)
+
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

@@ -115,9 +115,8 @@ export default function Dashboard() {
             .filter((category: any) => category && category !== '')
         )) as string[]
         setTeamCategories(['All', ...uniqueTeamCategories.sort()])
-        
-        
-        
+
+
         // Get date ranges based on selected category
         const today = new Date()
         today.setHours(0, 0, 0, 0) // Reset to start of day
@@ -182,12 +181,64 @@ export default function Dashboard() {
         const monthStartStr = monthStart.toISOString().split('T')[0]
         
         
+        // Helper function to parse Google Sheets dates (same as DailyPlanTable)
+        const parseSheetDate = (dateStr: string): Date | null => {
+          if (!dateStr) return null
+          
+          try {
+            // Handle Google Sheets serial number dates (numeric)
+            const numericValue = Number(dateStr)
+            if (!isNaN(numericValue) && numericValue > 0) {
+              // Google Sheets date serial number (days since Dec 30, 1899)
+              const baseDate = new Date(Date.UTC(1899, 11, 30))
+              const date = new Date(baseDate.getTime() + numericValue * 24 * 60 * 60 * 1000)
+              if (!isNaN(date.getTime()) && date.getFullYear() > 1900 && date.getFullYear() < 2100) {
+                // Return as local date (without timezone conversion)
+                return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+              }
+            }
+            
+            // Handle format like "04-Jan-2024" or "24-Nov-2025"
+            const parts = dateStr.split('-')
+            if (parts.length === 3) {
+              const day = parseInt(parts[0])
+              const monthMap: { [key: string]: number } = {
+                'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+                'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+              }
+              const monthStr = parts[1].toLowerCase().substring(0, 3)
+              const month = monthMap[monthStr]
+              const year = parseInt(parts[2])
+              
+              if (!isNaN(day) && month !== undefined && !isNaN(year)) {
+                // Create date in local timezone (no UTC conversion)
+                return new Date(year, month, day)
+              }
+            }
+            
+            // Fallback to standard date parsing with UTC awareness
+            const date = new Date(dateStr)
+            if (!isNaN(date.getTime())) {
+              // If parsed as ISO string (includes time), convert to local date only
+              if (dateStr.includes('T') || dateStr.includes('Z')) {
+                return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+              }
+              return date
+            }
+            
+            return null
+          } catch {
+            return null
+          }
+        }
+        
         // Filter data based on selected date range
         let todayData = data.filter((row: any) => {
           if (!row.Date) return false
           
           try {
-            const rowDate = new Date(row.Date)
+            const rowDate = parseSheetDate(String(row.Date))
+            if (!rowDate) return false
             const rowDateStr = rowDate.toISOString().split('T')[0]
             
             // Check if date is within the selected range
@@ -225,7 +276,8 @@ export default function Dashboard() {
         let monthData = data.filter((row: any) => {
           if (!row.Date) return false
           try {
-            const rowDate = new Date(row.Date)
+            const rowDate = parseSheetDate(String(row.Date))
+            if (!rowDate) return false
             const rowDateStr = rowDate.toISOString().split('T')[0]
             return rowDateStr >= monthStartStr && rowDateStr <= todayStr
           } catch (e) {
@@ -598,7 +650,7 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 p-2">
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 px-4 pt-4 pb-2">
       {/* Main Container */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200/60 flex flex-col h-full overflow-hidden">
         {/* Scrollable Content */}

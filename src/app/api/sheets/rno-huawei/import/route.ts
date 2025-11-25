@@ -76,9 +76,8 @@ export async function POST(request: NextRequest) {
     const headers = existingRows[0]
     
     // Log headers for debugging
-    console.log('Google Sheets headers:', headers)
-    console.log('Headers length:', headers.length)
-    
+
+
     const duidColumnIndex = headers.findIndex((h: string) => 
       h.toLowerCase() === 'duid' || h === 'DUID'
     )
@@ -142,12 +141,12 @@ export async function POST(request: NextRequest) {
         rowArray[index] = value !== undefined && value !== null ? value.toString() : ''
         
         if (rowIndex === 0) {
-          console.log(`Header "${header}" (index ${index}): ${rowArray[index]}`)
+
         }
       })
       
       if (rowIndex === 0) {
-        console.log('Final row array:', rowArray)
+
       }
       
       return rowArray
@@ -157,10 +156,8 @@ export async function POST(request: NextRequest) {
     // Skip first column (index 0) if it's empty by starting from column B
     const firstNonEmptyColIndex = headers.findIndex((h: string) => h && h.toString().trim())
     const startColumn = firstNonEmptyColIndex === 0 ? 'A' : String.fromCharCode(65 + firstNonEmptyColIndex) // A=65 in ASCII
-    
-    console.log(`Appending to range: ${sheetName}!${startColumn}:Z`)
-    console.log(`First non-empty column index: ${firstNonEmptyColIndex}`)
-    
+
+
     // Remove empty columns from the beginning of each row
     const cleanedRows = valuesToAppend.map(row => row.slice(firstNonEmptyColIndex))
     

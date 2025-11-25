@@ -8,14 +8,14 @@ async function getDateColumnsFromSettings(): Promise<string[]> {
     const { spreadsheetId, settingSheetName } = getEnvValues(RNO_CONFIG)
     
     if (!spreadsheetId) {
-      console.error('Spreadsheet ID not configured')
+
       return []
     }
 
     const settingsData = await getSheetData(spreadsheetId, settingSheetName)
     
     if (!settingsData || settingsData.length === 0) {
-      console.error('No settings data found')
+
       return []
     }
 
@@ -31,10 +31,9 @@ async function getDateColumnsFromSettings(): Promise<string[]> {
       })
       .filter((name: string) => name !== '')
 
-    console.log('Date columns loaded from settings:', dateColumns)
     return dateColumns
   } catch (error) {
-    console.error('Error fetching date columns from settings:', error)
+
     return []
   }
 }
@@ -62,7 +61,7 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
   const dateColumns = await getDateColumnsFromSettings()
   
   if (dateColumns.length === 0) {
-    console.warn('No date columns found in settings - proceeding without date protection')
+
   }
 
   const { spreadsheetId, defaultSheetName } = getEnvValues(RNO_CONFIG)

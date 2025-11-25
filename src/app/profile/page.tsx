@@ -643,7 +643,7 @@ export default function ProfilePage() {
                                   body: JSON.stringify({ loginAlerts: newValue }),
                                 })
                               } catch (error) {
-                                console.error('Failed to save preference')
+
                               }
                             }}
                             className="sr-only peer"

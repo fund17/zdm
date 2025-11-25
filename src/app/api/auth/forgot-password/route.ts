@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Forgot password error:', error)
+
     return NextResponse.json(
       { error: 'Failed to send verification code' },
       { status: 500 }

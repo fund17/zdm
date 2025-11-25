@@ -68,7 +68,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
           setPermissions(data.permissions)
         }
       } catch (error) {
-        console.error('Error fetching permissions:', error)
+
       } finally {
         setLoadingPermissions(false)
       }

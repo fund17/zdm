@@ -125,7 +125,6 @@ export function HuaweiRolloutPageContent({ apiBasePath, pageTitle }: HuaweiRollo
     try {
       const response = await fetch(`${apiBasePath}/settings`)
       if (!response.ok) {
-        console.error('Failed to fetch settings')
         return
       }
       
@@ -138,9 +137,8 @@ export function HuaweiRolloutPageContent({ apiBasePath, pageTitle }: HuaweiRollo
         .map((col: any) => col.name)
       
       setDateColumns(dateColumnNames)
-      console.log('Date columns from settings:', dateColumnNames)
     } catch (err) {
-      console.error('Error fetching date columns:', err)
+      // Silent catch
     }
   }
 
@@ -332,10 +330,6 @@ export function HuaweiRolloutPageContent({ apiBasePath, pageTitle }: HuaweiRollo
         setAnalyzingFile(false)
         return
       }
-
-      if (dateColumns.length === 0) {
-        console.warn('Date columns not loaded from settings yet')
-      }
       
       jsonData = jsonData.map(row => {
         const newRow: any = {}
@@ -417,7 +411,6 @@ export function HuaweiRolloutPageContent({ apiBasePath, pageTitle }: HuaweiRollo
         totalCells
       })
     } catch (error) {
-      console.error('Error analyzing file:', error)
       displayToast('Failed to analyze file', 'error')
     } finally {
       setAnalyzingFile(false)
@@ -548,7 +541,6 @@ export function HuaweiRolloutPageContent({ apiBasePath, pageTitle }: HuaweiRollo
         totalRows: jsonData.length
       })
     } catch (error) {
-      console.error('Error analyzing register file:', error)
       displayToast('Failed to analyze file', 'error')
     } finally {
       setAnalyzingRegisterFile(false)
@@ -577,7 +569,6 @@ export function HuaweiRolloutPageContent({ apiBasePath, pageTitle }: HuaweiRollo
 
       if (!response.ok) {
         const errorData = await response.json()
-        console.error('Register API error:', errorData)
         throw new Error(errorData.error || errorData.details || 'Failed to register DUIDs')
       }
 
@@ -602,7 +593,7 @@ export function HuaweiRolloutPageContent({ apiBasePath, pageTitle }: HuaweiRollo
   }
 
   return (
-    <div className="h-full flex flex-col pb-2">
+    <div className="h-full flex flex-col pb-2 px-4 pt-4">
       {showToast && (
         <div 
           className="fixed top-20 right-4 z-50 bg-white border-l-4 border-green-500 shadow-lg rounded-lg p-4 max-w-md animate-slide-in"

@@ -162,7 +162,7 @@ export default function DailyPlanPage() {
       // await fetchData()
       
     } catch (error) {
-      console.error('❌ Safe update error:', error)
+
       throw error // Re-throw to let DataTable handle the error
     }
   }
@@ -281,9 +281,8 @@ export default function DailyPlanPage() {
       setTableRefreshing(false)
 
     } catch (error) {
-      console.error('Import error:', error)
-      console.error('Error details:', error instanceof Error ? error.stack : error)
-      
+
+
       let errorMessage = 'An error occurred during import'
       
       if (error instanceof Error) {
@@ -379,7 +378,7 @@ export default function DailyPlanPage() {
       // Write and download file
       XLSX.writeFile(workbook, filename)
     } catch (error) {
-      console.error('❌ Export failed:', error)
+
       alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
@@ -415,7 +414,7 @@ export default function DailyPlanPage() {
   }
 
   return (
-    <div className="h-full flex flex-col pb-2">
+    <div className="h-full flex flex-col pb-2 px-4 pt-4">
       {/* Header */}
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">

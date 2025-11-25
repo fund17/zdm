@@ -98,9 +98,8 @@ export default function Dashboard() {
             .filter((category: any) => category && category !== '')
         )) as string[]
         setTeamCategories(['All', ...uniqueTeamCategories.sort()])
-        
-        
-        
+
+
         // Get date ranges based on selected category
         const today = new Date()
         today.setHours(0, 0, 0, 0) // Reset to start of day
@@ -556,7 +555,6 @@ export default function Dashboard() {
       flipBorder: 'border-red-300'
     },
   ];
-
 
 
   return (

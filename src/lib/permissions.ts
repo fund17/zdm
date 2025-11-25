@@ -84,16 +84,13 @@ export async function fetchRolePermissions(): Promise<RolePermissions[]> {
       })
     }
 
-    // Log fetched permissions for debugging
-    console.log('Fetched permissions from Google Sheets:', JSON.stringify(permissions, null, 2))
-
     // Update cache
     permissionsCache = permissions
     cacheTimestamp = now
 
     return permissions
   } catch (error) {
-    console.error('Error fetching role permissions:', error)
+
     throw error
   }
 }

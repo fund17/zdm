@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Reset password error:', error)
+
     return NextResponse.json(
       { error: 'Failed to reset password' },
       { status: 500 }

@@ -122,7 +122,7 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
         }
       }
     } catch (error) {
-      console.error('Failed to fetch user session:', error)
+
     }
   }
 

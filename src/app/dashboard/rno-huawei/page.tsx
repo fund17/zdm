@@ -89,36 +89,32 @@ export default function ItcHuaweiDashboard() {
       let poData: any[] = []
       
       if (!cachedData) {
-        console.warn('No PO cache found, fetching from API...')
-        
+
         // Fetch PO data from API
         const response = await fetch('/api/sheets/po-huawei')
-        console.log('📡 API Response status:', response.status)
-        
+
         const result = await response.json()
-        console.log('📡 API Result:', { success: result.success, dataLength: result.data?.length, message: result.message })
-        
+
         if (result.success && result.data) {
           poData = result.data
-          console.log(`📥 Fetched PO data: ${poData.length} rows`)
-          console.log('Sample PO row:', poData[0])
-          
+
+
           // Save to cache for future use
           try {
             const compressedData = JSON.stringify(poData)
             localStorage.setItem(cacheKey, compressedData)
             localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString())
-            console.log('💾 PO data cached')
+
           } catch (e) {
-            console.warn('Failed to cache PO data:', e)
+
           }
         } else {
-          console.error('Failed to fetch PO data from API:', result)
+
           return
         }
       } else {
         poData = JSON.parse(cachedData)
-        console.log(`🔍 Loading PO data from cache: ${poData.length} rows`)
+
       }
       
       // Create Site ID → PO Remaining % map
@@ -245,20 +241,12 @@ export default function ItcHuaweiDashboard() {
         finalMapPLN[siteId] = data.totalRemaining / data.count
       })
       
-      console.log(`✅ PO map created: ${Object.keys(finalMap).length} unique site IDs`)
-      console.log(`✅ PO map (Survey only): ${Object.keys(finalMapSurvey).length} unique site IDs`)
-      console.log(`✅ PO map (Dismantle only): ${Object.keys(finalMapDismantle).length} unique site IDs`)
-      console.log(`✅ PO map (ATP only): ${Object.keys(finalMapATP).length} unique site IDs`)
-      console.log(`✅ PO map (PLN only): ${Object.keys(finalMapPLN).length} unique site IDs`)
-      console.log('Sample PO data:', Object.entries(finalMap).slice(0, 3))
-      
       setPoRemainingMap(finalMap)
-      setPoRemainingSurveyMap(finalMapSurvey)
       setPoRemainingDismantleMap(finalMapDismantle)
       setPoRemainingATPMap(finalMapATP)
       setPoRemainingPLNMap(finalMapPLN)
     } catch (err) {
-      console.error('Failed to load PO data:', err)
+
     }
   }
 
@@ -613,9 +601,7 @@ export default function ItcHuaweiDashboard() {
     const atpApprovedSites = filteredData.filter(row => 
       getFilteredValue(row['ATP Approved'] || row['ATPApproved'])
     )
-    
-    console.log(`📊 ATP Approved sites: ${atpApprovedSites.length}`)
-    
+
     let totalPoRemaining = 0
     let sitesWithPOData = 0
     const unmatchedSites: string[] = []
@@ -644,19 +630,9 @@ export default function ItcHuaweiDashboard() {
       }
     })
     
-    console.log(`✅ Sites with PO data: ${sitesWithPOData} / ${atpApprovedSites.length}`)
-    console.log('💰 Sample matched sites with PO remaining:', matchedSamples)
-    console.log(`📊 Total PO remaining sum: ${totalPoRemaining.toFixed(2)}`)
-    
-    if (unmatchedSites.length > 0) {
-      console.log('⚠️ Unmatched sites (first 5):', unmatchedSites.slice(0, 5))
-    }
-    
     const avgPoRemainingPercent = sitesWithPOData > 0 
       ? (totalPoRemaining / sitesWithPOData).toFixed(1)
       : null
-    
-    console.log(`💵 Average PO Remaining (ATP): ${avgPoRemainingPercent}%`)
 
     // Calculate average PO remaining % for TSSR Closed sites (Survey SOW only)
     const tssrClosedSites = filteredData.filter(row => 
@@ -682,8 +658,6 @@ export default function ItcHuaweiDashboard() {
     const avgPoRemainingSurveyPercent = sitesWithPODataSurvey > 0 
       ? (totalPoRemainingSurvey / sitesWithPODataSurvey).toFixed(1)
       : null
-    
-    console.log(`💵 Average PO Remaining (Survey): ${avgPoRemainingSurveyPercent}% (${sitesWithPODataSurvey} sites)`)
 
     // Calculate average PO remaining % for Inbound sites (Dismantle SOW only)
     const inboundSites = filteredData.filter(row => 
@@ -709,8 +683,6 @@ export default function ItcHuaweiDashboard() {
     const avgPoRemainingDismantlePercent = sitesWithPODataDismantle > 0 
       ? (totalPoRemainingDismantle / sitesWithPODataDismantle).toFixed(1)
       : null
-    
-    console.log(`💵 Average PO Remaining (Dismantle): ${avgPoRemainingDismantlePercent}% (${sitesWithPODataDismantle} sites)`)
 
     // Calculate average PO remaining % for ATP PLN sites (PLN SOW only)
     const atpPLNSites = filteredData.filter(row => 
@@ -736,8 +708,6 @@ export default function ItcHuaweiDashboard() {
     const avgPoRemainingPlnPercent = sitesWithPODataPLN > 0 
       ? (totalPoRemainingPLN / sitesWithPODataPLN).toFixed(1)
       : null
-    
-    console.log(`💵 Average PO Remaining (PLN): ${avgPoRemainingPlnPercent}% (${sitesWithPODataPLN} sites)`)
 
     return {
       totalSites,

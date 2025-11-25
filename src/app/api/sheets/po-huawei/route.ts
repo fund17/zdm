@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
           }
         }
       } catch (metaError) {
-        console.error(`Error fetching metadata for ${spreadsheetId}:`, metaError)
+        // Silent metadata error
       }
       
       // Get sheet names for this spreadsheet
@@ -166,7 +166,6 @@ export async function GET(request: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    console.error('Error fetching PO Huawei data:', error)
     return NextResponse.json(
       { success: false, message: 'Failed to fetch data', error: String(error) },
       { status: 500 }

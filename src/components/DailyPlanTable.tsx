@@ -559,25 +559,25 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
     if (data.length > 0) {
       const activities = Array.from(new Set(
         data
-          .map((row: any) => row.Activity || row.activity || '')
+          .map((row: any) => String(row.Activity || row.activity || ''))
           .filter((activity: string) => activity && activity.trim() !== '')
       )) as string[]
 
       const statuses = Array.from(new Set(
         data
-          .map((row: any) => row.Status || row.status || '')
+          .map((row: any) => String(row.Status || row.status || ''))
           .filter((status: string) => status && status.trim() !== '')
       )) as string[]
 
       const vendors = Array.from(new Set(
         data
-          .map((row: any) => row.Vendor || row.vendor || '')
+          .map((row: any) => String(row.Vendor || row.vendor || ''))
           .filter((vendor: string) => vendor && vendor.trim() !== '')
       )) as string[]
 
       const teamCategories = Array.from(new Set(
         data
-          .map((row: any) => row['Team Category'] || row.teamCategory || row.team_category || '')
+          .map((row: any) => String(row['Team Category'] || row.teamCategory || row.team_category || ''))
           .filter((category: string) => category && category.trim() !== '')
       )) as string[]
 
@@ -593,7 +593,20 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
     if (!dateStr) return null
     
     try {
-      // Handle format like "04-Jan-2024"
+      // Handle Google Sheets serial number dates (numeric)
+      const numericValue = Number(dateStr)
+      if (!isNaN(numericValue) && numericValue > 0) {
+        // Google Sheets date serial number (days since Dec 30, 1899)
+        // Use UTC to avoid timezone shifts
+        const baseDate = new Date(Date.UTC(1899, 11, 30))
+        const date = new Date(baseDate.getTime() + numericValue * 24 * 60 * 60 * 1000)
+        if (!isNaN(date.getTime()) && date.getFullYear() > 1900 && date.getFullYear() < 2100) {
+          // Return as local date (without timezone conversion)
+          return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+        }
+      }
+      
+      // Handle format like "04-Jan-2024" or "24-Nov-2025"
       const parts = dateStr.split('-')
       if (parts.length === 3) {
         const day = parseInt(parts[0])
@@ -601,16 +614,27 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
           'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
           'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
         }
-        const month = monthMap[parts[1].toLowerCase()]
+        const monthStr = parts[1].toLowerCase().substring(0, 3)
+        const month = monthMap[monthStr]
         const year = parseInt(parts[2])
         
         if (!isNaN(day) && month !== undefined && !isNaN(year)) {
+          // Create date in local timezone (no UTC conversion)
           return new Date(year, month, day)
         }
       }
       
-      // Fallback to standard date parsing
-      return new Date(dateStr)
+      // Fallback to standard date parsing with UTC awareness
+      const date = new Date(dateStr)
+      if (!isNaN(date.getTime())) {
+        // If parsed as ISO string (includes time), convert to local date only
+        if (dateStr.includes('T') || dateStr.includes('Z')) {
+          return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+        }
+        return date
+      }
+      
+      return null
     } catch {
       return null
     }
@@ -717,7 +741,6 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
     }
     // If within default range, client-side filtering will handle it automatically
   }
-
 
 
   // Clear all filters
@@ -1045,8 +1068,10 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       case 'date':
         try {
           if (!value) return ''
-          const date = new Date(value)
-          if (isNaN(date.getTime())) return value?.toString() || ''
+          
+          // Use parseSheetDate to handle various date formats
+          const date = parseSheetDate(String(value))
+          if (!date || isNaN(date.getTime())) return value?.toString() || ''
           
           // Format DD-MMM-YYYY
           const day = String(date.getDate()).padStart(2, '0')
@@ -1940,9 +1965,8 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
 
         
       </div>
-      
 
-      
+
       {/* Filter Dropdown Portal - Outside table to prevent column resize */}
       {activeFilterColumn && filterDropdownPosition && (
         <div 
@@ -1990,7 +2014,8 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                       // Get unique values and find matching date
                       const allDates = getUniqueColumnValues(activeFilterColumn)
                       const matchingDate = allDates.find(dateStr => {
-                        const parsedDate = new Date(dateStr)
+                        const parsedDate = parseSheetDate(String(dateStr))
+                        if (!parsedDate) return false
                         parsedDate.setHours(0, 0, 0, 0)
                         return parsedDate.getTime() === today.getTime()
                       })
@@ -2011,7 +2036,8 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                       
                       const allDates = getUniqueColumnValues(activeFilterColumn)
                       const matchingDate = allDates.find(dateStr => {
-                        const parsedDate = new Date(dateStr)
+                        const parsedDate = parseSheetDate(String(dateStr))
+                        if (!parsedDate) return false
                         parsedDate.setHours(0, 0, 0, 0)
                         return parsedDate.getTime() === yesterday.getTime()
                       })
@@ -2032,7 +2058,8 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
 
                       const allDates = getUniqueColumnValues(activeFilterColumn)
                       const matchingDate = allDates.find(dateStr => {
-                        const parsedDate = new Date(dateStr)
+                        const parsedDate = parseSheetDate(String(dateStr))
+                        if (!parsedDate) return false
                         parsedDate.setHours(0, 0, 0, 0)
                         return parsedDate.getTime() === tomorrow.getTime()
                       })
@@ -2056,11 +2083,13 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                       
                       const sunday = new Date(monday)
                       sunday.setDate(monday.getDate() + 6)
+                      sunday.setHours(23, 59, 59, 999)
                       
                       // Find all dates in this week from actual data
                       const allDates = getUniqueColumnValues(activeFilterColumn)
                       const weekDates = allDates.filter(dateStr => {
-                        const parsedDate = new Date(dateStr)
+                        const parsedDate = parseSheetDate(String(dateStr))
+                        if (!parsedDate) return false
                         parsedDate.setHours(0, 0, 0, 0)
                         return parsedDate >= monday && parsedDate <= sunday
                       })
@@ -2076,6 +2105,37 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                   </button>
                   <button
                     onClick={() => {
+                      // Last week (Monday - Sunday)
+                      const now = new Date()
+                      const dayOfWeek = now.getDay()
+                      const lastMonday = new Date(now)
+                      lastMonday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) - 7)
+                      lastMonday.setHours(0, 0, 0, 0)
+                      
+                      const lastSunday = new Date(lastMonday)
+                      lastSunday.setDate(lastMonday.getDate() + 6)
+                      lastSunday.setHours(23, 59, 59, 999)
+                      
+                      // Find all dates in last week from actual data
+                      const allDates = getUniqueColumnValues(activeFilterColumn)
+                      const weekDates = allDates.filter(dateStr => {
+                        const parsedDate = parseSheetDate(String(dateStr))
+                        if (!parsedDate) return false
+                        parsedDate.setHours(0, 0, 0, 0)
+                        return parsedDate >= lastMonday && parsedDate <= lastSunday
+                      })
+                      
+                      if (weekDates.length > 0) {
+                        setColumnFilters(prev => prev.filter(f => f.id !== activeFilterColumn))
+                        setColumnFilters(prev => [...prev, { id: activeFilterColumn, value: weekDates }])
+                      }
+                    }}
+                    className="px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-blue-50 rounded border border-gray-200 hover:border-blue-300 transition-colors"
+                  >
+                    Last Week
+                  </button>
+                  <button
+                    onClick={() => {
                       // This month
                       const now = new Date()
                       const year = now.getFullYear()
@@ -2088,7 +2148,8 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                       // Find all dates in this month from actual data
                       const allDates = getUniqueColumnValues(activeFilterColumn)
                       const monthDates = allDates.filter(dateStr => {
-                        const parsedDate = new Date(dateStr)
+                        const parsedDate = parseSheetDate(String(dateStr))
+                        if (!parsedDate) return false
                         parsedDate.setHours(0, 0, 0, 0)
                         return parsedDate >= firstDay && parsedDate <= lastDay
                       })

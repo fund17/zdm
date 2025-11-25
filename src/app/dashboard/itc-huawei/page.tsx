@@ -24,7 +24,12 @@ interface SheetListItem {
   title: string
 }
 
-type PeriodFilter = 'all' | 'year' | 'sixmonths' | 'month' | 'week' | 'lastweek'
+type PeriodFilter = 'all' | 'custom' | 'year' | 'sixmonths' | 'month' | 'week' | 'lastweek'
+
+interface DateRange {
+  startDate: string
+  endDate: string
+}
 
 export default function ItcHuaweiDashboard() {
   const [allData, setAllData] = useState<any[]>([]) // Combined data from all sheets
@@ -33,6 +38,7 @@ export default function ItcHuaweiDashboard() {
   const [sheetList, setSheetList] = useState<SheetListItem[]>([])
   const [loadingSheetList, setLoadingSheetList] = useState(true)
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all')
+  const [dateRange, setDateRange] = useState<DateRange>({ startDate: '', endDate: '' })
   const [selectedRegion, setSelectedRegion] = useState<string>('all')
   const [selectedProject, setSelectedProject] = useState<string>('all')
   const [modalOpen, setModalOpen] = useState(false)
@@ -42,6 +48,11 @@ export default function ItcHuaweiDashboard() {
   const [poRemainingDismantleMap, setPoRemainingDismantleMap] = useState<Record<string, number>>({})
   const [poRemainingATPMap, setPoRemainingATPMap] = useState<Record<string, number>>({})
   const [poRemainingPLNMap, setPoRemainingPLNMap] = useState<Record<string, number>>({})
+  const [invoicePendingMap, setInvoicePendingMap] = useState<Record<string, number>>({})
+  const [invoicePendingSurveyMap, setInvoicePendingSurveyMap] = useState<Record<string, number>>({})
+  const [invoicePendingDismantleMap, setInvoicePendingDismantleMap] = useState<Record<string, number>>({})
+  const [invoicePendingATPMap, setInvoicePendingATPMap] = useState<Record<string, number>>({})
+  const [invoicePendingPLNMap, setInvoicePendingPLNMap] = useState<Record<string, number>>({})
 
   const fetchAllData = async () => {
     try {
@@ -90,36 +101,27 @@ export default function ItcHuaweiDashboard() {
       let poData: any[] = []
       
       if (!cachedData) {
-        console.warn('No PO cache found, fetching from API...')
-        
         // Fetch PO data from API
         const response = await fetch('/api/sheets/po-huawei')
-        console.log('📡 API Response status:', response.status)
         
         const result = await response.json()
-        console.log('📡 API Result:', { success: result.success, dataLength: result.data?.length, message: result.message })
         
         if (result.success && result.data) {
           poData = result.data
-          console.log(`📥 Fetched PO data: ${poData.length} rows`)
-          console.log('Sample PO row:', poData[0])
           
           // Save to cache for future use
           try {
             const compressedData = JSON.stringify(poData)
             localStorage.setItem(cacheKey, compressedData)
             localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString())
-            console.log('💾 PO data cached')
           } catch (e) {
-            console.warn('Failed to cache PO data:', e)
+            // Silent cache failure
           }
         } else {
-          console.error('Failed to fetch PO data from API:', result)
           return
         }
       } else {
         poData = JSON.parse(cachedData)
-        console.log(`🔍 Loading PO data from cache: ${poData.length} rows`)
       }
       
       // Create Site ID → PO Remaining % map
@@ -246,20 +248,94 @@ export default function ItcHuaweiDashboard() {
         finalMapPLN[siteId] = data.totalRemaining / data.count
       })
       
-      console.log(`✅ PO map created: ${Object.keys(finalMap).length} unique site IDs`)
-      console.log(`✅ PO map (Survey only): ${Object.keys(finalMapSurvey).length} unique site IDs`)
-      console.log(`✅ PO map (Dismantle only): ${Object.keys(finalMapDismantle).length} unique site IDs`)
-      console.log(`✅ PO map (ATP only): ${Object.keys(finalMapATP).length} unique site IDs`)
-      console.log(`✅ PO map (PLN only): ${Object.keys(finalMapPLN).length} unique site IDs`)
-      console.log('Sample PO data:', Object.entries(finalMap).slice(0, 3))
-      
       setPoRemainingMap(finalMap)
       setPoRemainingSurveyMap(finalMapSurvey)
       setPoRemainingDismantleMap(finalMapDismantle)
       setPoRemainingATPMap(finalMapATP)
       setPoRemainingPLNMap(finalMapPLN)
+      
+      // Create Invoice Pending maps (sum of Invoice Pending column, only for non-cancelled POs)
+      const invoicePendingMapAll: Record<string, number> = {}
+      const invoicePendingMapSurvey: Record<string, number> = {}
+      const invoicePendingMapDismantle: Record<string, number> = {}
+      const invoicePendingMapATP: Record<string, number> = {}
+      const invoicePendingMapPLN: Record<string, number> = {}
+      
+      poData.forEach((row: any) => {
+        const siteId = row['Site ID'] || row['Site ID PO'] || row['SiteID'] || row['Site']
+        if (!siteId) return
+        
+        // Check PO Status - skip if cancelled
+        const poStatus = row['PO Status']?.toString().toLowerCase() || ''
+        if (poStatus.includes('cancel')) return
+        
+        const normalizations = [
+          siteId.toString().toUpperCase().trim(),
+          siteId.toString().toLowerCase().trim(),
+          siteId.toString().toUpperCase().trim().replace(/\s+/g, ''),
+          siteId.toString().toLowerCase().trim().replace(/\s+/g, ''),
+        ]
+        
+        // Parse Invoice Pending amount
+        const invoicePendingStr = row['Invoice Pending']?.toString().replace(/,/g, '').replace(/[^\d.-]/g, '') || '0'
+        const invoicePending = parseFloat(invoicePendingStr)
+        
+        // Check SOW field
+        const sow = row['SOW']?.toString().toLowerCase() || ''
+        const isSurvey = sow.includes('survey')
+        const isDismantle = sow.includes('dismantle')
+        const isPLN = sow.includes('pln')
+        const isATP = !isSurvey && !isDismantle && !isPLN
+        
+        // Add to maps for all normalizations
+        normalizations.forEach(normalizedId => {
+          // All
+          if (!invoicePendingMapAll[normalizedId]) {
+            invoicePendingMapAll[normalizedId] = 0
+          }
+          invoicePendingMapAll[normalizedId] += invoicePending
+          
+          // Survey
+          if (isSurvey) {
+            if (!invoicePendingMapSurvey[normalizedId]) {
+              invoicePendingMapSurvey[normalizedId] = 0
+            }
+            invoicePendingMapSurvey[normalizedId] += invoicePending
+          }
+          
+          // Dismantle
+          if (isDismantle) {
+            if (!invoicePendingMapDismantle[normalizedId]) {
+              invoicePendingMapDismantle[normalizedId] = 0
+            }
+            invoicePendingMapDismantle[normalizedId] += invoicePending
+          }
+          
+          // PLN
+          if (isPLN) {
+            if (!invoicePendingMapPLN[normalizedId]) {
+              invoicePendingMapPLN[normalizedId] = 0
+            }
+            invoicePendingMapPLN[normalizedId] += invoicePending
+          }
+          
+          // ATP
+          if (isATP) {
+            if (!invoicePendingMapATP[normalizedId]) {
+              invoicePendingMapATP[normalizedId] = 0
+            }
+            invoicePendingMapATP[normalizedId] += invoicePending
+          }
+        })
+      })
+      
+      setInvoicePendingMap(invoicePendingMapAll)
+      setInvoicePendingSurveyMap(invoicePendingMapSurvey)
+      setInvoicePendingDismantleMap(invoicePendingMapDismantle)
+      setInvoicePendingATPMap(invoicePendingMapATP)
+      setInvoicePendingPLNMap(invoicePendingMapPLN)
     } catch (err) {
-      console.error('Failed to load PO data:', err)
+      // Silent error
     }
   }
 
@@ -423,6 +499,27 @@ export default function ItcHuaweiDashboard() {
     // If filter is 'all', accept any valid date string
     if (periodFilter === 'all') return true
     
+    // If filter is 'custom', use date range
+    if (periodFilter === 'custom') {
+      if (!dateRange.startDate || !dateRange.endDate) return true // If no range set, show all
+      
+      // Parse the date string (supports dd-MMM-yyyy, DD/MM/YYYY, Excel serial, etc.)
+      const dateValue = parseDate(dateStr)
+      if (!dateValue) return false
+      
+      // Normalize dates to day precision (remove time component) for accurate comparison
+      const rowDate = new Date(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate())
+      
+      const start = new Date(dateRange.startDate)
+      const startNormalized = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+      
+      const end = new Date(dateRange.endDate)
+      const endNormalized = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+      
+      return rowDate >= startNormalized && rowDate <= endNormalized
+    }
+    
+    // Legacy period filters (kept for backward compatibility but not used in UI)
     const now = new Date()
     now.setHours(23, 59, 59, 999)
     let startDate = new Date()
@@ -492,7 +589,7 @@ export default function ItcHuaweiDashboard() {
       const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
       const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
       return rowDateOnly.getTime() >= startDateOnly.getTime() && rowDateOnly.getTime() <= endDateOnly.getTime()
-  }, [periodFilter, parseDate])
+  }, [periodFilter, dateRange, parseDate])
 
   // Apply filters to data
   const filteredData = useMemo(() => {
@@ -560,6 +657,46 @@ export default function ItcHuaweiDashboard() {
     
     return null
   }, [poRemainingMap, poRemainingSurveyMap, poRemainingDismantleMap, poRemainingATPMap, poRemainingPLNMap])
+
+  // Helper function to get Invoice Pending for a site
+  const getInvoicePending = useCallback((siteId: string, category: 'all' | 'survey' | 'dismantle' | 'atp' | 'pln' = 'all'): number | null => {
+    if (!siteId) return null
+    
+    // Select appropriate map based on category
+    let mapToUse: Record<string, number>
+    switch (category) {
+      case 'survey':
+        mapToUse = invoicePendingSurveyMap
+        break
+      case 'dismantle':
+        mapToUse = invoicePendingDismantleMap
+        break
+      case 'atp':
+        mapToUse = invoicePendingATPMap
+        break
+      case 'pln':
+        mapToUse = invoicePendingPLNMap
+        break
+      default:
+        mapToUse = invoicePendingMap
+    }
+    
+    // Try all 4 variants
+    const variants = [
+      siteId.toUpperCase().replace(/\s+/g, ''),
+      siteId.toUpperCase(),
+      siteId.toLowerCase().replace(/\s+/g, ''),
+      siteId.toLowerCase()
+    ]
+    
+    for (const variant of variants) {
+      if (variant in mapToUse) {
+        return mapToUse[variant]
+      }
+    }
+    
+    return null
+  }, [invoicePendingMap, invoicePendingSurveyMap, invoicePendingDismantleMap, invoicePendingATPMap, invoicePendingPLNMap])
 
   // Calculate metrics from data
   const metrics = useMemo(() => {
@@ -692,8 +829,6 @@ export default function ItcHuaweiDashboard() {
       getFilteredValue(row['ATP Approved'] || row['ATPApproved'])
     )
     
-    console.log(`📊 ATP Approved sites: ${atpApprovedSites.length}`)
-    
     let totalPoRemaining = 0
     let sitesWithPOData = 0
     const unmatchedSites: string[] = []
@@ -722,19 +857,9 @@ export default function ItcHuaweiDashboard() {
       }
     })
     
-    console.log(`✅ Sites with PO data: ${sitesWithPOData} / ${atpApprovedSites.length}`)
-    console.log('💰 Sample matched sites with PO remaining:', matchedSamples)
-    console.log(`📊 Total PO remaining sum: ${totalPoRemaining.toFixed(2)}`)
-    
-    if (unmatchedSites.length > 0) {
-      console.log('⚠️ Unmatched sites (first 5):', unmatchedSites.slice(0, 5))
-    }
-    
     const avgPoRemainingPercent = sitesWithPOData > 0 
       ? (totalPoRemaining / sitesWithPOData).toFixed(1)
       : null
-    
-    console.log(`💵 Average PO Remaining (ATP): ${avgPoRemainingPercent}%`)
 
     // Calculate average PO remaining % for TSSR Closed sites (Survey SOW only)
     const tssrClosedSites = filteredData.filter(row => 
@@ -760,8 +885,6 @@ export default function ItcHuaweiDashboard() {
     const avgPoRemainingSurveyPercent = sitesWithPODataSurvey > 0 
       ? (totalPoRemainingSurvey / sitesWithPODataSurvey).toFixed(1)
       : null
-    
-    console.log(`💵 Average PO Remaining (Survey): ${avgPoRemainingSurveyPercent}% (${sitesWithPODataSurvey} sites)`)
 
     // Calculate average PO remaining % for Inbound sites (Dismantle SOW only)
     const inboundSites = filteredData.filter(row => 
@@ -787,8 +910,6 @@ export default function ItcHuaweiDashboard() {
     const avgPoRemainingDismantlePercent = sitesWithPODataDismantle > 0 
       ? (totalPoRemainingDismantle / sitesWithPODataDismantle).toFixed(1)
       : null
-    
-    console.log(`💵 Average PO Remaining (Dismantle): ${avgPoRemainingDismantlePercent}% (${sitesWithPODataDismantle} sites)`)
 
     // Calculate average PO remaining % for ATP PLN sites (PLN SOW only)
     const atpPLNSites = filteredData.filter(row => 
@@ -814,13 +935,96 @@ export default function ItcHuaweiDashboard() {
     const avgPoRemainingPlnPercent = sitesWithPODataPLN > 0 
       ? (totalPoRemainingPLN / sitesWithPODataPLN).toFixed(1)
       : null
+
+    // Calculate total Invoice Pending for ATP Approved sites
+    let totalInvoicePendingATP = 0
+    let sitesWithInvoicePendingATP = 0
     
-    console.log(`💵 Average PO Remaining (PLN): ${avgPoRemainingPlnPercent}% (${sitesWithPODataPLN} sites)`)
+    atpApprovedSites.forEach(row => {
+      const duid = row['DUID']
+      if (!duid) return
+      
+      const invoicePending = getInvoicePending(duid, 'atp')
+      if (invoicePending !== null && invoicePending !== undefined && invoicePending > 0) {
+        totalInvoicePendingATP += invoicePending
+        sitesWithInvoicePendingATP++
+      }
+    })
+
+    // Calculate total Invoice Pending for TSSR Closed sites (Survey)
+    let totalInvoicePendingSurvey = 0
+    let sitesWithInvoicePendingSurvey = 0
+    
+    tssrClosedSites.forEach(row => {
+      const duid = row['DUID']
+      if (!duid) return
+      
+      const invoicePending = getInvoicePending(duid, 'survey')
+      if (invoicePending !== null && invoicePending !== undefined && invoicePending > 0) {
+        totalInvoicePendingSurvey += invoicePending
+        sitesWithInvoicePendingSurvey++
+      }
+    })
+
+    // Calculate total Invoice Pending for Inbound sites (Dismantle)
+    let totalInvoicePendingDismantle = 0
+    let sitesWithInvoicePendingDismantle = 0
+    
+    inboundSites.forEach(row => {
+      const duid = row['DUID']
+      if (!duid) return
+      
+      const invoicePending = getInvoicePending(duid, 'dismantle')
+      if (invoicePending !== null && invoicePending !== undefined && invoicePending > 0) {
+        totalInvoicePendingDismantle += invoicePending
+        sitesWithInvoicePendingDismantle++
+      }
+    })
+
+    // Calculate metrics per region for comparison chart
+    const regionMetrics: Record<string, {
+      survey: number
+      tssrClosed: number
+      mos: number
+      install: number
+      integrated: number
+      atp: number
+      dismantle: number
+      total: number
+    }> = {}
+
+    filteredData.forEach(row => {
+      const region = row['Region'] || 'Unknown'
+      
+      if (!regionMetrics[region]) {
+        regionMetrics[region] = {
+          survey: 0,
+          tssrClosed: 0,
+          mos: 0,
+          install: 0,
+          integrated: 0,
+          atp: 0,
+          dismantle: 0,
+          total: 0
+        }
+      }
+
+      regionMetrics[region].total++
+      
+      if (getFilteredValue(row['Survey'])) regionMetrics[region].survey++
+      if (getFilteredValue(row['TSSR Closed'] || row['TSSRClosed'])) regionMetrics[region].tssrClosed++
+      if (getFilteredValue(row['MOS'])) regionMetrics[region].mos++
+      if (getFilteredValue(row['Install Done'] || row['InstallDone'])) regionMetrics[region].install++
+      if (getFilteredValue(row['Integrated'])) regionMetrics[region].integrated++
+      if (getFilteredValue(row['ATP Approved'] || row['ATPApproved'])) regionMetrics[region].atp++
+      if (getFilteredValue(row['Dismantle'])) regionMetrics[region].dismantle++
+    })
 
     return {
       totalSites,
       siteStatusCounts,
       regionCounts,
+      regionMetrics,
       
       // Project type detection
       hasRegularColumns,
@@ -879,8 +1083,16 @@ export default function ItcHuaweiDashboard() {
       sitesWithPODataDismantle,
       avgPoRemainingPlnPercent,
       sitesWithPODataPLN,
+      
+      // Invoice Pending data
+      totalInvoicePendingATP,
+      sitesWithInvoicePendingATP,
+      totalInvoicePendingSurvey,
+      sitesWithInvoicePendingSurvey,
+      totalInvoicePendingDismantle,
+      sitesWithInvoicePendingDismantle,
     }
-  }, [filteredData, periodFilter, getFilteredValue, getPORemaining])
+  }, [filteredData, periodFilter, getFilteredValue, getPORemaining, getInvoicePending])
 
   // Smart Analytics - Bottleneck Detection & Performance Analysis
   const analytics = useMemo(() => {
@@ -1009,11 +1221,7 @@ export default function ItcHuaweiDashboard() {
 
   const periodOptions = [
     { value: 'all' as PeriodFilter, label: 'All Time' },
-    { value: 'year' as PeriodFilter, label: 'This Year' },
-    { value: 'sixmonths' as PeriodFilter, label: 'Last 6 Months' },
-    { value: 'month' as PeriodFilter, label: 'This Month' },
-    { value: 'week' as PeriodFilter, label: 'This Week' },
-    { value: 'lastweek' as PeriodFilter, label: 'Last Week' },
+    { value: 'custom' as PeriodFilter, label: 'Custom Range' },
   ]
 
   // Function to open site list modal
@@ -1088,8 +1296,8 @@ export default function ItcHuaweiDashboard() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-2">
-      <div className="w-full px-2 sm:px-3 py-2 flex-1 flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 pb-2 px-4 pt-4">
+      <div className="w-full flex-1 flex flex-col overflow-hidden">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200/60 flex flex-col h-full overflow-hidden">
           {/* Sticky Header */}
           <div className="sticky top-0 z-10 bg-white rounded-t-xl border-b border-slate-200/60 p-4 md:p-5">
@@ -1127,6 +1335,25 @@ export default function ItcHuaweiDashboard() {
                   </button>
                 ))}
               </div>
+
+              {/* Custom Date Range */}
+              {periodFilter === 'custom' && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={dateRange.startDate}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="px-2 py-1.5 text-xs border border-slate-300 rounded-lg bg-white hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  />
+                  <span className="text-xs text-slate-500 font-medium">to</span>
+                  <input
+                    type="date"
+                    value={dateRange.endDate}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                    className="px-2 py-1.5 text-xs border border-slate-300 rounded-lg bg-white hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  />
+                </div>
+              )}
 
               {/* Divider */}
               <div className="h-8 w-px bg-slate-300"></div>
@@ -1188,17 +1415,21 @@ export default function ItcHuaweiDashboard() {
                         <p className="text-[10px] text-slate-500 font-medium">Implementation Invoice</p>
                       </div>
                     </div>
-                    {loading || !metrics.avgPoRemainingPercent && Object.keys(poRemainingMap).length === 0 ? (
-                      <div className="px-2 py-1 bg-blue-400 text-white rounded text-[10px] font-semibold animate-pulse">
-                        Loading...
-                      </div>
-                    ) : metrics.avgPoRemainingPercent ? (
-                      <div className="px-2 py-1 bg-blue-600 text-white rounded text-[10px] font-semibold">
-                        PO Remaining {metrics.avgPoRemainingPercent}%
-                      </div>
-                    ) : (
-                      <div className="px-2 py-1 bg-slate-400 text-white rounded text-[10px] font-semibold">
-                        NO PO DATA
+                    {!metrics.hasCMEColumns && (
+                      <div className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                        loading || (!metrics.totalInvoicePendingATP && Object.keys(invoicePendingMap).length === 0)
+                          ? 'bg-amber-100 text-amber-400 animate-pulse'
+                          : metrics.totalInvoicePendingATP && metrics.totalInvoicePendingATP > 0
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-400'
+                      }`}>
+                        {loading || (!metrics.totalInvoicePendingATP && Object.keys(invoicePendingMap).length === 0)
+                          ? '...'
+                          : metrics.totalInvoicePendingATP && metrics.totalInvoicePendingATP > 0
+                          ? `Inv Remaining: ${metrics.totalInvoicePendingATP >= 1000000000 
+                              ? (metrics.totalInvoicePendingATP / 1000000000).toFixed(1) + 'M'
+                              : (metrics.totalInvoicePendingATP / 1000000).toFixed(0) + 'Jt'}`
+                          : 'N/A'}
                       </div>
                     )}
                   </div>
@@ -1209,7 +1440,7 @@ export default function ItcHuaweiDashboard() {
                         {metrics.hasCMEColumns ? metrics.atpCME : metrics.atpApproved}
                       </span>
                       <span className="text-base sm:text-lg font-semibold text-slate-400">
-                        / {metrics.hasCMEColumns ? metrics.meDone : metrics.atpSubmit}
+                        / {metrics.hasCMEColumns ? metrics.cmeStart : metrics.mosCompleted}
                       </span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-2">
@@ -1217,14 +1448,14 @@ export default function ItcHuaweiDashboard() {
                         <div 
                           className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all duration-500"
                           style={{ width: `${metrics.hasCMEColumns 
-                            ? (metrics.meDone > 0 ? (metrics.atpCME / metrics.meDone) * 100 : 0)
-                            : (metrics.atpSubmit > 0 ? (metrics.atpApproved / metrics.atpSubmit) * 100 : 0)}%` }}
+                            ? (metrics.cmeStart > 0 ? (metrics.atpCME / metrics.cmeStart) * 100 : 0)
+                            : (metrics.mosCompleted > 0 ? (metrics.atpApproved / metrics.mosCompleted) * 100 : 0)}%` }}
                         />
                       </div>
                       <span className="text-xs font-semibold text-blue-600 min-w-[2.5rem] text-right">
                         {metrics.hasCMEColumns
-                          ? (metrics.meDone > 0 ? ((metrics.atpCME / metrics.meDone) * 100).toFixed(1) : '0')
-                          : (metrics.atpSubmit > 0 ? ((metrics.atpApproved / metrics.atpSubmit) * 100).toFixed(1) : '0')}%
+                          ? (metrics.cmeStart > 0 ? ((metrics.atpCME / metrics.cmeStart) * 100).toFixed(1) : '0')
+                          : (metrics.mosCompleted > 0 ? ((metrics.atpApproved / metrics.mosCompleted) * 100).toFixed(1) : '0')}%
                       </span>
                     </div>
                   </div>
@@ -1255,14 +1486,36 @@ export default function ItcHuaweiDashboard() {
                           <div className="text-[10px] text-slate-500 font-medium">MOS</div>
                           <div className="text-base font-bold text-slate-900">{metrics.mosCompleted}</div>
                         </div>
-                        <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
-                          <div className="text-[10px] text-blue-600 font-medium">Submit</div>
-                          <div className="text-base font-bold text-blue-700">{metrics.atpSubmit}</div>
+                        <div className="bg-rose-50 rounded-lg p-2 border border-rose-100">
+                          <div className="text-[10px] text-rose-600 font-medium">Pending ATP</div>
+                          <div className="text-base font-bold text-rose-700">{metrics.mosCompleted - metrics.atpApproved}</div>
                         </div>
                         <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
                           <div className="text-[10px] text-emerald-600 font-medium">Rate</div>
                           <div className="text-base font-bold text-emerald-700">
-                            {metrics.atpSubmit > 0 ? ((metrics.atpApproved / metrics.atpSubmit) * 100).toFixed(0) : '0'}%
+                            {metrics.mosCompleted > 0 ? ((metrics.atpApproved / metrics.mosCompleted) * 100).toFixed(0) : '0'}%
+                          </div>
+                        </div>
+                        <div className={`rounded-lg p-2 border ${
+                          loading || !metrics.avgPoRemainingPercent && Object.keys(poRemainingMap).length === 0
+                            ? 'bg-blue-50 border-blue-100'
+                            : metrics.avgPoRemainingPercent
+                            ? 'bg-blue-50 border-blue-100'
+                            : 'bg-slate-50 border-slate-100'
+                        }`}>
+                          <div className="text-[10px] text-slate-600 font-medium">PO Remain</div>
+                          <div className={`text-base font-bold ${
+                            loading || !metrics.avgPoRemainingPercent && Object.keys(poRemainingMap).length === 0
+                              ? 'text-blue-400 animate-pulse'
+                              : metrics.avgPoRemainingPercent
+                              ? 'text-blue-700'
+                              : 'text-slate-400'
+                          }`}>
+                            {loading || !metrics.avgPoRemainingPercent && Object.keys(poRemainingMap).length === 0
+                              ? '...'
+                              : metrics.avgPoRemainingPercent
+                              ? `${metrics.avgPoRemainingPercent}%`
+                              : 'N/A'}
                           </div>
                         </div>
                       </>
@@ -1286,19 +1539,23 @@ export default function ItcHuaweiDashboard() {
                         </p>
                       </div>
                     </div>
-                    {!metrics.hasCMEColumns && (loading || (!metrics.avgPoRemainingDismantlePercent && Object.keys(poRemainingDismantleMap).length === 0)) ? (
-                      <div className="px-2 py-1 bg-purple-400 text-white rounded text-[10px] font-semibold animate-pulse">
-                        Loading...
+                    {!metrics.hasCMEColumns && (
+                      <div className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                        loading || (!metrics.totalInvoicePendingDismantle && Object.keys(invoicePendingDismantleMap).length === 0)
+                          ? 'bg-amber-100 text-amber-400 animate-pulse'
+                          : metrics.totalInvoicePendingDismantle && metrics.totalInvoicePendingDismantle > 0
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-400'
+                      }`}>
+                        {loading || (!metrics.totalInvoicePendingDismantle && Object.keys(invoicePendingDismantleMap).length === 0)
+                          ? '...'
+                          : metrics.totalInvoicePendingDismantle && metrics.totalInvoicePendingDismantle > 0
+                          ? `Inv Remaining: ${metrics.totalInvoicePendingDismantle >= 1000000000 
+                              ? (metrics.totalInvoicePendingDismantle / 1000000000).toFixed(1) + 'M'
+                              : (metrics.totalInvoicePendingDismantle / 1000000).toFixed(0) + 'Jt'}`
+                          : 'N/A'}
                       </div>
-                    ) : !metrics.hasCMEColumns && metrics.avgPoRemainingDismantlePercent ? (
-                      <div className="px-2 py-1 bg-purple-600 text-white rounded text-[10px] font-semibold">
-                        PO Remaining {metrics.avgPoRemainingDismantlePercent}%
-                      </div>
-                    ) : !metrics.hasCMEColumns ? (
-                      <div className="px-2 py-1 bg-slate-400 text-white rounded text-[10px] font-semibold">
-                        NO PO DATA
-                      </div>
-                    ) : null}
+                    )}
                   </div>
                   
                   <div className="mb-3">
@@ -1327,7 +1584,7 @@ export default function ItcHuaweiDashboard() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className={`grid gap-2 text-center ${metrics.hasCMEColumns ? 'grid-cols-3' : 'grid-cols-4'}`}>
                     {metrics.hasCMEColumns ? (
                       <>
                         <div className="bg-purple-50 rounded-lg p-2 border border-purple-100">
@@ -1349,14 +1606,36 @@ export default function ItcHuaweiDashboard() {
                           <div className="text-[10px] text-slate-500 font-medium">Dismantle</div>
                           <div className="text-base font-bold text-slate-900">{metrics.dismantle}</div>
                         </div>
-                        <div className="bg-amber-50 rounded-lg p-2 border border-amber-100">
-                          <div className="text-[10px] text-amber-600 font-medium">BA Done</div>
-                          <div className="text-base font-bold text-amber-700">{metrics.baDismantle}</div>
+                        <div className="bg-rose-50 rounded-lg p-2 border border-rose-100">
+                          <div className="text-[10px] text-rose-600 font-medium">Pending Inbound</div>
+                          <div className="text-base font-bold text-rose-700">{metrics.dismantle - metrics.inbound}</div>
                         </div>
-                        <div className="bg-purple-50 rounded-lg p-2 border border-purple-100">
-                          <div className="text-[10px] text-purple-600 font-medium">Rate</div>
-                          <div className="text-base font-bold text-purple-700">
-                            {metrics.baDismantle > 0 ? ((metrics.inbound / metrics.baDismantle) * 100).toFixed(0) : '0'}%
+                        <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
+                          <div className="text-[10px] text-emerald-600 font-medium">Rate</div>
+                          <div className="text-base font-bold text-emerald-700">
+                            {metrics.dismantle > 0 ? ((metrics.inbound / metrics.dismantle) * 100).toFixed(0) : '0'}%
+                          </div>
+                        </div>
+                        <div className={`rounded-lg p-2 border ${
+                          loading || (!metrics.avgPoRemainingDismantlePercent && Object.keys(poRemainingDismantleMap).length === 0)
+                            ? 'bg-purple-50 border-purple-100'
+                            : metrics.avgPoRemainingDismantlePercent
+                            ? 'bg-purple-50 border-purple-100'
+                            : 'bg-slate-50 border-slate-100'
+                        }`}>
+                          <div className="text-[10px] text-slate-600 font-medium">PO Remain</div>
+                          <div className={`text-base font-bold ${
+                            loading || (!metrics.avgPoRemainingDismantlePercent && Object.keys(poRemainingDismantleMap).length === 0)
+                              ? 'text-purple-400 animate-pulse'
+                              : metrics.avgPoRemainingDismantlePercent
+                              ? 'text-purple-700'
+                              : 'text-slate-400'
+                          }`}>
+                            {loading || (!metrics.avgPoRemainingDismantlePercent && Object.keys(poRemainingDismantleMap).length === 0)
+                              ? '...'
+                              : metrics.avgPoRemainingDismantlePercent
+                              ? `${metrics.avgPoRemainingDismantlePercent}%`
+                              : 'N/A'}
                           </div>
                         </div>
                       </>
@@ -1380,27 +1659,23 @@ export default function ItcHuaweiDashboard() {
                         </p>
                       </div>
                     </div>
-                    {loading || (!metrics.hasCMEColumns && !metrics.avgPoRemainingSurveyPercent && Object.keys(poRemainingSurveyMap).length === 0) || (metrics.hasCMEColumns && !metrics.avgPoRemainingPlnPercent && Object.keys(poRemainingPLNMap).length === 0) ? (
-                      <div className="px-2 py-1 bg-emerald-400 text-white rounded text-[10px] font-semibold animate-pulse">
-                        Loading...
+                    {!metrics.hasCMEColumns && (
+                      <div className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                        loading || (!metrics.totalInvoicePendingSurvey && Object.keys(invoicePendingSurveyMap).length === 0)
+                          ? 'bg-amber-100 text-amber-400 animate-pulse'
+                          : metrics.totalInvoicePendingSurvey && metrics.totalInvoicePendingSurvey > 0
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-400'
+                      }`}>
+                        {loading || (!metrics.totalInvoicePendingSurvey && Object.keys(invoicePendingSurveyMap).length === 0)
+                          ? '...'
+                          : metrics.totalInvoicePendingSurvey && metrics.totalInvoicePendingSurvey > 0
+                          ? `Inv Remaining: ${metrics.totalInvoicePendingSurvey >= 1000000000 
+                              ? (metrics.totalInvoicePendingSurvey / 1000000000).toFixed(1) + 'M'
+                              : (metrics.totalInvoicePendingSurvey / 1000000).toFixed(0) + 'Jt'}`
+                          : 'N/A'}
                       </div>
-                    ) : !metrics.hasCMEColumns && metrics.avgPoRemainingSurveyPercent ? (
-                      <div className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-semibold">
-                        PO Remaining {metrics.avgPoRemainingSurveyPercent}%
-                      </div>
-                    ) : !metrics.hasCMEColumns ? (
-                      <div className="px-2 py-1 bg-slate-400 text-white rounded text-[10px] font-semibold">
-                        NO PO DATA
-                      </div>
-                    ) : metrics.hasCMEColumns && metrics.avgPoRemainingPlnPercent ? (
-                      <div className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-semibold">
-                        PO Remaining {metrics.avgPoRemainingPlnPercent}%
-                      </div>
-                    ) : metrics.hasCMEColumns ? (
-                      <div className="px-2 py-1 bg-slate-400 text-white rounded text-[10px] font-semibold">
-                        NO PO DATA
-                      </div>
-                    ) : null}
+                    )}
                   </div>
                   
                   <div className="mb-3">
@@ -1429,7 +1704,7 @@ export default function ItcHuaweiDashboard() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="grid grid-cols-4 gap-2 text-center">
                     {metrics.hasCMEColumns ? (
                       <>
                         <div className="bg-white rounded-lg p-2 border border-slate-100">
@@ -1444,6 +1719,28 @@ export default function ItcHuaweiDashboard() {
                           <div className="text-[10px] text-emerald-600 font-medium">ATP PLN</div>
                           <div className="text-base font-bold text-emerald-700">{metrics.atpPLN}</div>
                         </div>
+                        <div className={`rounded-lg p-2 border ${
+                          loading || (!metrics.avgPoRemainingPlnPercent && Object.keys(poRemainingPLNMap).length === 0)
+                            ? 'bg-emerald-50 border-emerald-100'
+                            : metrics.avgPoRemainingPlnPercent
+                            ? 'bg-emerald-50 border-emerald-100'
+                            : 'bg-slate-50 border-slate-100'
+                        }`}>
+                          <div className="text-[10px] text-slate-600 font-medium">PO Remain</div>
+                          <div className={`text-base font-bold ${
+                            loading || (!metrics.avgPoRemainingPlnPercent && Object.keys(poRemainingPLNMap).length === 0)
+                              ? 'text-emerald-400 animate-pulse'
+                              : metrics.avgPoRemainingPlnPercent
+                              ? 'text-emerald-700'
+                              : 'text-slate-400'
+                          }`}>
+                            {loading || (!metrics.avgPoRemainingPlnPercent && Object.keys(poRemainingPLNMap).length === 0)
+                              ? '...'
+                              : metrics.avgPoRemainingPlnPercent
+                              ? `${metrics.avgPoRemainingPlnPercent}%`
+                              : 'N/A'}
+                          </div>
+                        </div>
                       </>
                     ) : (
                       <>
@@ -1455,10 +1752,32 @@ export default function ItcHuaweiDashboard() {
                           <div className="text-[10px] text-rose-600 font-medium">Pending</div>
                           <div className="text-base font-bold text-rose-700">{metrics.surveyCompleted - metrics.tssrClosed}</div>
                         </div>
-                        <div className="bg-emerald-50 rounded-lg p-2 border border-emerald-100">
-                          <div className="text-[10px] text-emerald-600 font-medium">Rate</div>
-                          <div className="text-base font-bold text-emerald-700">
+                        <div className="bg-teal-50 rounded-lg p-2 border border-teal-100">
+                          <div className="text-[10px] text-teal-600 font-medium">Rate</div>
+                          <div className="text-base font-bold text-teal-700">
                             {metrics.surveyCompleted > 0 ? ((metrics.tssrClosed / metrics.surveyCompleted) * 100).toFixed(0) : '0'}%
+                          </div>
+                        </div>
+                        <div className={`rounded-lg p-2 border ${
+                          loading || (!metrics.avgPoRemainingSurveyPercent && Object.keys(poRemainingSurveyMap).length === 0)
+                            ? 'bg-emerald-50 border-emerald-100'
+                            : metrics.avgPoRemainingSurveyPercent
+                            ? 'bg-emerald-50 border-emerald-100'
+                            : 'bg-slate-50 border-slate-100'
+                        }`}>
+                          <div className="text-[10px] text-slate-600 font-medium">PO Remain</div>
+                          <div className={`text-base font-bold ${
+                            loading || (!metrics.avgPoRemainingSurveyPercent && Object.keys(poRemainingSurveyMap).length === 0)
+                              ? 'text-emerald-400 animate-pulse'
+                              : metrics.avgPoRemainingSurveyPercent
+                              ? 'text-emerald-700'
+                              : 'text-slate-400'
+                          }`}>
+                            {loading || (!metrics.avgPoRemainingSurveyPercent && Object.keys(poRemainingSurveyMap).length === 0)
+                              ? '...'
+                              : metrics.avgPoRemainingSurveyPercent
+                              ? `${metrics.avgPoRemainingSurveyPercent}%`
+                              : 'N/A'}
                           </div>
                         </div>
                       </>
@@ -1502,11 +1821,7 @@ export default function ItcHuaweiDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Survey</p>
                   <p className="text-2xl font-bold text-emerald-600 mt-1">{metrics.surveyCompleted}</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <div className="px-2 py-0.5 bg-emerald-50 rounded-full">
-                      <p className="text-xs font-semibold text-emerald-700">{metrics.surveyProgress}%</p>
-                    </div>
-                  </div>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">-</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <CheckCircle2 className="h-5 w-5 text-white" />
@@ -1523,11 +1838,7 @@ export default function ItcHuaweiDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">MOS</p>
                   <p className="text-2xl font-bold text-blue-600 mt-1">{metrics.mosCompleted}</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <div className="px-2 py-0.5 bg-blue-50 rounded-full">
-                      <p className="text-xs font-semibold text-blue-700">{metrics.mosProgress}%</p>
-                    </div>
-                  </div>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">-</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <CheckCircle2 className="h-5 w-5 text-white" />
@@ -1561,7 +1872,7 @@ export default function ItcHuaweiDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Integrated</p>
                   <p className="text-2xl font-bold text-purple-600 mt-1">{metrics.integratedCompleted}</p>
-                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.integratedProgress}% of Install</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.mosCompleted > 0 ? ((metrics.integratedCompleted / metrics.mosCompleted) * 100).toFixed(0) : '0'}% of MOS</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-purple-500 to-violet-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <TrendingUp className="h-5 w-5 text-white" />
@@ -1578,7 +1889,7 @@ export default function ItcHuaweiDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">ATP Submit</p>
                   <p className="text-2xl font-bold text-cyan-600 mt-1">{metrics.atpSubmit}</p>
-                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.atpSubmitProgress}% of Integrated</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.mosCompleted > 0 ? ((metrics.atpSubmit / metrics.mosCompleted) * 100).toFixed(0) : '0'}% of MOS</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <FileCheck className="h-5 w-5 text-white" />
@@ -1595,7 +1906,7 @@ export default function ItcHuaweiDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">ATP Approved</p>
                   <p className="text-2xl font-bold text-indigo-600 mt-1">{metrics.atpApproved}</p>
-                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.atpApprovedProgress}% of Submit</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.mosCompleted > 0 ? ((metrics.atpApproved / metrics.mosCompleted) * 100).toFixed(0) : '0'}% of MOS</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <CheckCircle2 className="h-5 w-5 text-white" />
@@ -1612,7 +1923,7 @@ export default function ItcHuaweiDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Dismantle</p>
                   <p className="text-2xl font-bold text-rose-600 mt-1">{metrics.dismantle}</p>
-                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.dismantleProgress}% of total</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.integratedCompleted > 0 ? ((metrics.dismantle / metrics.integratedCompleted) * 100).toFixed(0) : '0'}% of Integrated</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-rose-500 to-red-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <AlertCircle className="h-5 w-5 text-white" />
@@ -1634,11 +1945,7 @@ export default function ItcHuaweiDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">CME Start</p>
                   <p className="text-2xl font-bold text-emerald-600 mt-1">{metrics.cmeStart}</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <div className="px-2 py-0.5 bg-emerald-50 rounded-full">
-                      <p className="text-xs font-semibold text-emerald-700">{metrics.cmeStartProgress}%</p>
-                    </div>
-                  </div>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">-</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <CheckCircle2 className="h-5 w-5 text-white" />
@@ -1672,7 +1979,7 @@ export default function ItcHuaweiDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">ME Done</p>
                   <p className="text-2xl font-bold text-amber-600 mt-1">{metrics.meDone}</p>
-                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.meDoneProgress}% of Civil</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.cmeStart > 0 ? ((metrics.meDone / metrics.cmeStart) * 100).toFixed(0) : '0'}% of CME Start</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <Clock className="h-5 w-5 text-white" />
@@ -1706,7 +2013,7 @@ export default function ItcHuaweiDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">PLN MG</p>
                   <p className="text-2xl font-bold text-purple-600 mt-1">{metrics.plnMG}</p>
-                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.plnMGProgress}% of ME Done</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.cmeStart > 0 ? ((metrics.plnMG / metrics.cmeStart) * 100).toFixed(0) : '0'}% of CME Start</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-purple-500 to-violet-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <TrendingUp className="h-5 w-5 text-white" />
@@ -1723,7 +2030,7 @@ export default function ItcHuaweiDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">BPUJL</p>
                   <p className="text-2xl font-bold text-cyan-600 mt-1">{metrics.bpujl}</p>
-                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.bpujlProgress}% of total</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.cmeStart > 0 ? ((metrics.bpujl / metrics.cmeStart) * 100).toFixed(0) : '0'}% of CME Start</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <CheckCircle2 className="h-5 w-5 text-white" />
@@ -1740,7 +2047,7 @@ export default function ItcHuaweiDashboard() {
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">PLN Connected</p>
                   <p className="text-2xl font-bold text-indigo-600 mt-1">{metrics.plnConnected}</p>
-                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.plnConnectedProgress}% of total</p>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">{metrics.cmeStart > 0 ? ((metrics.plnConnected / metrics.cmeStart) * 100).toFixed(0) : '0'}% of CME Start</p>
                 </div>
                 <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <TrendingUp className="h-5 w-5 text-white" />
@@ -1768,171 +2075,98 @@ export default function ItcHuaweiDashboard() {
             )}
           </div>
 
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6">
-            {/* Survey Progress */}
-            <div className="bg-white rounded-xl border border-slate-200/60 p-4 md:p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg">
-                  <CheckCircle2 className="h-4 w-4 text-white" />
+          {/* Region Progress Comparison Pivot Table */}
+          {metrics.regionMetrics && Object.keys(metrics.regionMetrics).length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200/60 p-5 shadow-sm mb-6 overflow-x-auto">
+              <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <div className="p-1.5 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg">
+                  <BarChart3 className="h-4 w-4 text-white" />
                 </div>
-                Survey Progress
+                Progress Comparison by Region
               </h3>
-              <div className="space-y-3">
-                {[
-                  { label: 'Survey', value: metrics.surveyCompleted, isInitial: true },
-                  { label: 'TSSR Closed', value: metrics.tssrClosed, total: metrics.surveyCompleted },
-                ].map((stage) => {
-                  if (stage.isInitial) {
-                    // Initial progress - hanya tampilkan angka tanpa perbandingan
-                    return (
-                      <div key={stage.label} className="rounded-xl p-4 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200/50">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-slate-700 text-sm">{stage.label}</span>
-                          <span className="font-bold text-2xl text-emerald-600">{stage.value}</span>
-                        </div>
-                      </div>
-                    )
-                  }
-                  
-                  const percentage = stage.total && stage.total > 0 ? ((stage.value / stage.total) * 100).toFixed(1) : '0'
-                  const percentageNum = parseFloat(percentage)
-                  const cappedPercentage = Math.min(percentageNum, 100)
-                  const statusColor = getStatusColor(percentageNum)
-                  const barColor = getProgressBarColor(percentageNum)
-                  
-                  return (
-                    <div key={stage.label} className={`rounded-xl p-3 border ${statusColor.border} ${statusColor.bg}`}>
-                      <div className="flex items-center justify-between text-xs mb-2">
-                        <span className="font-semibold text-slate-700">{stage.label}</span>
-                        <span className={`font-bold ${percentageNum > 100 ? 'text-rose-600' : statusColor.text}`}>
-                          {stage.value} / {stage.total} ({percentage}%)
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2.5 relative overflow-hidden">
-                        <div
-                          className={`${barColor} h-2.5 rounded-full transition-all duration-500 relative`}
-                          style={{ width: `${cappedPercentage}%` }}
-                        >
-                          <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-slate-300">
+                      <th className="text-left py-3 px-4 font-bold text-slate-900 bg-slate-50 sticky left-0 z-10">Region</th>
+                      <th className="text-center py-3 px-4 font-bold text-slate-900 bg-slate-50">Total Sites</th>
+                      <th className="text-center py-3 px-3 font-semibold text-emerald-700 bg-emerald-50">Survey</th>
+                      <th className="text-center py-3 px-3 font-semibold text-teal-700 bg-teal-50">TSSR Closed</th>
+                      <th className="text-center py-3 px-3 font-semibold text-blue-700 bg-blue-50">MOS</th>
+                      <th className="text-center py-3 px-3 font-semibold text-amber-700 bg-amber-50">Install</th>
+                      <th className="text-center py-3 px-3 font-semibold text-purple-700 bg-purple-50">Integrated</th>
+                      <th className="text-center py-3 px-3 font-semibold text-cyan-700 bg-cyan-50">ATP</th>
+                      <th className="text-center py-3 px-3 font-semibold text-rose-700 bg-rose-50">Dismantle</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(metrics.regionMetrics)
+                      .sort((a, b) => b[1].total - a[1].total)
+                      .map(([region, data], idx) => (
+                        <tr key={region} className={`border-b border-slate-200 hover:bg-slate-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                          <td className="py-3 px-4 font-semibold text-slate-900 sticky left-0 bg-inherit z-10">{region}</td>
+                          <td className="text-center py-3 px-4 font-bold text-slate-900">{data.total}</td>
+                          <td className="text-center py-3 px-3">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="font-bold text-emerald-700">{data.survey}</span>
+                              <span className="text-xs text-slate-600 font-medium">-</span>
+                            </div>
+                          </td>
+                          <td className="text-center py-3 px-3">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="font-bold text-teal-700">{data.tssrClosed}</span>
+                              <span className="text-xs text-slate-600 font-medium">{data.survey > 0 ? ((data.tssrClosed / data.survey) * 100).toFixed(0) : '0'}%</span>
+                            </div>
+                          </td>
+                          <td className="text-center py-3 px-3">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="font-bold text-blue-700">{data.mos}</span>
+                              <span className="text-xs text-slate-600 font-medium">-</span>
+                            </div>
+                          </td>
+                          <td className="text-center py-3 px-3">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="font-bold text-amber-700">{data.install}</span>
+                              <span className="text-xs text-slate-600 font-medium">{data.mos > 0 ? ((data.install / data.mos) * 100).toFixed(0) : '0'}%</span>
+                            </div>
+                          </td>
+                          <td className="text-center py-3 px-3">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="font-bold text-purple-700">{data.integrated}</span>
+                              <span className="text-xs text-slate-600 font-medium">{data.mos > 0 ? ((data.integrated / data.mos) * 100).toFixed(0) : '0'}%</span>
+                            </div>
+                          </td>
+                          <td className="text-center py-3 px-3">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="font-bold text-cyan-700">{data.atp}</span>
+                              <span className="text-xs text-slate-600 font-medium">{data.mos > 0 ? ((data.atp / data.mos) * 100).toFixed(0) : '0'}%</span>
+                            </div>
+                          </td>
+                          <td className="text-center py-3 px-3">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="font-bold text-rose-700">{data.dismantle}</span>
+                              <span className="text-xs text-slate-600 font-medium">{data.integrated > 0 ? ((data.dismantle / data.integrated) * 100).toFixed(0) : '0'}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    {/* Total Row */}
+                    <tr className="border-t-2 border-slate-300 bg-slate-100 font-bold">
+                      <td className="py-3 px-4 text-slate-900 sticky left-0 bg-slate-100 z-10">TOTAL</td>
+                      <td className="text-center py-3 px-4 text-slate-900">{metrics.totalSites}</td>
+                      <td className="text-center py-3 px-3 text-emerald-700">{metrics.surveyCompleted}</td>
+                      <td className="text-center py-3 px-3 text-teal-700">{metrics.tssrClosed}</td>
+                      <td className="text-center py-3 px-3 text-blue-700">{metrics.mosCompleted}</td>
+                      <td className="text-center py-3 px-3 text-amber-700">{metrics.installCompleted}</td>
+                      <td className="text-center py-3 px-3 text-purple-700">{metrics.integratedCompleted}</td>
+                      <td className="text-center py-3 px-3 text-cyan-700">{metrics.atpApproved}</td>
+                      <td className="text-center py-3 px-3 text-rose-700">{metrics.dismantle}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            {/* Rollout Progress */}
-            <div className="bg-white rounded-xl border border-slate-200/60 p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
-                  <TrendingUp className="h-4 w-4 text-white" />
-                </div>
-                Rollout Progress
-              </h3>
-              <div className="space-y-3">
-                {[
-                  { label: 'MOS', value: metrics.mosCompleted, isInitial: true },
-                  { label: 'Install Done', value: metrics.installCompleted, total: metrics.mosCompleted },
-                  { label: 'Integrated', value: metrics.integratedCompleted, total: metrics.installCompleted },
-                  { label: 'ATP Submit', value: metrics.atpSubmit, total: metrics.integratedCompleted },
-                  { label: 'ATP Approved', value: metrics.atpApproved, total: metrics.atpSubmit },
-                ].map((stage) => {
-                  if (stage.isInitial) {
-                    // Initial progress - hanya tampilkan angka tanpa perbandingan
-                    return (
-                      <div key={stage.label} className="rounded-xl p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/50">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-slate-700 text-sm">{stage.label}</span>
-                          <span className="font-bold text-2xl text-blue-600">{stage.value}</span>
-                        </div>
-                      </div>
-                    )
-                  }
-                  
-                  const percentage = stage.total && stage.total > 0 ? ((stage.value / stage.total) * 100).toFixed(1) : '0'
-                  const percentageNum = parseFloat(percentage)
-                  const cappedPercentage = Math.min(percentageNum, 100)
-                  const statusColor = getStatusColor(percentageNum)
-                  const barColor = getProgressBarColor(percentageNum)
-                  
-                  return (
-                    <div key={stage.label} className={`rounded-xl p-3 border ${statusColor.border} ${statusColor.bg}`}>
-                      <div className="flex items-center justify-between text-xs mb-2">
-                        <span className="font-semibold text-slate-700">{stage.label}</span>
-                        <span className={`font-bold ${percentageNum > 100 ? 'text-rose-600' : statusColor.text}`}>
-                          {stage.value} / {stage.total} ({percentage}%)
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2.5 relative overflow-hidden">
-                        <div
-                          className={`${barColor} h-2.5 rounded-full transition-all duration-500 relative`}
-                          style={{ width: `${cappedPercentage}%` }}
-                        >
-                          <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Dismantle Progress */}
-            <div className="bg-white rounded-xl border border-slate-200/60 p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <div className="p-1.5 bg-gradient-to-br from-rose-500 to-red-600 rounded-lg">
-                  <AlertCircle className="h-4 w-4 text-white" />
-                </div>
-                Dismantle Progress
-              </h3>
-              <div className="space-y-3">
-                {[
-                  { label: 'Dismantle', value: metrics.dismantle, isInitial: true },
-                  { label: 'BA Dismantle', value: metrics.baDismantle, total: metrics.dismantle },
-                  { label: 'Inbound', value: metrics.inbound, total: metrics.baDismantle },
-                ].map((stage) => {
-                  if (stage.isInitial) {
-                    // Initial progress - hanya tampilkan angka tanpa perbandingan
-                    return (
-                      <div key={stage.label} className="rounded-xl p-4 bg-gradient-to-r from-rose-50 to-red-50 border border-rose-200/50">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-slate-700 text-sm">{stage.label}</span>
-                          <span className="font-bold text-2xl text-rose-600">{stage.value}</span>
-                        </div>
-                      </div>
-                    )
-                  }
-                  
-                  const percentage = stage.total && stage.total > 0 ? ((stage.value / stage.total) * 100).toFixed(1) : '0'
-                  const percentageNum = parseFloat(percentage)
-                  const cappedPercentage = Math.min(percentageNum, 100)
-                  const statusColor = getStatusColor(percentageNum)
-                  const barColor = getProgressBarColor(percentageNum)
-                  
-                  return (
-                    <div key={stage.label} className={`rounded-xl p-3 border ${statusColor.border} ${statusColor.bg}`}>
-                      <div className="flex items-center justify-between text-xs mb-2">
-                        <span className="font-semibold text-slate-700">{stage.label}</span>
-                        <span className={`font-bold ${percentageNum > 100 ? 'text-rose-600' : statusColor.text}`}>
-                          {stage.value} / {stage.total} ({percentage}%)
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2.5 relative overflow-hidden">
-                        <div
-                          className={`${barColor} h-2.5 rounded-full transition-all duration-500 relative`}
-                          style={{ width: `${cappedPercentage}%` }}
-                        >
-                          <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* Additional Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">

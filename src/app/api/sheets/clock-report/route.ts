@@ -35,8 +35,6 @@ export async function GET(request: NextRequest) {
 
     // If sheetId is provided, fetch data from that specific sheet
     if (sheetId) {
-      console.log('Fetching data from sheet:', sheetId)
-      
       // Get all sheet tabs in the spreadsheet
       const spreadsheet = await sheets.spreadsheets.get({
         spreadsheetId: sheetId,
@@ -72,19 +70,14 @@ export async function GET(request: NextRequest) {
 
           allData.push(...formattedData)
         } catch (error) {
-          console.error(`Error fetching data from tab ${tabName}:`, error)
+          // Silent catch
         }
       }
 
-      console.log('Total records fetched:', allData.length)
       return NextResponse.json({ data: allData })
     }
 
     // List all Clock Detail Report sheets in the folder (including subfolders)
-    console.log('=== CLOCK REPORT API DEBUG ===')
-    console.log('Folder ID:', folderId)
-    console.log('Service Account Email:', process.env.GOOGLE_CLIENT_EMAIL)
-
     try {
       // Function to recursively get all subfolders
       const getAllFolderIds = async (parentFolderId: string): Promise<string[]> => {
@@ -97,8 +90,6 @@ export async function GET(request: NextRequest) {
         })
 
         if (subfolders.data.files && subfolders.data.files.length > 0) {
-          console.log('Found subfolders:', subfolders.data.files.map(f => f.name))
-          
           for (const folder of subfolders.data.files) {
             if (folder.id) {
               const childFolderIds = await getAllFolderIds(folder.id)
@@ -112,7 +103,6 @@ export async function GET(request: NextRequest) {
 
       // Get all folder IDs including subfolders
       const allFolderIds = await getAllFolderIds(folderId)
-      console.log('Total folders to search (including subfolders):', allFolderIds.length)
 
       // Search for spreadsheets in all folders
       const allFiles: any[] = []
@@ -130,26 +120,11 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      console.log('Total spreadsheets found in all folders:', allFiles.length)
-      if (allFiles.length > 0) {
-        console.log('Sample files:', allFiles.slice(0, 5).map(f => f.name))
-      } else {
-        console.log('⚠️ No files found. Possible reasons:')
-        console.log('1. Service account does not have access to this folder')
-        console.log('2. Folder ID is incorrect')
-        console.log('3. Folders are empty')
-      }
-
       // Filter for Clock Detail Report files
       const clockReportFiles = allFiles.filter(file => 
         file.name?.toLowerCase().includes('clock') && 
         file.name?.toLowerCase().includes('detail')
       )
-
-      console.log('Found Clock Detail Report sheets:', clockReportFiles.length)
-      if (clockReportFiles.length > 0) {
-        console.log('Clock Detail Report files:', clockReportFiles.map(f => f.name))
-      }
 
       const sheetList = clockReportFiles.map((file) => ({
         id: file.id,
@@ -158,7 +133,6 @@ export async function GET(request: NextRequest) {
         modifiedTime: file.modifiedTime,
       }))
 
-      console.log('=== END DEBUG ===')
       return NextResponse.json({ 
         sheets: sheetList,
         debug: {
@@ -169,8 +143,6 @@ export async function GET(request: NextRequest) {
         }
       })
     } catch (listError: any) {
-      console.error('Error listing files from folder:', listError.message)
-      console.error('Full error:', listError)
       return NextResponse.json({
         sheets: [],
         error: 'Failed to access folder',
@@ -178,7 +150,6 @@ export async function GET(request: NextRequest) {
       })
     }
   } catch (error: any) {
-    console.error('Clock Report API Error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch clock reports', details: error.message },
       { status: 500 }

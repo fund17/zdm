@@ -212,42 +212,14 @@ export default function POHuaweiDashboard() {
     setError(null)
 
     try {
-      // Check cache first
-      const cacheKey = 'po_huawei_full_data_cache'
-      const cacheTimestampKey = 'po_huawei_full_data_cache_timestamp'
-      const cacheExpiry = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
-      
-      const cachedData = localStorage.getItem(cacheKey)
-      const cachedTimestamp = localStorage.getItem(cacheTimestampKey)
-      
-      // Check if cache exists and is not expired
-      if (cachedData && cachedTimestamp) {
-        const timestamp = parseInt(cachedTimestamp)
-        const now = Date.now()
-        
-        if (now - timestamp < cacheExpiry) {
-          // Use cached data
-          const cached = JSON.parse(cachedData)
-          setAllData(cached)
-          setLoading(false)
-          return
-        }
-      }
-
-      // No cache or expired - fetch fresh data
-      const response = await fetch('/api/sheets/po-huawei')
+      // Fetch PO data from API with 7-day cache (leveraging Vercel Edge)
+      const response = await fetch('/api/sheets/po-huawei', {
+        next: { revalidate: 604800 } // 7 days cache, auto-refresh every Wednesday
+      })
       const data = await response.json()
 
       if (data.success) {
         setAllData(data.data)
-        
-        // Save to cache with compression and size check
-        const compressedData = compressData(data.data)
-        const cacheSaved = safeSetItem(cacheKey, compressedData)
-        
-        if (cacheSaved) {
-          safeSetItem(cacheTimestampKey, Date.now().toString())
-        }
       } else {
         setError(data.message || 'Failed to load data')
       }

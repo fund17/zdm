@@ -58,9 +58,11 @@ export default function ItcHuaweiDashboard() {
     try {
       setLoading(true)
       
-      // Fetch all sheets in parallel
+      // Fetch all sheets in parallel with Vercel Edge cache
       const promises = sheetList.map(sheet => 
-        fetch(`/api/sheets/itc-huawei?sheetName=${sheet.sheetName}`)
+        fetch(`/api/sheets/itc-huawei?sheetName=${sheet.sheetName}`, {
+          next: { revalidate: 600 } // 10 minutes cache
+        })
           .then(res => res.json())
           .then(result => ({
             sheetName: sheet.sheetName,
@@ -95,34 +97,18 @@ export default function ItcHuaweiDashboard() {
 
   const loadPOData = async () => {
     try {
-      const cacheKey = 'po_huawei_full_data_cache'
-      const cachedData = localStorage.getItem(cacheKey)
+      // Fetch PO data from API with 7-day cache (leveraging Vercel Edge)
+      const response = await fetch('/api/sheets/po-huawei', {
+        next: { revalidate: 604800 } // 7 days cache
+      })
       
-      let poData: any[] = []
+      const result = await response.json()
       
-      if (!cachedData) {
-        // Fetch PO data from API
-        const response = await fetch('/api/sheets/po-huawei')
-        
-        const result = await response.json()
-        
-        if (result.success && result.data) {
-          poData = result.data
-          
-          // Save to cache for future use
-          try {
-            const compressedData = JSON.stringify(poData)
-            localStorage.setItem(cacheKey, compressedData)
-            localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString())
-          } catch (e) {
-            // Silent cache failure
-          }
-        } else {
-          return
-        }
-      } else {
-        poData = JSON.parse(cachedData)
+      if (!result.success || !result.data) {
+        return
       }
+      
+      const poData = result.data
       
       // Create Site ID → PO Remaining % map
       const sitePoMap: Record<string, { count: number; totalRemaining: number }> = {}

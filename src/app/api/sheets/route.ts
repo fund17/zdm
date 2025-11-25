@@ -41,27 +41,42 @@ export async function GET(request: NextRequest) {
       end.setHours(23, 59, 59, 999)
       
       filteredData = data.filter(row => {
-        const dateStr = row.Date?.toString()
-        if (!dateStr) return false
+        const dateValue = row.Date
+        if (!dateValue) return false
         
-        // Parse date from various formats
         let rowDate: Date | null = null
         
-        // Handle 04-Jan-2024 format
-        const ddMmmYyyy = /(\d{1,2})-(\w{3})-(\d{4})/.exec(dateStr)
-        if (ddMmmYyyy) {
-          const [, day, month, year] = ddMmmYyyy
-          const monthMap: Record<string, string> = {
-            Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
-            Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12'
-          }
-          const monthNum = monthMap[month]
-          if (monthNum) {
-            rowDate = new Date(`${year}-${monthNum}-${day.padStart(2, '0')}`)
-          }
+        // Handle Excel serial number (e.g., 45295, 45296)
+        if (typeof dateValue === 'number') {
+          // Excel serial: days since 1900-01-01 (with 1900 leap year bug)
+          const excelEpoch = Date.UTC(1899, 11, 30) // Dec 30, 1899
+          const timestamp = excelEpoch + (dateValue * 86400000)
+          rowDate = new Date(timestamp)
         } else {
-          // Handle other formats
-          rowDate = new Date(dateStr)
+          // Handle string dates
+          const dateStr = dateValue.toString()
+          
+          // Handle 04-Jan-2024 format
+          const ddMmmYyyy = /(\d{1,2})-(\w{3})-(\d{4})/.exec(dateStr)
+          if (ddMmmYyyy) {
+            const [, day, month, year] = ddMmmYyyy
+            const monthMap: Record<string, string> = {
+              Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
+              Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12'
+            }
+            const monthNum = monthMap[month]
+            if (monthNum) {
+              // Parse as UTC to avoid timezone shifts
+              rowDate = new Date(Date.UTC(
+                parseInt(year),
+                parseInt(monthNum) - 1,
+                parseInt(day)
+              ))
+            }
+          } else {
+            // Handle other formats
+            rowDate = new Date(dateStr)
+          }
         }
         
         if (!rowDate || isNaN(rowDate.getTime())) return false

@@ -150,32 +150,33 @@ export default function LandingDashboard() {
     setPoLoading(true)
     
     try {
-      // Load Daily Plan and ITC Huawei in parallel (fast data)
+      // Calculate today's date in Jakarta timezone (WIB/WITA)
+      const today = new Date()
+      const jakartaOffset = 7 * 60 // WIB is UTC+7
+      const localTime = today.getTime() + (jakartaOffset * 60 * 1000)
+      const todayLocal = new Date(localTime)
+      
+      const todayYear = todayLocal.getUTCFullYear()
+      const todayMonth = String(todayLocal.getUTCMonth() + 1).padStart(2, '0')
+      const todayDate = String(todayLocal.getUTCDate()).padStart(2, '0')
+      const todayStr = `${todayYear}-${todayMonth}-${todayDate}`
+      
+      // Load Daily Plan (with today filter) and ITC Huawei in parallel
+      // Server-side filtering reduces bandwidth from ~500KB (6566 rows) to ~2KB (5-20 rows)
+      // ITC Huawei uses 24-hour Vercel Edge cache for optimal performance
       const [dailyResponse, itcResponse] = await Promise.all([
-        fetch('/api/sheets'),
-        fetch('/api/sheets/itc-huawei')
+        fetch(`/api/sheets?startDate=${todayStr}&endDate=${todayStr}`),
+        fetch('/api/sheets/itc-huawei', {
+          next: { revalidate: 86400 } // 24 hours cache
+        })
       ])
 
-      // Process Daily Plan data
+      // Process Daily Plan data (server already filtered to today only)
       if (dailyResponse.ok) {
         const dailyData = await dailyResponse.json()
-        const data = dailyData.data || []
+        const todayData = dailyData.data || []
         
-        // Filter today's data
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const todayStr = today.toISOString().split('T')[0]
-        
-        const todayData = data.filter((row: any) => {
-          if (!row.Date) return false
-          try {
-            const rowDate = new Date(row.Date)
-            const rowDateStr = rowDate.toISOString().split('T')[0]
-            return rowDateStr === todayStr
-          } catch (e) {
-            return false
-          }
-        })
+        // Server-filtered today data: removed console log for production
 
         let completed = 0
         let inProgress = 0
@@ -185,6 +186,8 @@ export default function LandingDashboard() {
         todayData.forEach((row: any) => {
           const status = (row.Status || '').toLowerCase().trim()
           const team = row['Team Name'] || row['Team'] || row['team']
+          
+          // Processing row: removed console log for production
           
           if (status === 'carry over' || status === 'done') {
             completed++
@@ -198,6 +201,8 @@ export default function LandingDashboard() {
             teamsWorking.add(team)
           }
         })
+        
+        // Summary info: removed console log for production
 
         setSummary(prev => ({
           ...prev,
@@ -264,66 +269,24 @@ export default function LandingDashboard() {
   }
 
   const forceRefreshPOData = async () => {
-    // Clear cache first
-    localStorage.removeItem('po_huawei_dashboard_cache')
-    localStorage.removeItem('po_huawei_dashboard_cache_timestamp')
-    localStorage.removeItem('po_huawei_full_data_cache')
-    localStorage.removeItem('po_huawei_full_data_cache_timestamp')
-    
     // Set loading state
     setPoLoading(true)
     
-    // Fetch fresh data
+    // Fetch fresh data with cache bypass
     await loadPOData(true)
   }
 
   const loadPOData = async (skipCache = false) => {
     try {
-      // Check cache first
-      const cacheKey = 'po_huawei_dashboard_cache'
-      const cacheTimestampKey = 'po_huawei_dashboard_cache_timestamp'
-      const cacheExpiry = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+      // Fetch PO data from API with 7-day cache (leveraging Vercel Edge)
+      const poResponse = await fetch('/api/sheets/po-huawei', {
+        next: { revalidate: 604800 }, // 7 days cache, auto-refresh every Wednesday
+        cache: skipCache ? 'no-store' : 'default'
+      })
       
-      const cachedData = localStorage.getItem(cacheKey)
-      const cachedTimestamp = localStorage.getItem(cacheTimestampKey)
-      
-      // Check if cache exists and is not expired (skip if skipCache is true)
-      if (!skipCache && cachedData && cachedTimestamp) {
-        const timestamp = parseInt(cachedTimestamp)
-        const now = Date.now()
-        
-        if (now - timestamp < cacheExpiry) {
-          // Use cached data (includes lastUpdated)
-          const cached = JSON.parse(cachedData)
-          setSummary(prev => ({
-            ...prev,
-            poHuawei: {
-              ...cached,
-              // Ensure lastUpdated is preserved from cache
-              lastUpdated: cached.lastUpdated || 'Cached data'
-            }
-          }))
-          setPoLoading(false)
-          return
-        }
-      }
-      
-      // No cache or expired - fetch fresh data
-      const poResponse = await fetch('/api/sheets/po-huawei')
       if (poResponse.ok) {
         const poData = await poResponse.json()
         const data = poData.data || []
-        
-        // Save full data to cache for detail dashboard with compression
-        const fullDataCacheKey = 'po_huawei_full_data_cache'
-        const fullDataCacheTimestampKey = 'po_huawei_full_data_cache_timestamp'
-        const compressedData = compressData(data)
-        const cacheSaved = safeSetItem(fullDataCacheKey, compressedData)
-        
-        if (cacheSaved) {
-          safeSetItem(fullDataCacheTimestampKey, Date.now().toString())
-        } else {
-        }
         
         const uniqueSiteIDs = new Set(data.map((row: any) => row['Site ID'] || row['Site ID PO']))
         
@@ -376,19 +339,20 @@ export default function LandingDashboard() {
           totalAmount,
           cancelledAmount,
           invoiced,
-          lastUpdated: poData.lastUpdated || new Date().toLocaleString('id-ID', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-        }
-
-        // Save summary to cache with safe storage
-        const summaryCacheSaved = safeSetItem(cacheKey, JSON.stringify(poSummary))
-        if (summaryCacheSaved) {
-          safeSetItem(cacheTimestampKey, Date.now().toString())
+          lastUpdated: poData.cacheInfo?.cachedUntil 
+            ? `Cached until ${new Date(poData.cacheInfo.cachedUntil).toLocaleString('id-ID', { 
+                day: '2-digit', 
+                month: 'short', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              })}`
+            : new Date().toLocaleString('id-ID', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })
         }
 
         setSummary(prev => ({

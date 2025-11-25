@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const shouldForceRefresh = isWednesday && jakartaHour >= 8 && jakartaHour < 10
     
     if (shouldForceRefresh) {
-      console.log('🔄 Wednesday morning: Forcing cache refresh for PO Huawei data')
+      // Wednesday morning force refresh: logging removed for production
     }
     // Get all PO Huawei spreadsheet IDs from environment
     const spreadsheetIds = [

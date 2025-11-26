@@ -41,9 +41,13 @@ export default function ItcHuaweiDashboard() {
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: '', endDate: '' })
   const [selectedRegions, setSelectedRegions] = useState<string[]>([])
   const [selectedProjects, setSelectedProjects] = useState<string[]>([])
+  const [showRegionDropdown, setShowRegionDropdown] = useState(false)
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
-  const [modalType, setModalType] = useState<'site' | 'team'>('site')
+  const [modalType, setModalType] = useState<'site' | 'team' | 'totalSites'>('site')
   const [modalData, setModalData] = useState<{ title: string; sites: any[]; allSites: any[] }>({ title: '', sites: [], allSites: [] })
+  const [clickedTeamIndex, setClickedTeamIndex] = useState<number | null>(null)
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
   const [poRemainingMap, setPoRemainingMap] = useState<Record<string, number>>({})
   const [poRemainingSurveyMap, setPoRemainingSurveyMap] = useState<Record<string, number>>({})
   const [poRemainingDismantleMap, setPoRemainingDismantleMap] = useState<Record<string, number>>({})
@@ -704,7 +708,8 @@ export default function ItcHuaweiDashboard() {
   const metrics = useMemo(() => {
     if (filteredData.length === 0) return null
 
-    const totalSites = filteredData.length
+    // Total Sites will be counted only for rows with activity in date range
+    let totalSites = 0
     
     // Site Status counts
     const siteStatusCounts: Record<string, number> = {}
@@ -774,6 +779,9 @@ export default function ItcHuaweiDashboard() {
       
       // Site Status - only count if row has activity in filter range
       if (hasValidDateInRange || periodFilter === 'all') {
+        // Increment total sites counter
+        totalSites++
+        
         const status = row['Site Status'] || row['SiteStatus'] || 'Unknown'
         siteStatusCounts[status] = (siteStatusCounts[status] || 0) + 1
         
@@ -999,6 +1007,7 @@ export default function ItcHuaweiDashboard() {
       mos: number
       install: number
       integrated: number
+      atpSubmit: number
       atp: number
       dismantle: number
       total: number
@@ -1015,6 +1024,7 @@ export default function ItcHuaweiDashboard() {
           mos: 0,
           install: 0,
           integrated: 0,
+          atpSubmit: 0,
           atp: 0,
           dismantle: 0,
           total: 0,
@@ -1057,6 +1067,7 @@ export default function ItcHuaweiDashboard() {
       if (getFilteredValue(row['MOS'])) regionMetrics[region].mos++
       if (getFilteredValue(row['Install Done'] || row['InstallDone'])) regionMetrics[region].install++
       if (getFilteredValue(row['Integrated'])) regionMetrics[region].integrated++
+      if (getFilteredValue(row['ATP Submit'] || row['ATPSubmit'])) regionMetrics[region].atpSubmit++
       if (getFilteredValue(row['ATP Approved'] || row['ATPApproved'])) regionMetrics[region].atp++
       if (getFilteredValue(row['Dismantle'])) regionMetrics[region].dismantle++
     })
@@ -1290,11 +1301,12 @@ export default function ItcHuaweiDashboard() {
       return `${day}-${month}-${year}`
     }
 
-    // Map all sites with correct column names (DUID, DU Name, Project)
+    // Map all sites with correct column names (DUID, DU Name, Project, TL Name)
     const allSites = filteredRows.map(row => ({
       duid: row['DUID'] || row['DU ID'] || '-',
       duName: row['DU Name'] || row['DUName'] || '-',
       project: row['_project'] || '-',
+      tlName: row['TL Name'] || row['TLName'] || row['Team Name'] || row['TeamName'] || '-',
       date: formatDateForDisplay(row[fieldName]),
       dateObj: parseDate(row[fieldName]?.toString())
     }))
@@ -1316,39 +1328,95 @@ export default function ItcHuaweiDashboard() {
     setModalOpen(true)
   }
 
+  // Function to open total sites modal
+  const openTotalSitesModal = () => {
+    const sitesData: any[] = []
+    
+    filteredData.forEach(row => {
+      // Check which activities exist for this site
+      const activities: string[] = []
+      
+      // Regular project columns
+      if (getFilteredValue(row['Survey'])) activities.push('Survey')
+      if (getFilteredValue(row['TSSR Closed']) || getFilteredValue(row['TSSRClosed'])) activities.push('TSSR Closed')
+      if (getFilteredValue(row['MOS'])) activities.push('MOS')
+      if (getFilteredValue(row['Install Done']) || getFilteredValue(row['InstallDone'])) activities.push('Install Done')
+      if (getFilteredValue(row['Integrated'])) activities.push('Integrated')
+      if (getFilteredValue(row['ATP Submit']) || getFilteredValue(row['ATPSubmit'])) activities.push('ATP Submit')
+      if (getFilteredValue(row['ATP Approved']) || getFilteredValue(row['ATPApproved'])) activities.push('ATP Approved')
+      if (getFilteredValue(row['Dismantle'])) activities.push('Dismantle')
+      if (getFilteredValue(row['BA Dismantle']) || getFilteredValue(row['BADismantle'])) activities.push('BA Dismantle')
+      if (getFilteredValue(row['Inbound'])) activities.push('Inbound')
+      
+      // CME/PLN/BPUJL columns
+      if (getFilteredValue(row['CME Start'])) activities.push('CME Start')
+      if (getFilteredValue(row['Civil Done'])) activities.push('Civil Done')
+      if (getFilteredValue(row['ME Done'])) activities.push('ME Done')
+      if (getFilteredValue(row['PLN MG'])) activities.push('PLN MG')
+      if (getFilteredValue(row['PLN Connected'])) activities.push('PLN Connected')
+      if (getFilteredValue(row['ATP PLN'])) activities.push('ATP PLN')
+      if (getFilteredValue(row['BPUJL'])) activities.push('BPUJL')
+      if (getFilteredValue(row['ATP CME'])) activities.push('ATP CME')
+      
+      // Only include rows with activity or if filter is 'all'
+      const hasValidDateInRange = activities.length > 0
+      
+      if (hasValidDateInRange || periodFilter === 'all') {
+        sitesData.push({
+          duid: row['DUID'] || row['DU ID'] || '-',
+          duName: row['DU Name'] || row['DUName'] || '-',
+          project: row['_project'] || '-',
+          tlName: row['TL Name'] || row['TLName'] || row['Team Name'] || row['TeamName'] || '-',
+          activity: activities.length > 0 ? activities.join(', ') : 'No Activity'
+        })
+      }
+    })
+
+    // Sort by DUID
+    const sortedSites = sitesData.sort((a, b) => {
+      return a.duid.localeCompare(b.duid)
+    })
+
+    const displaySites = sortedSites.slice(0, 15)
+    const allSitesForDownload = sortedSites
+
+    setModalData({ title: 'Total Sites', sites: displaySites, allSites: allSitesForDownload })
+    setModalType('totalSites')
+    setModalOpen(true)
+  }
+
   // Function to open team list modal
   const openTeamListModal = () => {
     // Get unique TL Names from filtered data (only from rows with activity in date range)
-    const teamMap = new Map<string, any[]>()
+    const teamMap = new Map<string, { sites: any[], activities: Set<string> }>()
     
     filteredData.forEach(row => {
-      // Only count rows that have at least one valid date field in filter range
-      const hasValidDateInRange = 
-        // Regular project columns
-        getFilteredValue(row['Survey']) ||
-        getFilteredValue(row['TSSR Closed']) ||
-        getFilteredValue(row['TSSRClosed']) ||
-        getFilteredValue(row['MOS']) ||
-        getFilteredValue(row['Install Done']) ||
-        getFilteredValue(row['InstallDone']) ||
-        getFilteredValue(row['Integrated']) ||
-        getFilteredValue(row['ATP Submit']) ||
-        getFilteredValue(row['ATPSubmit']) ||
-        getFilteredValue(row['ATP Approved']) ||
-        getFilteredValue(row['ATPApproved']) ||
-        getFilteredValue(row['Dismantle']) ||
-        getFilteredValue(row['BA Dismantle']) ||
-        getFilteredValue(row['BADismantle']) ||
-        getFilteredValue(row['Inbound']) ||
-        // CME/PLN/BPUJL columns
-        getFilteredValue(row['CME Start']) ||
-        getFilteredValue(row['Civil Done']) ||
-        getFilteredValue(row['ME Done']) ||
-        getFilteredValue(row['PLN MG']) ||
-        getFilteredValue(row['PLN Connected']) ||
-        getFilteredValue(row['ATP PLN']) ||
-        getFilteredValue(row['BPUJL']) ||
-        getFilteredValue(row['ATP CME'])
+      // Check which activities exist for this site
+      const activities: string[] = []
+      
+      // Regular project columns
+      if (getFilteredValue(row['Survey'])) activities.push('Survey')
+      if (getFilteredValue(row['TSSR Closed']) || getFilteredValue(row['TSSRClosed'])) activities.push('TSSR Closed')
+      if (getFilteredValue(row['MOS'])) activities.push('MOS')
+      if (getFilteredValue(row['Install Done']) || getFilteredValue(row['InstallDone'])) activities.push('Install Done')
+      if (getFilteredValue(row['Integrated'])) activities.push('Integrated')
+      if (getFilteredValue(row['ATP Submit']) || getFilteredValue(row['ATPSubmit'])) activities.push('ATP Submit')
+      if (getFilteredValue(row['ATP Approved']) || getFilteredValue(row['ATPApproved'])) activities.push('ATP Approved')
+      if (getFilteredValue(row['Dismantle'])) activities.push('Dismantle')
+      if (getFilteredValue(row['BA Dismantle']) || getFilteredValue(row['BADismantle'])) activities.push('BA Dismantle')
+      if (getFilteredValue(row['Inbound'])) activities.push('Inbound')
+      
+      // CME/PLN/BPUJL columns
+      if (getFilteredValue(row['CME Start'])) activities.push('CME Start')
+      if (getFilteredValue(row['Civil Done'])) activities.push('Civil Done')
+      if (getFilteredValue(row['ME Done'])) activities.push('ME Done')
+      if (getFilteredValue(row['PLN MG'])) activities.push('PLN MG')
+      if (getFilteredValue(row['PLN Connected'])) activities.push('PLN Connected')
+      if (getFilteredValue(row['ATP PLN'])) activities.push('ATP PLN')
+      if (getFilteredValue(row['BPUJL'])) activities.push('BPUJL')
+      if (getFilteredValue(row['ATP CME'])) activities.push('ATP CME')
+      
+      const hasValidDateInRange = activities.length > 0
       
       // Only include rows with activity in date range or if filter is 'all'
       if (hasValidDateInRange || periodFilter === 'all') {
@@ -1356,26 +1424,33 @@ export default function ItcHuaweiDashboard() {
         if (tlName && tlName.trim() !== '') {
           const teamKey = tlName.trim()
           if (!teamMap.has(teamKey)) {
-            teamMap.set(teamKey, [])
+            teamMap.set(teamKey, { sites: [], activities: new Set<string>() })
           }
-          teamMap.get(teamKey)!.push({
+          const teamData = teamMap.get(teamKey)!
+          teamData.sites.push({
             duid: row['DUID'] || row['DU ID'] || '-',
             duName: row['DU Name'] || row['DUName'] || '-',
-            project: row['_project'] || '-'
+            project: row['_project'] || '-',
+            region: row['Region'] || '-'
           })
+          // Add all activities to the team's activity set
+          activities.forEach(activity => teamData.activities.add(activity))
         }
       }
     })
 
     // Convert to array and create display data
-    const teamList = Array.from(teamMap.entries()).map(([teamName, sites]) => ({
+    const teamList = Array.from(teamMap.entries()).map(([teamName, teamData]) => ({
       tlName: teamName,
-      totalSites: sites.length,
-      projects: sites.map(s => s.project).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+      totalSites: teamData.sites.length,
+      projects: teamData.sites.map(s => s.project).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+      regions: teamData.sites.map(s => s.region).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+      activity: Array.from(teamData.activities).sort().join(', ') || 'No Activity',
+      siteDetails: teamData.sites, // Include full site details for tooltip
       // Keep old format for backward compatibility
       duid: teamName,
-      duName: `${sites.length} sites`,
-      project: sites.map(s => s.project).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+      duName: `${teamData.sites.length} sites`,
+      project: teamData.sites.map(s => s.project).filter((v, i, a) => a.indexOf(v) === i).join(', '),
       date: '-'
     }))
 
@@ -1405,13 +1480,36 @@ export default function ItcHuaweiDashboard() {
       excelData = modalData.allSites.map(team => ({
         'TL Name': team.tlName,
         'Total Sites': team.totalSites,
-        'Projects': team.projects
+        'Regions': team.regions,
+        'Projects': team.projects,
+        'Activity': team.activity
       }))
       sheetName = 'Team List'
       colWidths = [
         { wch: 30 },
         { wch: 15 },
-        { wch: 50 }
+        { wch: 40 },
+        { wch: 50 },
+        { wch: 60 }
+      ]
+    } else if (modalType === 'totalSites') {
+      // Total sites format with activity
+      excelData = modalData.allSites.map((site, index) => ({
+        'No': index + 1,
+        'DUID': site.duid,
+        'DU Name': site.duName,
+        'Project': site.project,
+        'TL Name': site.tlName,
+        'Activity': site.activity
+      }))
+      sheetName = 'Total Sites'
+      colWidths = [
+        { wch: 8 },
+        { wch: 20 },
+        { wch: 40 },
+        { wch: 30 },
+        { wch: 30 },
+        { wch: 60 }
       ]
     } else {
       // Site list format
@@ -1419,12 +1517,14 @@ export default function ItcHuaweiDashboard() {
         'DUID': site.duid,
         'DU Name': site.duName,
         'Project': site.project,
+        'TL Name': site.tlName,
         'Date': site.date
       }))
       sheetName = 'Site List'
       colWidths = [
         { wch: 20 },
         { wch: 40 },
+        { wch: 30 },
         { wch: 30 },
         { wch: 15 }
       ]
@@ -1510,9 +1610,10 @@ export default function ItcHuaweiDashboard() {
               {/* Region Filter - Multi-select */}
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <label className="text-xs font-medium text-slate-700 whitespace-nowrap">Region:</label>
-                <div className="relative group">
+                <div className="relative">
                   <button
                     type="button"
+                    onClick={() => setShowRegionDropdown(!showRegionDropdown)}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px] text-left flex items-center justify-between"
                   >
                     <span className="truncate">
@@ -1522,45 +1623,51 @@ export default function ItcHuaweiDashboard() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                  <div className="hidden group-hover:block absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
-                    <div className="p-2">
-                      <label className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedRegions.length === 0}
-                          onChange={() => setSelectedRegions([])}
-                          className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-xs font-medium text-slate-700">All Regions</span>
-                      </label>
-                      {regions.map((region) => (
-                        <label key={region} className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedRegions.includes(region)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedRegions(prev => [...prev, region])
-                              } else {
-                                setSelectedRegions(prev => prev.filter(r => r !== region))
-                              }
-                            }}
-                            className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="text-xs text-slate-700">{region}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+                  {showRegionDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowRegionDropdown(false)}></div>
+                      <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
+                        <div className="p-2">
+                          <label className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedRegions.length === 0}
+                              onChange={() => setSelectedRegions([])}
+                              className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-xs font-medium text-slate-700">All Regions</span>
+                          </label>
+                          {regions.map((region) => (
+                            <label key={region} className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedRegions.includes(region)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedRegions(prev => [...prev, region])
+                                  } else {
+                                    setSelectedRegions(prev => prev.filter(r => r !== region))
+                                  }
+                                }}
+                                className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-xs text-slate-700">{region}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
               {/* Project Filter - Multi-select */}
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <label className="text-xs font-medium text-slate-700 whitespace-nowrap">Project:</label>
-                <div className="relative group">
+                <div className="relative">
                   <button
                     type="button"
+                    onClick={() => setShowProjectDropdown(!showProjectDropdown)}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px] text-left flex items-center justify-between"
                   >
                     <span className="truncate">
@@ -1570,36 +1677,41 @@ export default function ItcHuaweiDashboard() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                  <div className="hidden group-hover:block absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
-                    <div className="p-2">
-                      <label className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedProjects.length === 0}
-                          onChange={() => setSelectedProjects([])}
-                          className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-xs font-medium text-slate-700">All Projects</span>
-                      </label>
-                      {projects.map((project) => (
-                        <label key={project} className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedProjects.includes(project)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedProjects(prev => [...prev, project])
-                              } else {
-                                setSelectedProjects(prev => prev.filter(p => p !== project))
-                              }
-                            }}
-                            className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="text-xs text-slate-700">{project}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+                  {showProjectDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowProjectDropdown(false)}></div>
+                      <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
+                        <div className="p-2">
+                          <label className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedProjects.length === 0}
+                              onChange={() => setSelectedProjects([])}
+                              className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-xs font-medium text-slate-700">All Projects</span>
+                          </label>
+                          {projects.map((project) => (
+                            <label key={project} className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedProjects.includes(project)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedProjects(prev => [...prev, project])
+                                  } else {
+                                    setSelectedProjects(prev => prev.filter(p => p !== project))
+                                  }
+                                }}
+                                className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-xs text-slate-700">{project}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -2008,7 +2120,10 @@ export default function ItcHuaweiDashboard() {
                     : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-9'
                 }`}>
             {/* Total Sites */}
-            <div className="group bg-white rounded-xl border border-slate-200/60 p-3 md:p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
+            <div 
+              onClick={() => openTotalSitesModal()}
+              className="group bg-white rounded-xl border border-slate-200/60 p-3 md:p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Total Sites</p>
@@ -2323,7 +2438,8 @@ export default function ItcHuaweiDashboard() {
                       <th className="text-center py-3 px-3 font-semibold text-blue-700 bg-blue-50">MOS</th>
                       <th className="text-center py-3 px-3 font-semibold text-amber-700 bg-amber-50">Install</th>
                       <th className="text-center py-3 px-3 font-semibold text-purple-700 bg-purple-50">Integrated</th>
-                      <th className="text-center py-3 px-3 font-semibold text-cyan-700 bg-cyan-50">ATP</th>
+                      <th className="text-center py-3 px-3 font-semibold text-indigo-700 bg-indigo-50">ATP Submit</th>
+                      <th className="text-center py-3 px-3 font-semibold text-cyan-700 bg-cyan-50">ATP Approve</th>
                       <th className="text-center py-3 px-3 font-semibold text-rose-700 bg-rose-50">Dismantle</th>
                     </tr>
                   </thead>
@@ -2367,8 +2483,14 @@ export default function ItcHuaweiDashboard() {
                           </td>
                           <td className="text-center py-3 px-3">
                             <div className="flex flex-col items-center gap-1">
+                              <span className="font-bold text-indigo-700">{data.atpSubmit}</span>
+                              <span className="text-xs text-slate-600 font-medium">{data.mos > 0 ? ((data.atpSubmit / data.mos) * 100).toFixed(0) : '0'}%</span>
+                            </div>
+                          </td>
+                          <td className="text-center py-3 px-3">
+                            <div className="flex flex-col items-center gap-1">
                               <span className="font-bold text-cyan-700">{data.atp}</span>
-                              <span className="text-xs text-slate-600 font-medium">{data.mos > 0 ? ((data.atp / data.mos) * 100).toFixed(0) : '0'}%</span>
+                              <span className="text-xs text-slate-600 font-medium">{data.atpSubmit > 0 ? ((data.atp / data.atpSubmit) * 100).toFixed(0) : '0'}%</span>
                             </div>
                           </td>
                           <td className="text-center py-3 px-3">
@@ -2389,6 +2511,7 @@ export default function ItcHuaweiDashboard() {
                       <td className="text-center py-3 px-3 text-blue-700">{metrics.mosCompleted}</td>
                       <td className="text-center py-3 px-3 text-amber-700">{metrics.installCompleted}</td>
                       <td className="text-center py-3 px-3 text-purple-700">{metrics.integratedCompleted}</td>
+                      <td className="text-center py-3 px-3 text-indigo-700">{metrics.atpSubmit}</td>
                       <td className="text-center py-3 px-3 text-cyan-700">{metrics.atpApproved}</td>
                       <td className="text-center py-3 px-3 text-rose-700">{metrics.dismantle}</td>
                     </tr>
@@ -2596,15 +2719,15 @@ export default function ItcHuaweiDashboard() {
       {/* Site List Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col animate-slideUp">
+          <div className="bg-white rounded-2xl shadow-2xl w-[95%] max-w-[1400px] max-h-[85vh] flex flex-col animate-slideUp">
             {/* Modal Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 md:p-6 border-b border-slate-200 gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
-                  {modalType === 'team' ? modalData.title : `${modalData.title} - Site List`}
+                  {modalType === 'team' ? modalData.title : modalType === 'totalSites' ? modalData.title : `${modalData.title} - Site List`}
                 </h2>
                 <p className="text-sm text-slate-600 mt-1 font-medium">
-                  Showing {modalData.sites.length} of {modalData.allSites.length} {modalType === 'team' ? 'teams' : 'sites'} (most recent)
+                  Showing {modalData.sites.length} of {modalData.allSites.length} {modalType === 'team' ? 'teams' : 'sites'} {modalType !== 'totalSites' && '(most recent)'}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -2642,7 +2765,9 @@ export default function ItcHuaweiDashboard() {
                           <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">No</th>
                           <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">TL Name</th>
                           <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Total Sites</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Regions</th>
                           <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Projects</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Activity</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2653,8 +2778,52 @@ export default function ItcHuaweiDashboard() {
                           >
                             <td className="px-4 py-3 text-slate-600 font-medium">{index + 1}</td>
                             <td className="px-4 py-3 text-slate-900 font-medium">{team.tlName}</td>
-                            <td className="px-4 py-3 text-purple-600 font-semibold">{team.totalSites}</td>
+                            <td 
+                              className="px-4 py-3 text-purple-600 font-semibold cursor-pointer relative hover:bg-purple-50 transition-colors"
+                              onClick={(e) => {
+                                if (clickedTeamIndex === index) {
+                                  setClickedTeamIndex(null)
+                                } else {
+                                  setClickedTeamIndex(index)
+                                  const rect = e.currentTarget.getBoundingClientRect()
+                                  setTooltipPosition({ x: rect.left, y: rect.bottom })
+                                }
+                              }}
+                            >
+                              {team.totalSites}
+                            </td>
+                            <td className="px-4 py-3 text-emerald-600 font-medium">{team.regions}</td>
                             <td className="px-4 py-3 text-blue-600 font-medium">{team.projects}</td>
+                            <td className="px-4 py-3 text-amber-600 font-medium text-xs">{team.activity}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : modalType === 'totalSites' ? (
+                    // Total Sites Table with Activity
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">No</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DUID</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DU Name</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Project</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">TL Name</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Activity</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {modalData.sites.map((site, index) => (
+                          <tr 
+                            key={index}
+                            className="hover:bg-slate-50 transition-colors border-b border-slate-100"
+                          >
+                            <td className="px-4 py-3 text-slate-600 font-medium">{index + 1}</td>
+                            <td className="px-4 py-3 font-mono text-slate-900 font-medium">{site.duid}</td>
+                            <td className="px-4 py-3 text-slate-900">{site.duName}</td>
+                            <td className="px-4 py-3 text-blue-600 font-medium">{site.project}</td>
+                            <td className="px-4 py-3 text-purple-600 font-medium">{site.tlName}</td>
+                            <td className="px-4 py-3 text-emerald-600 font-medium text-xs">{site.activity}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2668,6 +2837,7 @@ export default function ItcHuaweiDashboard() {
                           <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DUID</th>
                           <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DU Name</th>
                           <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Project</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">TL Name</th>
                           <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Date</th>
                         </tr>
                       </thead>
@@ -2681,6 +2851,7 @@ export default function ItcHuaweiDashboard() {
                             <td className="px-4 py-3 font-mono text-slate-900 font-medium">{site.duid}</td>
                             <td className="px-4 py-3 text-slate-900">{site.duName}</td>
                             <td className="px-4 py-3 text-blue-600 font-medium">{site.project}</td>
+                            <td className="px-4 py-3 text-purple-600 font-medium">{site.tlName}</td>
                             <td className="px-4 py-3 text-slate-600 font-medium">{site.date}</td>
                           </tr>
                         ))}
@@ -2692,6 +2863,39 @@ export default function ItcHuaweiDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Site List Popup for Team - Outside modal */}
+      {clickedTeamIndex !== null && modalType === 'team' && modalData.sites[clickedTeamIndex]?.siteDetails && (
+        <>
+          <div 
+            className="fixed inset-0 z-[59]"
+            onClick={() => setClickedTeamIndex(null)}
+          ></div>
+          <div 
+            className="fixed z-[60] bg-white border border-slate-300 rounded-lg shadow-2xl p-3 max-h-96 overflow-y-auto w-96"
+            style={{
+              left: `${tooltipPosition.x}px`,
+              top: `${tooltipPosition.y + 5}px`
+            }}
+          >
+            <div className="text-xs font-semibold text-slate-700 mb-2 pb-2 border-b border-slate-200">
+              Site List - {modalData.sites[clickedTeamIndex].tlName} ({modalData.sites[clickedTeamIndex].siteDetails.length} sites)
+            </div>
+            <div className="space-y-1">
+              {modalData.sites[clickedTeamIndex].siteDetails.map((site: any, siteIdx: number) => (
+                <div key={siteIdx} className="text-xs py-1 border-b border-slate-100 last:border-0">
+                  <div className="font-mono text-slate-900 font-medium">{site.duid}</div>
+                  <div className="text-slate-600 truncate">{site.duName}</div>
+                  <div className="flex gap-2 mt-0.5">
+                    <span className="text-blue-600 font-medium">{site.project}</span>
+                    <span className="text-emerald-600">{site.region}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

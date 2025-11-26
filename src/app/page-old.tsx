@@ -249,8 +249,8 @@ export default function Dashboard() {
         todayData.forEach((row: any) => {
           const status = row.Status || 'No Status'
           const activity = row.Activity || 'No Activity'
-          // Try multiple possible field names for team
-          const team = row['Team Name'] || row['Team'] || row['team'] || row['team_name'] || row['TeamName'] || 'No Team'
+          // Try multiple possible field names for team leader
+          const team = row['TL Name'] || row['Team Name'] || row['Team'] || row['team'] || row['team_name'] || row['TeamName'] || 'No Team'
           // Try multiple possible field names for site
           const site = row['Site ID'] || row['Site'] || row['site'] || row['site_id'] || row['SiteID'] || row['Site Name'] || 'No Site'
           
@@ -347,8 +347,8 @@ export default function Dashboard() {
         todayData.forEach((row: any) => {
           const status = row.Status || 'No Status'
           const activity = row.Activity || 'No Activity'
-          // Try multiple possible field names for team
-          const team = row['Team Name'] || row['Team'] || row['team'] || row['team_name'] || row['TeamName'] || 'No Team'
+          // Try multiple possible field names for team leader
+          const team = row['TL Name'] || row['Team Name'] || row['Team'] || row['team'] || row['team_name'] || row['TeamName'] || 'No Team'
 
           // Use same status mapping for monthly data
           const normalizedStatus = status.toLowerCase().trim()

@@ -42,6 +42,7 @@ export default function ItcHuaweiDashboard() {
   const [selectedRegion, setSelectedRegion] = useState<string>('all')
   const [selectedProject, setSelectedProject] = useState<string>('all')
   const [modalOpen, setModalOpen] = useState(false)
+  const [modalType, setModalType] = useState<'site' | 'team'>('site')
   const [modalData, setModalData] = useState<{ title: string; sites: any[]; allSites: any[] }>({ title: '', sites: [], allSites: [] })
   const [poRemainingMap, setPoRemainingMap] = useState<Record<string, number>>({})
   const [poRemainingSurveyMap, setPoRemainingSurveyMap] = useState<Record<string, number>>({})
@@ -720,6 +721,9 @@ export default function ItcHuaweiDashboard() {
     let bpujl = 0
     let atpCME = 0
     
+    // Calculate unique teams from TL Name column (only from active rows)
+    const uniqueTeams = new Set<string>()
+    
     // Detect project type from first row
     const hasRegularColumns = filteredData.length > 0 && ('Survey' in filteredData[0] || 'MOS' in filteredData[0])
     const hasCMEColumns = filteredData.length > 0 && ('CME Start' in filteredData[0] || 'ATP CME' in filteredData[0])
@@ -761,6 +765,12 @@ export default function ItcHuaweiDashboard() {
         // Region
         const region = row['Region'] || 'Unknown'
         regionCounts[region] = (regionCounts[region] || 0) + 1
+        
+        // Count unique TL Names only from active rows
+        const tlName = row['TL Name'] || row['TLName'] || row['Team Name'] || row['TeamName']
+        if (tlName && tlName.trim() !== '') {
+          uniqueTeams.add(tlName.trim())
+        }
       }
       
       // Survey Progress - check if date is in filter range
@@ -977,6 +987,7 @@ export default function ItcHuaweiDashboard() {
       atp: number
       dismantle: number
       total: number
+      teamQty: Set<string>
     }> = {}
 
     filteredData.forEach(row => {
@@ -991,11 +1002,28 @@ export default function ItcHuaweiDashboard() {
           integrated: 0,
           atp: 0,
           dismantle: 0,
-          total: 0
+          total: 0,
+          teamQty: new Set<string>()
         }
       }
 
       regionMetrics[region].total++
+      
+      const hasValidDateInRange = 
+        getFilteredValue(row['Survey']) ||
+        getFilteredValue(row['TSSR Closed'] || row['TSSRClosed']) ||
+        getFilteredValue(row['MOS']) ||
+        getFilteredValue(row['Install Done'] || row['InstallDone']) ||
+        getFilteredValue(row['Integrated']) ||
+        getFilteredValue(row['ATP Approved'] || row['ATPApproved']) ||
+        getFilteredValue(row['Dismantle'])
+      
+      if (hasValidDateInRange || periodFilter === 'all') {
+        const tlName = row['TL Name'] || row['TLName'] || row['Team Name'] || row['TeamName']
+        if (tlName && tlName.trim() !== '') {
+          regionMetrics[region].teamQty.add(tlName.trim())
+        }
+      }
       
       if (getFilteredValue(row['Survey'])) regionMetrics[region].survey++
       if (getFilteredValue(row['TSSR Closed'] || row['TSSRClosed'])) regionMetrics[region].tssrClosed++
@@ -1006,8 +1034,12 @@ export default function ItcHuaweiDashboard() {
       if (getFilteredValue(row['Dismantle'])) regionMetrics[region].dismantle++
     })
 
+    // Calculate team qty from unique teams set
+    const teamQty = uniqueTeams.size
+
     return {
       totalSites,
+      teamQty,
       siteStatusCounts,
       regionCounts,
       regionMetrics,
@@ -1253,6 +1285,83 @@ export default function ItcHuaweiDashboard() {
     const allSitesForDownload = sortedSites.map(({ dateObj, ...site }) => site)
 
     setModalData({ title: label, sites: displaySites, allSites: allSitesForDownload })
+    setModalType('site')
+    setModalOpen(true)
+  }
+
+  // Function to open team list modal
+  const openTeamListModal = () => {
+    // Get unique TL Names from filtered data (only from rows with activity in date range)
+    const teamMap = new Map<string, any[]>()
+    
+    filteredData.forEach(row => {
+      // Only count rows that have at least one valid date field in filter range
+      const hasValidDateInRange = 
+        // Regular project columns
+        getFilteredValue(row['Survey']) ||
+        getFilteredValue(row['TSSR Closed']) ||
+        getFilteredValue(row['TSSRClosed']) ||
+        getFilteredValue(row['MOS']) ||
+        getFilteredValue(row['Install Done']) ||
+        getFilteredValue(row['InstallDone']) ||
+        getFilteredValue(row['Integrated']) ||
+        getFilteredValue(row['ATP Submit']) ||
+        getFilteredValue(row['ATPSubmit']) ||
+        getFilteredValue(row['ATP Approved']) ||
+        getFilteredValue(row['ATPApproved']) ||
+        getFilteredValue(row['Dismantle']) ||
+        getFilteredValue(row['BA Dismantle']) ||
+        getFilteredValue(row['BADismantle']) ||
+        getFilteredValue(row['Inbound']) ||
+        // CME/PLN/BPUJL columns
+        getFilteredValue(row['CME Start']) ||
+        getFilteredValue(row['Civil Done']) ||
+        getFilteredValue(row['ME Done']) ||
+        getFilteredValue(row['PLN MG']) ||
+        getFilteredValue(row['PLN Connected']) ||
+        getFilteredValue(row['ATP PLN']) ||
+        getFilteredValue(row['BPUJL']) ||
+        getFilteredValue(row['ATP CME'])
+      
+      // Only include rows with activity in date range or if filter is 'all'
+      if (hasValidDateInRange || periodFilter === 'all') {
+        const tlName = row['TL Name'] || row['TLName'] || row['Team Name'] || row['TeamName']
+        if (tlName && tlName.trim() !== '') {
+          const teamKey = tlName.trim()
+          if (!teamMap.has(teamKey)) {
+            teamMap.set(teamKey, [])
+          }
+          teamMap.get(teamKey)!.push({
+            duid: row['DUID'] || row['DU ID'] || '-',
+            duName: row['DU Name'] || row['DUName'] || '-',
+            project: row['_project'] || '-'
+          })
+        }
+      }
+    })
+
+    // Convert to array and create display data
+    const teamList = Array.from(teamMap.entries()).map(([teamName, sites]) => ({
+      tlName: teamName,
+      totalSites: sites.length,
+      projects: sites.map(s => s.project).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+      // Keep old format for backward compatibility
+      duid: teamName,
+      duName: `${sites.length} sites`,
+      project: sites.map(s => s.project).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+      date: '-'
+    }))
+
+    // Sort by number of sites (descending)
+    const sortedTeams = teamList.sort((a, b) => {
+      return b.totalSites - a.totalSites
+    })
+
+    const displayTeams = sortedTeams.slice(0, 15)
+    const allTeamsForDownload = sortedTeams
+
+    setModalData({ title: 'Team Leaders', sites: displayTeams, allSites: allTeamsForDownload })
+    setModalType('team')
     setModalOpen(true)
   }
 
@@ -1260,28 +1369,52 @@ export default function ItcHuaweiDashboard() {
   const downloadFromModal = () => {
     if (modalData.allSites.length === 0) return
 
-    const excelData = modalData.allSites.map(site => ({
-      'DUID': site.duid,
-      'DU Name': site.duName,
-      'Project': site.project,
-      'Date': site.date
-    }))
+    let excelData
+    let sheetName
+    let colWidths
+    
+    if (modalType === 'team') {
+      // Team list format
+      excelData = modalData.allSites.map(team => ({
+        'TL Name': team.tlName,
+        'Total Sites': team.totalSites,
+        'Projects': team.projects
+      }))
+      sheetName = 'Team List'
+      colWidths = [
+        { wch: 30 },
+        { wch: 15 },
+        { wch: 50 }
+      ]
+    } else {
+      // Site list format
+      excelData = modalData.allSites.map(site => ({
+        'DUID': site.duid,
+        'DU Name': site.duName,
+        'Project': site.project,
+        'Date': site.date
+      }))
+      sheetName = 'Site List'
+      colWidths = [
+        { wch: 20 },
+        { wch: 40 },
+        { wch: 30 },
+        { wch: 15 }
+      ]
+    }
 
     const ws = XLSX.utils.json_to_sheet(excelData)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Site List')
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
 
-    const colWidths = [
-      { wch: 20 },
-      { wch: 40 },
-      { wch: 30 },
-      { wch: 15 }
-    ]
     ws['!cols'] = colWidths
 
     const projectName = selectedProject !== 'all' ? selectedProject.replace(/\s+/g, '_') : 'AllProjects'
     const regionName = selectedRegion !== 'all' ? selectedRegion.replace(/\s+/g, '_') : 'AllRegions'
-    XLSX.writeFile(wb, `${modalData.title}_SiteList_${projectName}_${regionName}_${periodFilter}.xlsx`)
+    const fileName = modalType === 'team' 
+      ? `${modalData.title}_TeamList_${projectName}_${regionName}_${periodFilter}.xlsx`
+      : `${modalData.title}_SiteList_${projectName}_${regionName}_${periodFilter}.xlsx`
+    XLSX.writeFile(wb, fileName)
   }
 
   return (
@@ -1782,8 +1915,8 @@ export default function ItcHuaweiDashboard() {
               <div className="mt-6 pt-6 border-t border-slate-200">
                 <div className={`grid gap-3 md:gap-4 ${
                   metrics.hasCMEColumns 
-                    ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5' 
-                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8'
+                    ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-10' 
+                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-9'
                 }`}>
             {/* Total Sites */}
             <div className="group bg-white rounded-xl border border-slate-200/60 p-3 md:p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
@@ -1794,6 +1927,22 @@ export default function ItcHuaweiDashboard() {
                 </div>
                 <div className="w-10 h-10 sm:w-11 sm:h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                   <Database className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+                </div>
+              </div>
+            </div>
+
+            {/* Team Qty */}
+            <div 
+              onClick={() => openTeamListModal()}
+              className="group bg-white rounded-xl border border-slate-200/60 p-3 md:p-4 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Team Qty</p>
+                  <p className="text-2xl font-bold bg-gradient-to-br from-purple-600 to-pink-700 bg-clip-text text-transparent mt-1">{metrics.teamQty}</p>
+                </div>
+                <div className="w-10 h-10 sm:w-11 sm:h-11 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                  <Users className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                 </div>
               </div>
             </div>
@@ -2079,6 +2228,7 @@ export default function ItcHuaweiDashboard() {
                     <tr className="border-b-2 border-slate-300">
                       <th className="text-left py-3 px-4 font-bold text-slate-900 bg-slate-50 sticky left-0 z-10">Region</th>
                       <th className="text-center py-3 px-4 font-bold text-slate-900 bg-slate-50">Total Sites</th>
+                      <th className="text-center py-3 px-3 font-semibold text-purple-700 bg-purple-50">Team Qty</th>
                       <th className="text-center py-3 px-3 font-semibold text-emerald-700 bg-emerald-50">Survey</th>
                       <th className="text-center py-3 px-3 font-semibold text-teal-700 bg-teal-50">TSSR Closed</th>
                       <th className="text-center py-3 px-3 font-semibold text-blue-700 bg-blue-50">MOS</th>
@@ -2095,6 +2245,7 @@ export default function ItcHuaweiDashboard() {
                         <tr key={region} className={`border-b border-slate-200 hover:bg-slate-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                           <td className="py-3 px-4 font-semibold text-slate-900 sticky left-0 bg-inherit z-10">{region}</td>
                           <td className="text-center py-3 px-4 font-bold text-slate-900">{data.total}</td>
+                          <td className="text-center py-3 px-3 font-bold text-purple-700">{data.teamQty.size}</td>
                           <td className="text-center py-3 px-3">
                             <div className="flex flex-col items-center gap-1">
                               <span className="font-bold text-emerald-700">{data.survey}</span>
@@ -2143,6 +2294,7 @@ export default function ItcHuaweiDashboard() {
                     <tr className="border-t-2 border-slate-300 bg-slate-100 font-bold">
                       <td className="py-3 px-4 text-slate-900 sticky left-0 bg-slate-100 z-10">TOTAL</td>
                       <td className="text-center py-3 px-4 text-slate-900">{metrics.totalSites}</td>
+                      <td className="text-center py-3 px-3 text-purple-700">{metrics.teamQty}</td>
                       <td className="text-center py-3 px-3 text-emerald-700">{metrics.surveyCompleted}</td>
                       <td className="text-center py-3 px-3 text-teal-700">{metrics.tssrClosed}</td>
                       <td className="text-center py-3 px-3 text-blue-700">{metrics.mosCompleted}</td>
@@ -2359,8 +2511,12 @@ export default function ItcHuaweiDashboard() {
             {/* Modal Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 md:p-6 border-b border-slate-200 gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">{modalData.title} - Site List</h2>
-                <p className="text-sm text-slate-600 mt-1 font-medium">Showing {modalData.sites.length} of {modalData.allSites.length} sites (most recent)</p>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {modalType === 'team' ? modalData.title : `${modalData.title} - Site List`}
+                </h2>
+                <p className="text-sm text-slate-600 mt-1 font-medium">
+                  Showing {modalData.sites.length} of {modalData.allSites.length} {modalType === 'team' ? 'teams' : 'sites'} (most recent)
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -2380,40 +2536,68 @@ export default function ItcHuaweiDashboard() {
               </div>
             </div>
 
-            {/* Modal Body - Site List Table */}
+            {/* Modal Body - Site List or Team List Table */}
             <div className="flex-1 overflow-auto p-4 md:p-6">
               {modalData.sites.length === 0 ? (
                 <div className="text-center py-12">
                   <AlertCircle className="h-12 w-12 text-slate-400 mx-auto mb-3" />
-                  <p className="text-slate-600 font-medium">No sites found</p>
+                  <p className="text-slate-600 font-medium">No {modalType === 'team' ? 'teams' : 'sites'} found</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 sticky top-0">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">No</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DUID</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DU Name</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Project</th>
-                        <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {modalData.sites.map((site, index) => (
-                        <tr 
-                          key={index}
-                          className="hover:bg-slate-50 transition-colors border-b border-slate-100"
-                        >
-                          <td className="px-4 py-3 text-slate-600 font-medium">{index + 1}</td>
-                          <td className="px-4 py-3 font-mono text-slate-900 font-medium">{site.duid}</td>
-                          <td className="px-4 py-3 text-slate-900">{site.duName}</td>
-                          <td className="px-4 py-3 text-blue-600 font-medium">{site.project}</td>
-                          <td className="px-4 py-3 text-slate-600 font-medium">{site.date}</td>
+                  {modalType === 'team' ? (
+                    // Team List Table
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">No</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">TL Name</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Total Sites</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Projects</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {modalData.sites.map((team, index) => (
+                          <tr 
+                            key={index}
+                            className="hover:bg-slate-50 transition-colors border-b border-slate-100"
+                          >
+                            <td className="px-4 py-3 text-slate-600 font-medium">{index + 1}</td>
+                            <td className="px-4 py-3 text-slate-900 font-medium">{team.tlName}</td>
+                            <td className="px-4 py-3 text-purple-600 font-semibold">{team.totalSites}</td>
+                            <td className="px-4 py-3 text-blue-600 font-medium">{team.projects}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    // Site List Table
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">No</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DUID</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">DU Name</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Project</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-900 border-b border-slate-200">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {modalData.sites.map((site, index) => (
+                          <tr 
+                            key={index}
+                            className="hover:bg-slate-50 transition-colors border-b border-slate-100"
+                          >
+                            <td className="px-4 py-3 text-slate-600 font-medium">{index + 1}</td>
+                            <td className="px-4 py-3 font-mono text-slate-900 font-medium">{site.duid}</td>
+                            <td className="px-4 py-3 text-slate-900">{site.duName}</td>
+                            <td className="px-4 py-3 text-blue-600 font-medium">{site.project}</td>
+                            <td className="px-4 py-3 text-slate-600 font-medium">{site.date}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               )}
             </div>

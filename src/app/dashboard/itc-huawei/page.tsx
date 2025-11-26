@@ -39,8 +39,8 @@ export default function ItcHuaweiDashboard() {
   const [loadingSheetList, setLoadingSheetList] = useState(true)
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all')
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: '', endDate: '' })
-  const [selectedRegion, setSelectedRegion] = useState<string>('all')
-  const [selectedProject, setSelectedProject] = useState<string>('all')
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([])
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState<'site' | 'team'>('site')
   const [modalData, setModalData] = useState<{ title: string; sites: any[]; allSites: any[] }>({ title: '', sites: [], allSites: [] })
@@ -578,28 +578,43 @@ export default function ItcHuaweiDashboard() {
       return rowDateOnly.getTime() >= startDateOnly.getTime() && rowDateOnly.getTime() <= endDateOnly.getTime()
   }, [periodFilter, dateRange, parseDate])
 
+  // Helper function to normalize region to Proper Case
+  const normalizeRegion = useCallback((region: string): string => {
+    if (!region) return region
+    return region
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }, [])
+
   // Apply filters to data
   const filteredData = useMemo(() => {
-    let filtered = allData
+    let filtered = allData.map(row => ({
+      ...row,
+      Region: normalizeRegion(row['Region']) // Normalize region to Proper Case
+    }))
 
-    // Filter by region
-    if (selectedRegion !== 'all') {
-      filtered = filtered.filter(row => row['Region'] === selectedRegion)
+    // Filter by regions (multi-select)
+    if (selectedRegions.length > 0) {
+      filtered = filtered.filter(row => selectedRegions.includes(row['Region']))
     }
 
-    // Filter by project
-    if (selectedProject !== 'all') {
-      filtered = filtered.filter(row => row['_project'] === selectedProject)
+    // Filter by projects (multi-select)
+    if (selectedProjects.length > 0) {
+      filtered = filtered.filter(row => selectedProjects.includes(row['_project']))
     }
 
     return filtered
-  }, [allData, selectedRegion, selectedProject])
+  }, [allData, selectedRegions, selectedProjects, normalizeRegion])
 
   // Get unique regions and projects for filter options
   const regions = useMemo(() => {
-    const uniqueRegions = Array.from(new Set(allData.map(row => row['Region']).filter(Boolean)))
+    const uniqueRegions = Array.from(new Set(
+      allData.map(row => normalizeRegion(row['Region'])).filter(Boolean)
+    ))
     return uniqueRegions.sort()
-  }, [allData])
+  }, [allData, normalizeRegion])
 
   const projects = useMemo(() => {
     const uniqueProjects = Array.from(new Set(allData.map(row => row['_project']).filter(Boolean)))
@@ -1007,18 +1022,30 @@ export default function ItcHuaweiDashboard() {
         }
       }
 
-      regionMetrics[region].total++
-      
       const hasValidDateInRange = 
         getFilteredValue(row['Survey']) ||
         getFilteredValue(row['TSSR Closed'] || row['TSSRClosed']) ||
         getFilteredValue(row['MOS']) ||
         getFilteredValue(row['Install Done'] || row['InstallDone']) ||
         getFilteredValue(row['Integrated']) ||
+        getFilteredValue(row['ATP Submit'] || row['ATPSubmit']) ||
         getFilteredValue(row['ATP Approved'] || row['ATPApproved']) ||
-        getFilteredValue(row['Dismantle'])
+        getFilteredValue(row['Dismantle']) ||
+        getFilteredValue(row['BA Dismantle'] || row['BADismantle']) ||
+        getFilteredValue(row['Inbound']) ||
+        getFilteredValue(row['CME Start']) ||
+        getFilteredValue(row['Civil Done']) ||
+        getFilteredValue(row['ME Done']) ||
+        getFilteredValue(row['PLN MG']) ||
+        getFilteredValue(row['PLN Connected']) ||
+        getFilteredValue(row['ATP PLN']) ||
+        getFilteredValue(row['BPUJL']) ||
+        getFilteredValue(row['ATP CME'])
       
+      // Only count in total if row has activity in date range
       if (hasValidDateInRange || periodFilter === 'all') {
+        regionMetrics[region].total++
+        
         const tlName = row['TL Name'] || row['TLName'] || row['Team Name'] || row['TeamName']
         if (tlName && tlName.trim() !== '') {
           regionMetrics[region].teamQty.add(tlName.trim())
@@ -1409,8 +1436,8 @@ export default function ItcHuaweiDashboard() {
 
     ws['!cols'] = colWidths
 
-    const projectName = selectedProject !== 'all' ? selectedProject.replace(/\s+/g, '_') : 'AllProjects'
-    const regionName = selectedRegion !== 'all' ? selectedRegion.replace(/\s+/g, '_') : 'AllRegions'
+    const projectName = selectedProjects.length > 0 ? selectedProjects.join('_').replace(/\s+/g, '_') : 'AllProjects'
+    const regionName = selectedRegions.length > 0 ? selectedRegions.join('_').replace(/\s+/g, '_') : 'AllRegions'
     const fileName = modalType === 'team' 
       ? `${modalData.title}_TeamList_${projectName}_${regionName}_${periodFilter}.xlsx`
       : `${modalData.title}_SiteList_${projectName}_${regionName}_${periodFilter}.xlsx`
@@ -1480,38 +1507,100 @@ export default function ItcHuaweiDashboard() {
               {/* Divider */}
               <div className="h-8 w-px bg-slate-300"></div>
 
-              {/* Region Filter */}
+              {/* Region Filter - Multi-select */}
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <label className="text-xs font-medium text-slate-700 whitespace-nowrap">Region:</label>
-                <select
-                  value={selectedRegion}
-                  onChange={(e) => setSelectedRegion(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Regions</option>
-                  {regions.map((region) => (
-                    <option key={region} value={region}>
-                      {region}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative group">
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px] text-left flex items-center justify-between"
+                  >
+                    <span className="truncate">
+                      {selectedRegions.length === 0 ? 'All Regions' : `${selectedRegions.length} selected`}
+                    </span>
+                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  <div className="hidden group-hover:block absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
+                    <div className="p-2">
+                      <label className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedRegions.length === 0}
+                          onChange={() => setSelectedRegions([])}
+                          className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-xs font-medium text-slate-700">All Regions</span>
+                      </label>
+                      {regions.map((region) => (
+                        <label key={region} className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedRegions.includes(region)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedRegions(prev => [...prev, region])
+                              } else {
+                                setSelectedRegions(prev => prev.filter(r => r !== region))
+                              }
+                            }}
+                            className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-xs text-slate-700">{region}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Project Filter */}
+              {/* Project Filter - Multi-select */}
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <label className="text-xs font-medium text-slate-700 whitespace-nowrap">Project:</label>
-                <select
-                  value={selectedProject}
-                  onChange={(e) => setSelectedProject(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Projects</option>
-                  {projects.map((project) => (
-                    <option key={project} value={project}>
-                      {project}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative group">
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px] text-left flex items-center justify-between"
+                  >
+                    <span className="truncate">
+                      {selectedProjects.length === 0 ? 'All Projects' : `${selectedProjects.length} selected`}
+                    </span>
+                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  <div className="hidden group-hover:block absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
+                    <div className="p-2">
+                      <label className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedProjects.length === 0}
+                          onChange={() => setSelectedProjects([])}
+                          className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-xs font-medium text-slate-700">All Projects</span>
+                      </label>
+                      {projects.map((project) => (
+                        <label key={project} className="flex items-center px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedProjects.includes(project)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedProjects(prev => [...prev, project])
+                              } else {
+                                setSelectedProjects(prev => prev.filter(p => p !== project))
+                              }
+                            }}
+                            className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-xs text-slate-700">{project}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

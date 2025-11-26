@@ -147,8 +147,10 @@ export function HuaweiRolloutTable({
     // Return null for empty values to ensure proper Excel handling
     if (value === undefined || value === null || value === '') return null
     
-    // Format date values for export
+    // Parse date values to JavaScript Date object for proper Excel date export
     if (config.type === 'date' && value) {
+      let dateObj: Date | null = null
+      
       // Handle Excel serial date number
       if (typeof value === 'number' && value >= 1 && value <= 60000) {
         let days = value - 1
@@ -156,15 +158,10 @@ export function HuaweiRolloutTable({
           days = days - 1
         }
         const excelEpoch = Date.UTC(1900, 0, 1)
-        const date = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
-        const day = date.getUTCDate().toString().padStart(2, '0')
-        const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
-        const year = date.getUTCFullYear()
-        return `${day}-${month}-${year}`
-      }
-      
+        dateObj = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
+      } 
       // Handle string serial number
-      if (typeof value === 'string') {
+      else if (typeof value === 'string') {
         const serialNumberMatch = value.match(/^\d+$/)
         if (serialNumberMatch) {
           const serialNumber = parseInt(value, 10)
@@ -174,16 +171,44 @@ export function HuaweiRolloutTable({
               days = days - 1
             }
             const excelEpoch = Date.UTC(1900, 0, 1)
-            const date = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
-            const day = date.getUTCDate().toString().padStart(2, '0')
-            const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
-            const year = date.getUTCFullYear()
-            return `${day}-${month}-${year}`
+            dateObj = new Date(excelEpoch + days * 24 * 60 * 60 * 1000)
+          }
+        } else {
+          // Try to parse DD-MMM-YYYY format (24-Nov-2025)
+          const ddMmmYyyyMatch = value.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/)
+          if (ddMmmYyyyMatch) {
+            const day = parseInt(ddMmmYyyyMatch[1], 10)
+            const monthStr = ddMmmYyyyMatch[2].toLowerCase()
+            const year = parseInt(ddMmmYyyyMatch[3], 10)
+            const monthMap: Record<string, number> = {
+              'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+              'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+            }
+            const month = monthMap[monthStr]
+            if (month !== undefined) {
+              dateObj = new Date(year, month, day)
+            }
+          } else {
+            // Try DD/MM/YYYY or DD-MM-YYYY format
+            const parts = value.split(/[\/\-]/)
+            if (parts.length === 3) {
+              const day = parseInt(parts[0], 10)
+              const month = parseInt(parts[1], 10) - 1
+              const year = parseInt(parts[2], 10)
+              dateObj = new Date(year, month, day)
+            }
           }
         }
+      } else if (value instanceof Date) {
+        dateObj = value
       }
       
-      // Already formatted date, return as is
+      // Return Date object if valid, otherwise return original value
+      if (dateObj && !isNaN(dateObj.getTime())) {
+        return dateObj
+      }
+      
+      // Fallback: return original value if parsing failed
       return value
     }
     
@@ -251,6 +276,24 @@ export function HuaweiRolloutTable({
       const wsData = [headers, ...dataRows]
 
       const ws = XLSX.utils.aoa_to_sheet(wsData)
+      
+      // Format date columns to Excel date format
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1')
+      visibleColumns.forEach((config, colIndex) => {
+        if (config.type === 'date') {
+          // Apply date format to all cells in this column (skip header row)
+          for (let row = 1; row <= range.e.r; row++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIndex })
+            const cell = ws[cellAddress]
+            if (cell && cell.v instanceof Date) {
+              // Set cell type to 'd' for date and apply Excel date format
+              cell.t = 'd'
+              cell.z = 'dd-mmm-yyyy' // Excel date format (e.g., 24-Nov-2025)
+            }
+          }
+        }
+      })
+      
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Huawei Rollout')
 
@@ -1140,8 +1183,48 @@ export function HuaweiRolloutTable({
       if (dateColumns.length === 0) return true
       
       return dateColumns.some(config => {
-        const cellValue = row[config.name]
-        if (!cellValue) return false
+        // Try multiple matching strategies to find the column value
+        let cellValue = row[config.name]
+        
+        // Try display name (with spaces)
+        if (cellValue === undefined || cellValue === null || cellValue === '') {
+          cellValue = row[config.displayName]
+        }
+        
+        // Try case-insensitive match
+        if (cellValue === undefined || cellValue === null || cellValue === '') {
+          const matchingKey = Object.keys(row).find(
+            key => key.toLowerCase() === config.name.toLowerCase() ||
+                   key.toLowerCase() === config.displayName.toLowerCase()
+          )
+          if (matchingKey) {
+            cellValue = row[matchingKey]
+          }
+        }
+        
+        // Try without spaces
+        if (cellValue === undefined || cellValue === null || cellValue === '') {
+          const matchingKey = Object.keys(row).find(
+            key => key.replace(/\s+/g, '') === config.name.replace(/\s+/g, '') ||
+                   key.replace(/\s+/g, '') === config.displayName.replace(/\s+/g, '')
+          )
+          if (matchingKey) {
+            cellValue = row[matchingKey]
+          }
+        }
+        
+        // Try trimmed match
+        if (cellValue === undefined || cellValue === null || cellValue === '') {
+          const matchingKey = Object.keys(row).find(
+            key => key.trim() === config.name.trim() ||
+                   key.trim() === config.displayName.trim()
+          )
+          if (matchingKey) {
+            cellValue = row[matchingKey]
+          }
+        }
+        
+        if (!cellValue || cellValue === '') return false
         
         let rowDate: Date | null = null
         
@@ -2615,6 +2698,35 @@ export function HuaweiRolloutTable({
                 className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 autoFocus
               />
+              
+              {/* Select All / Deselect All Buttons */}
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    // Get all filtered values
+                    const allValues = getUniqueColumnValues(activeFilterColumn)
+                      .filter(value => 
+                        filterSearchQuery === '' || 
+                        value.toLowerCase().includes(filterSearchQuery.toLowerCase())
+                      )
+                    
+                    // Set filter to all these values
+                    table.getColumn(activeFilterColumn)?.setFilterValue(allValues)
+                  }}
+                  className="flex-1 px-2 py-1.5 text-[10px] bg-green-50 text-green-700 rounded hover:bg-green-100 transition-colors font-medium border border-green-200"
+                >
+                  ✓ Select All
+                </button>
+                <button
+                  onClick={() => {
+                    // Clear filter (deselect all)
+                    table.getColumn(activeFilterColumn)?.setFilterValue(undefined)
+                  }}
+                  className="flex-1 px-2 py-1.5 text-[10px] bg-red-50 text-red-700 rounded hover:bg-red-100 transition-colors font-medium border border-red-200"
+                >
+                  ✕ Deselect All
+                </button>
+              </div>
               
               {/* Selected Count Badge */}
               {getSelectedCount(activeFilterColumn) > 0 && (

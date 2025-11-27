@@ -30,10 +30,21 @@ export async function GET(request: NextRequest) {
     // Apply server-side region filtering
     let filteredData = data
     if (region && data && data.length > 0) {
-      filteredData = data.filter(row => {
-        const rowRegion = row.Region || row.region || ''
-        return rowRegion === region
-      })
+      // Skip filtering if region is "All Region" - show all data
+      if (region.toLowerCase() === 'all region') {
+        filteredData = data
+      } else {
+        // Support multi-region filtering (comma-separated)
+        const allowedRegions = region.split(',').map(r => r.trim().toLowerCase())
+        
+        filteredData = data.filter(row => {
+          const rowRegion = (row.Region || row.region || '').toString().trim().toLowerCase()
+          if (!rowRegion) return false
+          
+          // Check if row region matches any of the allowed regions
+          return allowedRegions.some(allowedRegion => rowRegion === allowedRegion)
+        })
+      }
     }
 
     let lastUpdated: string | undefined

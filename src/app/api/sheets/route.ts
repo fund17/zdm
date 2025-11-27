@@ -93,10 +93,21 @@ export async function GET(request: NextRequest) {
 
     // Apply server-side region filtering
     if (region && filteredData.length > 0) {
-      filteredData = filteredData.filter(row => {
-        const rowRegion = row.Region || row.region || ''
-        return rowRegion === region
-      })
+      // Skip filtering if region is "All Region" - show all data
+      if (region.toLowerCase() === 'all region') {
+        // Keep all data, no filtering
+      } else {
+        // Support multi-region filtering (comma-separated)
+        const allowedRegions = region.split(',').map(r => r.trim().toLowerCase())
+        
+        filteredData = filteredData.filter(row => {
+          const rowRegion = (row.Region || row.region || '').toString().trim().toLowerCase()
+          if (!rowRegion) return false
+          
+          // Check if row region matches any of the allowed regions
+          return allowedRegions.some(allowedRegion => rowRegion === allowedRegion)
+        })
+      }
     }
     
     // Format lastUpdated to Indonesian locale

@@ -133,19 +133,8 @@ const getActivityBadgeStyle = (activity: string) => {
 
 export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFilteredDataChange, onDateFilterChange, statusFilter, activityFilter, initialDateFilter, showFilters = false, onExport, onSaveComplete, loading = false, onImport, onRefresh, refreshing = false }: DataTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]) // Start with no sorting, will be set after columns load
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('dailyplan-columnFilters')
-      return saved ? JSON.parse(saved) : []
-    }
-    return []
-  })
-  const [globalFilter, setGlobalFilter] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('dailyplan-globalFilter') || ''
-    }
-    return ''
-  })
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [globalFilter, setGlobalFilter] = useState('')
   const [editingCell, setEditingCell] = useState<EditingState | null>(null)
   const [hoveredTextarea, setHoveredTextarea] = useState<{ columnId: string; value: string; position: { x: number; y: number }; displayName: string } | null>(null)
   const [editingTextarea, setEditingTextarea] = useState<{ rowId: string; columnId: string; value: string; oldValue: string; displayName: string } | null>(null)
@@ -168,30 +157,10 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
   const [customRangeEnd, setCustomRangeEnd] = useState('')
 
   // Filter states for the new filters section
-  const [selectedActivity, setSelectedActivity] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('dailyplan-selectedActivity') || null
-    }
-    return null
-  })
-  const [selectedStatus, setSelectedStatus] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('dailyplan-selectedStatus') || null
-    }
-    return null
-  })
-  const [selectedVendor, setSelectedVendor] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('dailyplan-selectedVendor') || null
-    }
-    return null
-  })
-  const [selectedTeamCategory, setSelectedTeamCategory] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('dailyplan-selectedTeamCategory') || null
-    }
-    return null
-  })
+  const [selectedActivity, setSelectedActivity] = useState<string | null>(null)
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null)
+  const [selectedVendor, setSelectedVendor] = useState<string | null>(null)
+  const [selectedTeamCategory, setSelectedTeamCategory] = useState<string | null>(null)
 
   const [uniqueActivities, setUniqueActivities] = useState<string[]>([])
   const [uniqueStatuses, setUniqueStatuses] = useState<string[]>([])
@@ -333,6 +302,37 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       setDateFilter(initialDateFilter)
     }
   }, [initialDateFilter, dateFilter.startDate, dateFilter.endDate])
+
+  // Load filters from localStorage on mount (after hydration)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedColumnFilters = localStorage.getItem('dailyplan-columnFilters')
+      if (savedColumnFilters) {
+        try {
+          setColumnFilters(JSON.parse(savedColumnFilters))
+        } catch (e) {
+          console.error('Failed to parse saved column filters', e)
+        }
+      }
+
+      const savedGlobalFilter = localStorage.getItem('dailyplan-globalFilter')
+      if (savedGlobalFilter) {
+        setGlobalFilter(savedGlobalFilter)
+      }
+
+      const savedActivity = localStorage.getItem('dailyplan-selectedActivity')
+      if (savedActivity) setSelectedActivity(savedActivity)
+
+      const savedStatus = localStorage.getItem('dailyplan-selectedStatus')
+      if (savedStatus) setSelectedStatus(savedStatus)
+
+      const savedVendor = localStorage.getItem('dailyplan-selectedVendor')
+      if (savedVendor) setSelectedVendor(savedVendor)
+
+      const savedTeamCategory = localStorage.getItem('dailyplan-selectedTeamCategory')
+      if (savedTeamCategory) setSelectedTeamCategory(savedTeamCategory)
+    }
+  }, [])
 
   // Save filters to localStorage whenever they change
   useEffect(() => {

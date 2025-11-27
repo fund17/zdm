@@ -488,7 +488,8 @@ export function HuaweiRolloutTable({
   useEffect(() => {
     const fetchColumnConfig = async () => {
       try {
-        // Convert page path to API path
+        // Convert page path to API path (with SSR safety check)
+        if (typeof window === 'undefined') return
         const pagePath = window.location.pathname // e.g., /itc-huawei
         const apiPath = `/api/sheets${pagePath}/settings` // e.g., /api/sheets/itc-huawei/settings
 
@@ -1700,8 +1701,8 @@ export function HuaweiRolloutTable({
     } else {
       const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect()
       const dropdownWidth = 280 // Width of the dropdown from CSS
-      const viewportWidth = window.innerWidth
-      const viewportHeight = window.innerHeight
+      const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1920
+      const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 1080
       const dropdownHeight = 400 // Approximate max height
       
       // Calculate initial left position (try to align with button)

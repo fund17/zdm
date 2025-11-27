@@ -3,6 +3,18 @@ import { revalidatePath } from 'next/cache'
 import { google } from 'googleapis'
 import { ITC_CONFIG, getEnvValues } from '@/lib/huaweiRouteConfig'
 
+// Helper function to invalidate cache after import
+function invalidateItcCache() {
+  try {
+    revalidatePath('/api/sheets/itc-huawei')
+    revalidatePath('/itc-huawei')
+    revalidatePath('/dashboard/itc-huawei')
+    console.log('ITC Huawei cache invalidated after import')
+  } catch (error) {
+    console.warn('Failed to invalidate ITC cache:', error)
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { sheetName, rows } = await request.json()
@@ -152,12 +164,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Invalidate cache after successful import
-    try {
-      revalidatePath('/api/sheets/itc-huawei')
-      revalidatePath('/itc-huawei')
-    } catch (revalidateError) {
-      console.warn('Cache revalidation warning:', revalidateError)
-    }
+    invalidateItcCache()
 
     return NextResponse.json({
       success: true,

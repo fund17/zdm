@@ -3,6 +3,18 @@ import { revalidatePath } from 'next/cache'
 import { getSheetsClient, getSheetData } from '@/lib/googleSheets'
 import { RNO_CONFIG, getEnvValues } from '@/lib/huaweiRouteConfig'
 
+// Helper function to invalidate cache after update
+function invalidateRnoCache(sheetName?: string) {
+  try {
+    revalidatePath('/api/sheets/rno-huawei')
+    revalidatePath('/rno-huawei')
+    revalidatePath('/dashboard/rno-huawei')
+    console.log('RNO Huawei cache invalidated successfully')
+  } catch (error) {
+    console.warn('Failed to invalidate RNO cache:', error)
+  }
+}
+
 // Fetch date columns from settings dynamically
 async function getDateColumnsFromSettings(): Promise<string[]> {
   try {
@@ -219,13 +231,17 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
 
   }
 
+  // Invalidate cache after successful batch update
+  invalidateRnoCache(targetSheetName)
+
   return NextResponse.json({
     success: true,
     message: 'Bulk import completed',
     updatedCount: cellsUpdated,
     skippedCount: cellsSkipped,
     totalRows: updates.length,
-    importedCells: importedCellsList
+    importedCells: importedCellsList,
+    cacheInvalidated: true
   })
 }
 
@@ -432,12 +448,7 @@ export async function PUT(request: NextRequest) {
     })
 
     // Invalidate cache after successful update
-    try {
-      revalidatePath('/api/sheets/rno-huawei')
-      revalidatePath('/rno-huawei')
-    } catch (revalidateError) {
-      console.warn('Cache revalidation warning:', revalidateError)
-    }
+    invalidateRnoCache(targetSheetName)
 
     return NextResponse.json({
       success: true,

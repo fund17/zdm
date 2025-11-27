@@ -53,6 +53,7 @@ export async function PUT(request: NextRequest) {
       }
     })
 
+    // Tidak perlu revalidasi karena Daily Plan menggunakan direct fetch (no-cache)
     return NextResponse.json({ 
       success: true,
       message: 'Cell updated successfully',

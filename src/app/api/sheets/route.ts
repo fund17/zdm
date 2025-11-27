@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, getSheetMetadata } from '@/lib/googleSheets'
 
-// Edge Runtime for faster response and reduced bandwidth via Vercel Edge Network
-export const runtime = 'nodejs' // Keep nodejs for Google Sheets API compatibility
-// Cache for 3 hours (10800 seconds) - will be invalidated on-demand when user updates
-// Only invalidated when user updates data via safe-update or import endpoints
-// No one updates directly in Google Sheets, so 3 hours is safe
-export const revalidate = 10800 // 3 hours as fallback, but primarily relies on on-demand revalidation
-// Enable dynamic for query params (date filtering)
+// Use nodejs runtime for Google Sheets API compatibility
+export const runtime = 'nodejs'
+// NO CACHE - Direct fetch untuk memastikan data selalu update setelah inline edit atau import
 export const dynamic = 'force-dynamic'
+export const revalidate = 0 // No cache, always fetch fresh data
 
 export async function GET(request: NextRequest) {
   try {
@@ -122,16 +119,13 @@ export async function GET(request: NextRequest) {
       dateFilter: startDate && endDate ? { startDate, endDate } : null,
       regionFilter: region ? { region } : null,
       lastUpdated,
-      message: 'Data fetched successfully'
+      message: 'Data fetched successfully (direct fetch - no cache)'
     })
 
-    // Set cache headers for CDN and browser caching
-    // s-maxage: CDN cache for 3 hours (10800s) - will be invalidated on-demand when user updates
-    // stale-while-revalidate: Serve stale content while revalidating in background (30s)
-    // This dramatically reduces Fast Origin Transfer costs on Vercel
+    // NO CACHE - selalu fetch data terbaru dari Google Sheets
     response.headers.set(
       'Cache-Control',
-      'public, s-maxage=10800, stale-while-revalidate=30'
+      'no-store, no-cache, must-revalidate, max-age=0'
     )
 
     return response

@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getSheetsClient } from '@/lib/googleSheets'
 
+// Helper function to invalidate cache after batch update
+function invalidateItcCache() {
+  try {
+    revalidatePath('/api/sheets/itc-huawei')
+    revalidatePath('/itc-huawei')
+    revalidatePath('/dashboard/itc-huawei')
+    console.log('ITC Huawei cache invalidated after batch update')
+  } catch (error) {
+    console.warn('Failed to invalidate ITC cache:', error)
+  }
+}
+
 interface CellUpdate {
   duid: string
   columnId: string
@@ -150,12 +162,7 @@ export async function PUT(request: Request) {
     }
 
     // Invalidate cache after successful batch update
-    try {
-      revalidatePath('/api/sheets/itc-huawei')
-      revalidatePath('/itc-huawei')
-    } catch (revalidateError) {
-      console.warn('Cache revalidation warning:', revalidateError)
-    }
+    invalidateItcCache()
 
     return NextResponse.json({
       success: true,

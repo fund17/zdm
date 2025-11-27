@@ -779,105 +779,6 @@ export default function ItcHuaweiDashboard() {
     }
   }, [allData, filteredData, periodFilter, getFilteredValue, getPORemaining])
 
-  // Smart Analytics - Bottleneck Detection & Performance Analysis
-  const analytics = useMemo(() => {
-    if (!metrics) return null
-
-    // 1. Bottleneck Detection - Find slowest phase
-    const phases = [
-      { name: 'Survey', progress: parseFloat(metrics.surveyProgress), count: metrics.surveyCompleted, total: metrics.totalSites },
-      { name: 'TSSR Closed', progress: parseFloat(metrics.tssrClosedProgress), count: metrics.tssrClosed, total: metrics.surveyCompleted },
-      { name: 'MOS', progress: parseFloat(metrics.mosProgress), count: metrics.mosCompleted, total: metrics.totalSites },
-      { name: 'Install Done', progress: parseFloat(metrics.installProgress), count: metrics.installCompleted, total: metrics.mosCompleted },
-      { name: 'Integrated', progress: parseFloat(metrics.integratedProgress), count: metrics.integratedCompleted, total: metrics.installCompleted },
-      { name: 'ATP Submit', progress: parseFloat(metrics.atpSubmitProgress), count: metrics.atpSubmit, total: metrics.integratedCompleted },
-      { name: 'ATP Approved', progress: parseFloat(metrics.atpApprovedProgress), count: metrics.atpApproved, total: metrics.atpSubmit },
-      { name: 'Dismantle', progress: parseFloat(metrics.dismantleProgress), count: metrics.dismantle, total: metrics.totalSites },
-      { name: 'BA Dismantle', progress: parseFloat(metrics.baDismantleProgress), count: metrics.baDismantle, total: metrics.dismantle },
-      { name: 'Inbound', progress: parseFloat(metrics.inboundProgress), count: metrics.inbound, total: metrics.baDismantle }
-    ].filter(p => p.total > 0) // Only phases with activity
-
-    const bottleneck = phases.reduce((min, p) => p.progress < min.progress ? p : min, phases[0])
-
-    // 2. Region Performance Analysis - Weighted Score
-    const regionPerformance = Object.entries(metrics.regionCounts).map(([region, count]) => {
-      // Calculate completion rate for this region
-      const regionData = filteredData.filter(row => row['Region'] === region)
-      const completed = regionData.filter(row => 
-        getFilteredValue(row['ATP Approved'] || row['ATPApproved'])
-      ).length
-      const completionRate = count > 0 ? (completed / count) * 100 : 0
-
-      // Weighted Performance Score
-      // Formula: (Completion Rate * 0.7) + (Site Count / Max Site Count * 100 * 0.3)
-      // This gives 70% weight to completion rate and 30% weight to site volume
-      const maxSiteCount = Math.max(...Object.values(metrics.regionCounts))
-      const volumeScore = (count / maxSiteCount) * 100
-      const performanceScore = (completionRate * 0.7) + (volumeScore * 0.3)
-
-      return { 
-        region, 
-        count, 
-        completed, 
-        completionRate,
-        volumeScore,
-        performanceScore 
-      }
-    }).sort((a, b) => b.performanceScore - a.performanceScore)
-
-    const topRegions = regionPerformance.slice(0, 3)
-    const bottomRegions = regionPerformance.slice(-3).reverse()
-
-    // 3. Stuck Sites Detection (sites without progress >30 days)
-    const stuckSites = filteredData.filter(row => {
-      const lastActivity = [
-        row['Survey'], row['TSSR Closed'], row['TSSRClosed'],
-        row['MOS'], row['Install Done'], row['InstallDone'],
-        row['Integrated'], row['ATP Submit'], row['ATPSubmit'],
-        row['ATP Approved'], row['ATPApproved']
-      ]
-        .map(d => parseDate(d))
-        .filter(d => d !== null)
-        .sort((a, b) => b!.getTime() - a!.getTime())[0]
-
-      if (!lastActivity) return false
-
-      const daysSinceActivity = Math.floor((new Date().getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24))
-      return daysSinceActivity > 30
-    })
-
-    // 4. Predictive Completion (based on current velocity)
-    const calculateVelocity = (completed: number, days: number) => {
-      return days > 0 ? completed / days : 0
-    }
-
-    let daysInPeriod = 365 // default for 'all'
-    if (periodFilter === 'year') daysInPeriod = 365
-    else if (periodFilter === 'sixmonths') daysInPeriod = 180
-    else if (periodFilter === 'month') daysInPeriod = 30
-    else if (periodFilter === 'week') daysInPeriod = 7
-
-    const velocity = calculateVelocity(metrics.atpApproved, daysInPeriod)
-    const remaining = metrics.totalSites - metrics.atpApproved
-    const daysToComplete = velocity > 0 ? Math.ceil(remaining / velocity) : 999
-    const estimatedCompletion = new Date()
-    estimatedCompletion.setDate(estimatedCompletion.getDate() + daysToComplete)
-
-    return {
-      bottleneck,
-      topRegions,
-      bottomRegions,
-      stuckSites: stuckSites.length,
-      velocity: velocity.toFixed(2),
-      daysToComplete,
-      estimatedCompletion: daysToComplete < 999 ? estimatedCompletion.toLocaleDateString('id-ID', { 
-        day: 'numeric', 
-        month: 'short', 
-        year: 'numeric' 
-      }) : 'N/A'
-    }
-  }, [metrics, filteredData, periodFilter, getFilteredValue, parseDate])
-
   // Helper function to get status color based on progress
   const getStatusColor = (progress: number): { bg: string; text: string; border: string } => {
     if (progress >= 70) return { 
@@ -1052,7 +953,7 @@ export default function ItcHuaweiDashboard() {
           {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto rounded-b-xl p-4 md:p-5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 hover:scrollbar-thumb-slate-400">
             {/* Professional Revenue & Performance Analytics */}
-            {analytics && metrics && (
+            {metrics && (
               <div className="space-y-4 mt-6 pt-6 border-t border-slate-200">
               {/* Revenue Milestone Cards - Compact */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1871,94 +1772,6 @@ export default function ItcHuaweiDashboard() {
                 })}
               </div>
             </div>
-                </div>
-              </div>
-            )}
-
-            {/* Predictive Analytics Panel */}
-            {analytics && metrics && (
-              <div className="bg-gradient-to-br from-slate-50 via-white to-slate-50 rounded-xl border border-slate-200 p-4 md:p-5 shadow-sm mb-6">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2.5 bg-gradient-to-br from-slate-700 to-slate-800 rounded-lg shadow-sm">
-                      <BarChart3 className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900">Project Performance & Forecast</h3>
-                      <p className="text-xs text-slate-600 mt-0.5 font-medium">Real-time analytics with predictive insights</p>
-                    </div>
-                  </div>
-                  <div className="px-3 py-1.5 bg-slate-800 text-white rounded-lg shadow-sm">
-                    <span className="text-xs font-semibold">LIVE</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-                  {/* Current Velocity */}
-                  <div className="bg-white rounded-xl p-4 border border-blue-200 shadow-sm hover:shadow-md transition-all">
-                    <div className="flex items-center gap-2 mb-3">
-                      <TrendingUp className="h-4 w-4 text-blue-600" />
-                      <span className="text-sm font-semibold text-slate-900">Current Velocity</span>
-                    </div>
-                    <div className="text-2xl sm:text-3xl font-bold text-blue-600 mb-1">{analytics.velocity}</div>
-                    <div className="text-xs text-slate-600 font-medium">sites/day completion rate</div>
-                    <div className="mt-3 pt-3 border-t border-slate-100">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-600 font-medium">Remaining</span>
-                        <span className="font-semibold text-slate-900">{metrics.totalSites - metrics.atpApproved} sites</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Completion Forecast */}
-                  <div className="bg-white rounded-xl p-4 border border-emerald-200 shadow-sm hover:shadow-md transition-all">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Calendar className="h-4 w-4 text-emerald-600" />
-                      <span className="text-sm font-semibold text-slate-900">Est. Completion</span>
-                    </div>
-                    <div className="text-xl font-bold text-emerald-600 mb-1 leading-tight">{analytics.estimatedCompletion}</div>
-                    <div className="text-xs text-slate-600 font-medium">based on current pace</div>
-                    <div className="mt-3 pt-3 border-t border-slate-100">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-600 font-medium">Days to Go</span>
-                        <span className="font-semibold text-slate-900">{analytics.daysToComplete < 999 ? analytics.daysToComplete : 'N/A'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Risk Alert */}
-                  <div className="bg-white rounded-xl p-4 border border-amber-200 shadow-sm hover:shadow-md transition-all">
-                    <div className="flex items-center gap-2 mb-3">
-                      <AlertCircle className="h-4 w-4 text-amber-600" />
-                      <span className="text-sm font-semibold text-slate-900">Stuck Sites</span>
-                    </div>
-                    <div className="text-2xl sm:text-3xl font-bold text-amber-600 mb-1">{analytics.stuckSites}</div>
-                    <div className="text-xs text-slate-600 font-medium">&gt;30 days no activity</div>
-                    <div className="mt-3 pt-3 border-t border-slate-100">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-600 font-medium">Risk Level</span>
-                        <span className={`font-semibold ${analytics.stuckSites / metrics.totalSites > 0.15 ? 'text-rose-600' : analytics.stuckSites / metrics.totalSites > 0.05 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                          {analytics.stuckSites / metrics.totalSites > 0.15 ? 'HIGH' : analytics.stuckSites / metrics.totalSites > 0.05 ? 'MEDIUM' : 'LOW'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bottleneck Detection */}
-                  <div className="bg-white rounded-xl p-4 border border-rose-200 shadow-sm hover:shadow-md transition-all">
-                    <div className="flex items-center gap-2 mb-3">
-                      <XCircle className="h-4 w-4 text-rose-600" />
-                      <span className="text-sm font-semibold text-slate-900">Bottleneck</span>
-                    </div>
-                    <div className="text-lg font-bold text-rose-600 mb-1 leading-tight">{analytics.bottleneck.name}</div>
-                    <div className="text-xs text-slate-600 font-medium">slowest phase</div>
-                    <div className="mt-3 pt-3 border-t border-slate-100">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-600 font-medium">Completion</span>
-                        <span className="font-semibold text-rose-600">{analytics.bottleneck.progress.toFixed(1)}%</span>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </div>
             )}

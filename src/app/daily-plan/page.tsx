@@ -12,6 +12,11 @@ interface SheetData {
 }
 
 export default function DailyPlanPage() {
+  // Set dynamic page title
+  useEffect(() => {
+    document.title = 'ZMG - Daily Plan'
+  }, [])
+
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

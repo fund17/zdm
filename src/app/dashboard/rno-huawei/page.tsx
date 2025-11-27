@@ -26,6 +26,11 @@ interface SheetListItem {
 type PeriodFilter = 'all' | 'year' | 'sixmonths' | 'month' | 'week'
 
 export default function ItcHuaweiDashboard() {
+  // Set dynamic page title
+  useEffect(() => {
+    document.title = 'ZMG - Dashboard RNO Huawei'
+  }, [])
+
   const [allData, setAllData] = useState<any[]>([]) // Combined data from all sheets
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

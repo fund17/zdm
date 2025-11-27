@@ -47,6 +47,11 @@ interface User {
 }
 
 export default function UserManagementPage() {
+  // Set dynamic page title
+  useEffect(() => {
+    document.title = 'ZMG - User Management'
+  }, [])
+
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<TabType>('users')
   const [users, setUsers] = useState<User[]>([])

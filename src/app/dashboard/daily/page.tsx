@@ -43,6 +43,11 @@ const getActivityColor = (activityName: string, index: number) => {
 }
 
 export default function Dashboard() {
+  // Set dynamic page title
+  useEffect(() => {
+    document.title = 'ZMG - Dashboard Daily'
+  }, [])
+
   const [stats, setStats] = useState<DashboardStats>({
     totalRecords: 0,
     lastUpdated: 'Loading...',

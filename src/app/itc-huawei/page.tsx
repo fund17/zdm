@@ -6,6 +6,11 @@ import { useState, useEffect } from 'react'
 export default function ItcHuaweiPage() {
   const [userRegion, setUserRegion] = useState<string | undefined>()
 
+  // Set dynamic page title
+  useEffect(() => {
+    document.title = 'ZMG - ITC Huawei Rollout'
+  }, [])
+
   useEffect(() => {
     const fetchUser = async () => {
       try {

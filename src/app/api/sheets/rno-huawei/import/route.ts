@@ -1,19 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { google } from 'googleapis'
 import { RNO_CONFIG, getEnvValues } from '@/lib/huaweiRouteConfig'
-
-// Helper function to invalidate cache after import
-function invalidateRnoCache() {
-  try {
-    revalidatePath('/api/sheets/rno-huawei')
-    revalidatePath('/rno-huawei')
-    revalidatePath('/dashboard/rno-huawei')
-    console.log('RNO Huawei cache invalidated after import')
-  } catch (error) {
-    console.warn('Failed to invalidate RNO cache:', error)
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -183,14 +170,12 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Invalidate cache after successful import
-    invalidateRnoCache()
+    // No cache invalidation needed - using direct fetch (no-cache)
 
     return NextResponse.json({
       success: true,
       count: rows.length,
-      range: appendResponse.data.updates?.updatedRange,
-      cacheInvalidated: true
+      range: appendResponse.data.updates?.updatedRange
     })
 
   } catch (error) {

@@ -1,18 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { getSheetsClient, getSheetData } from '@/lib/googleSheets'
-
-// Helper function to invalidate cache after update
-function invalidateItcCache(sheetName?: string) {
-  try {
-    revalidatePath('/api/sheets/itc-huawei')
-    revalidatePath('/itc-huawei')
-    revalidatePath('/dashboard/itc-huawei')
-    console.log('ITC Huawei cache invalidated successfully')
-  } catch (error) {
-    console.warn('Failed to invalidate ITC cache:', error)
-  }
-}
 
 // Fetch date columns from settings dynamically
 async function getDateColumnsFromSettings(): Promise<string[]> {
@@ -231,8 +218,7 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
 
   }
 
-  // Invalidate cache after successful batch update
-  invalidateItcCache(targetSheetName)
+  // No cache invalidation needed - using direct fetch (no-cache)
 
   return NextResponse.json({
     success: true,
@@ -240,8 +226,7 @@ async function handleBulkImport(requestBody: SafeUpdateRequest) {
     updatedCount: cellsUpdated,
     skippedCount: cellsSkipped,
     totalRows: updates.length,
-    importedCells: importedCellsList,
-    cacheInvalidated: true
+    importedCells: importedCellsList
   })
 }
 
@@ -447,8 +432,7 @@ export async function PUT(request: NextRequest) {
       }
     })
 
-    // Invalidate cache after successful update
-    invalidateItcCache(targetSheetName)
+    // No cache invalidation needed - using direct fetch (no-cache)
 
     return NextResponse.json({
       success: true,
@@ -461,8 +445,7 @@ export async function PUT(request: NextRequest) {
         newValue: value,
         sheetRowNumber,
         timestamp: new Date().toISOString()
-      },
-      cacheInvalidated: true
+      }
     })
 
   } catch (error) {

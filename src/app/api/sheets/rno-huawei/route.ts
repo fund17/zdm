@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSheetData, getSheetMetadata } from '@/lib/googleSheets'
 import { RNO_CONFIG, getEnvValues } from '@/lib/huaweiRouteConfig'
 
-// Cache for 3 hours (10800 seconds) - will be invalidated on-demand when user updates
-export const revalidate = 10800 // 3 hours as fallback
+// NO CACHE - Direct fetch untuk memastikan data selalu update setelah inline edit atau import
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const revalidate = 0 // No cache, always fetch fresh data
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,13 +54,14 @@ export async function GET(request: NextRequest) {
       originalTotal: data?.length || 0,
       regionFilter: region ? { region } : null,
       lastUpdated,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      message: 'Data fetched successfully (direct fetch - no cache)'
     })
 
-    // Set cache headers for CDN caching (3 hours)
+    // NO CACHE - selalu fetch data terbaru dari Google Sheets
     response.headers.set(
       'Cache-Control',
-      'public, s-maxage=10800, stale-while-revalidate=30'
+      'no-store, no-cache, must-revalidate, max-age=0'
     )
 
     return response

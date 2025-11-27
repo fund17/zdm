@@ -23,6 +23,11 @@ interface UserData {
 type TabType = 'overview' | 'security'
 
 export default function ProfilePage() {
+  // Set dynamic page title
+  useEffect(() => {
+    document.title = 'ZMG - Profile'
+  }, [])
+
   const router = useRouter()
   const [user, setUser] = useState<UserData | null>(null)
   const [loading, setLoading] = useState(true)

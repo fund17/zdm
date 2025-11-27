@@ -32,6 +32,11 @@ interface DateRange {
 }
 
 export default function ItcHuaweiDashboard() {
+  // Set dynamic page title
+  useEffect(() => {
+    document.title = 'ZMG - Dashboard ITC Huawei'
+  }, [])
+
   const [allData, setAllData] = useState<any[]>([]) // Combined data from all sheets
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

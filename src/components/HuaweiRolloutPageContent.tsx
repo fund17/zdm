@@ -203,7 +203,7 @@ export function HuaweiRolloutPageContent({ apiBasePath, pageTitle, userRegion }:
 
       const result = await response.json()
       
-      await fetchData(selectedSheet, { showFullLoading: false })
+      await fetchData(selectedSheet, { showFullLoading: false, region: userRegion })
       
       return result
     } catch (error) {
@@ -483,7 +483,7 @@ export function HuaweiRolloutPageContent({ apiBasePath, pageTitle, userRegion }:
       displayToast(`✅ Successfully imported ${result.updatedCount || importPreview?.cellsWillUpdate || 0} cells!`, 'success')
       
       setTableRefreshing(true)
-      await fetchData(selectedSheet, { showFullLoading: false })
+      await fetchData(selectedSheet, { showFullLoading: false, region: userRegion })
       setTableRefreshing(false)
       
     } catch (error) {
@@ -589,7 +589,7 @@ export function HuaweiRolloutPageContent({ apiBasePath, pageTitle, userRegion }:
       displayToast(`✅ Successfully registered ${result.addedCount || registerPreview.validRows.length} rows!`, 'success')
       
       setTableRefreshing(true)
-      await fetchData(selectedSheet, { showFullLoading: false })
+      await fetchData(selectedSheet, { showFullLoading: false, region: userRegion })
       setTableRefreshing(false)
       
     } catch (error) {

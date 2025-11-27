@@ -110,6 +110,11 @@ interface DashboardSummary {
 }
 
 export default function LandingDashboard() {
+  // Set dynamic page title
+  useEffect(() => {
+    document.title = 'ZMG - Dashboard'
+  }, [])
+
   const [summary, setSummary] = useState<DashboardSummary>({
     daily: {
       totalTasks: 0,

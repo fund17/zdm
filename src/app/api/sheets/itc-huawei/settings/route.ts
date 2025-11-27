@@ -17,6 +17,7 @@ interface ColumnConfig {
   editable: boolean
   displayName: string
   sticky?: 'left' | 'right' | null
+  list?: string // Comma-separated list of options for type 'list'
 }
 
 export async function GET(request: NextRequest) {
@@ -44,12 +45,13 @@ export async function GET(request: NextRequest) {
 
     // Raw settings data processed
 
-    // Parse column configuration - using Column, Value, Editable, Show structure
+    // Parse column configuration - using Column, Value, Editable, Show, List structure
     const columnConfigs: ColumnConfig[] = settingsData.map((row: any) => {
       const columnName = row.Column || ''
       const type = row.Value || 'String'
       const editable = (row.Editable || 'yes').toString().toLowerCase() === 'yes'
       const show = (row.Show || 'yes').toString().toLowerCase() === 'yes'
+      const list = row.List || '' // Get list options if present
       
       // Normalize type
       let normalizedType: ColumnType = 'string'
@@ -67,7 +69,8 @@ export async function GET(request: NextRequest) {
         type: normalizedType,
         show: show,
         editable: editable,
-        displayName: columnName // Keep original display name with spaces
+        displayName: columnName, // Keep original display name with spaces
+        ...(list && { list: list }) // Add list field only if present
       }
     }).filter(config => config.name)
 

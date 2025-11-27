@@ -1,4 +1,4 @@
-# Cache Strategy Update - Vercel Edge Cache
+build# Cache Strategy Update - Vercel Edge Cache
 
 ## Problem Statement
 Cache di Vercel Edge tidak ter-update setelah user melakukan perubahan data melalui:

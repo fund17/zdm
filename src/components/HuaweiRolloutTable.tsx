@@ -24,6 +24,7 @@ interface ColumnConfig {
   show: boolean
   editable: boolean
   displayName: string
+  list?: string // Comma-separated list of options for type 'list'
 }
 
 interface SimpleDataTableProps {
@@ -953,8 +954,46 @@ export function HuaweiRolloutTable({
             )
           }
           
-          // Editable cell
+          // Check if this is a status column for badge rendering
+          const columnNameLower = config.name.toLowerCase()
+          const displayNameLower = config.displayName.toLowerCase()
+          const isSiteStatusColumn = (columnNameLower.includes('status') || displayNameLower.includes('status')) && config.name !== 'PO_Status'
+          
+          // Editable cell with status badge support
           if (config.editable && !isEditing) {
+            // If it's a status column with value, show badge instead of plain text
+            if (isSiteStatusColumn && displayValue && displayValue.toString().trim()) {
+              const badge = getStatusBadge(displayValue.toString())
+              const cellClasses = `group flex items-center justify-between px-1 py-0.5 rounded transition-colors ${
+                hasChanges 
+                  ? 'bg-orange-50 border border-orange-200 hover:bg-orange-100' 
+                  : isImported
+                  ? 'bg-emerald-50 border border-emerald-200 hover:bg-emerald-100'
+                  : 'hover:bg-gray-50'
+              }`
+              
+              return (
+                <div 
+                  className={cellClasses}
+                  onDoubleClick={() => handleCellEdit(row.original, columnId, displayValue)}
+                  title={hasChanges ? "Modified - not saved yet. Double-click to edit." : isImported ? "Just imported from Excel" : "Double-click to edit"}
+                >
+                  <div className="flex-1 min-w-0 flex items-center gap-1">
+                    {hasChanges && <div className="w-1.5 h-1.5 bg-orange-500 rounded-full flex-shrink-0" />}
+                    {!hasChanges && isImported && <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full flex-shrink-0" />}
+                    <span 
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${badge.bg} ${badge.text} ${badge.border}`}
+                    >
+                      <span className="text-[10px]">{badge.icon}</span>
+                      <span>{displayValue.toString()}</span>
+                    </span>
+                  </div>
+                  <Edit2 className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                </div>
+              )
+            }
+            
+            // Regular editable cell
             const cellClasses = `group flex items-center justify-between px-1 py-0.5 rounded transition-colors text-xs ${
               hasChanges 
                 ? 'bg-orange-50 border border-orange-200 hover:bg-orange-100' 
@@ -983,6 +1022,31 @@ export function HuaweiRolloutTable({
 
           // Editing state
           if (isEditing) {
+            // List type - dropdown select
+            if (config.type === 'list' && config.list) {
+              const options = config.list.split(',').map(opt => opt.trim()).filter(opt => opt)
+              return (
+                <div className="w-full h-full" data-editing-cell style={{ padding: 0, margin: 0 }}>
+                  <select
+                    autoFocus
+                    value={editingCell.value || ''}
+                    onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleCellSave()
+                      if (e.key === 'Escape') handleCellCancel()
+                    }}
+                    className="w-full h-full px-2 py-1.5 border-2 border-blue-500 text-xs focus:outline-none focus:border-blue-600 bg-white"
+                    style={{ margin: 0, borderRadius: 0 }}
+                  >
+                    <option value="">-- Select --</option>
+                    {options.map((option, idx) => (
+                      <option key={idx} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+              )
+            }
+            
             return (
               <div className="w-full h-full" data-editing-cell style={{ padding: 0, margin: 0 }}>
                 {config.type === 'textarea' ? (
@@ -1036,13 +1100,9 @@ export function HuaweiRolloutTable({
             )
           }
           
-          // Status badge rendering for Site Status or similar columns
-          const columnNameLower = config.name.toLowerCase()
-          const displayNameLower = config.displayName.toLowerCase()
-          const isSiteStatusColumn = columnNameLower.includes('status') || displayNameLower.includes('status')
-          
-          // Apply badge to status columns (but not for PO_Status which is handled separately)
-          if (isSiteStatusColumn && displayValue && displayValue.toString().trim() && config.name !== 'PO_Status') {
+          // Status badge rendering for non-editable status columns
+          // (isSiteStatusColumn already defined above, reuse the check)
+          if (isSiteStatusColumn && displayValue && displayValue.toString().trim()) {
             const badge = getStatusBadge(displayValue.toString())
             const cellClasses = `flex items-center gap-1 px-1 py-0.5 rounded ${
               hasChanges 
@@ -2186,11 +2246,11 @@ export function HuaweiRolloutTable({
     <div className="h-full flex flex-col">
       {/* Enhanced Filter Bar - Professional Design */}
       <div className="flex-none bg-gradient-to-r from-slate-50 via-gray-50 to-slate-50 border-b border-gray-200 shadow-sm">
-        <div className="flex items-center justify-between px-4 py-3 space-x-4">
-          {/* Left Section: Date Filter */}
-          <div className="flex items-center space-x-3">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 py-3">
+          {/* Left Section: Date Filter & Action Buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Custom Date Range */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <input
                 type="date"
                 value={dateFilter.startDate}
@@ -2223,16 +2283,17 @@ export function HuaweiRolloutTable({
                     endDate: today.toISOString().split('T')[0]
                   })
                 }}
-                className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                className="inline-flex items-center px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
                 title="Reset date filter to last 30 days"
               >
-                Reset Date
+                <Calendar className="h-3.5 w-3.5 lg:mr-1.5" />
+                <span className="hidden lg:inline">Reset Date</span>
               </button>
             )}
 
             {/* Action Buttons: Import, Export, Refresh, Load PO Status */}
             {(onExport || onRefresh || onImport) && (
-              <div className="flex items-center space-x-2 border-l border-gray-300 pl-3">
+              <div className="flex items-center gap-2 flex-wrap sm:border-l sm:border-gray-300 sm:pl-3">
                 {/* Import Excel Button */}
                 {onImport && (
                   <button
@@ -2240,10 +2301,10 @@ export function HuaweiRolloutTable({
                     className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-600 rounded-md hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors duration-200 shadow-sm"
                     title="Import Excel to update data (matches by DUID)"
                   >
-                    <svg className="h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="h-3.5 w-3.5 sm:mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                     </svg>
-                    Import
+                    <span className="hidden sm:inline">Import</span>
                   </button>
                 )}
                 
@@ -2253,8 +2314,8 @@ export function HuaweiRolloutTable({
                   className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-600 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                   title="Export filtered data to Excel (local data, no server fetch)"
                 >
-                  <Download className={`h-3.5 w-3.5 mr-1.5 ${localExporting ? 'animate-bounce' : ''}`} />
-                  {localExporting ? 'Exporting...' : 'Export'}
+                  <Download className={`h-3.5 w-3.5 ${localExporting ? 'animate-bounce' : ''} lg:mr-1.5`} />
+                  <span className="hidden lg:inline">{localExporting ? 'Exporting...' : 'Export'}</span>
                 </button>
                 {/* Refresh is now placed in the search area (right side) */}
                 {!showPOStatus ? (
@@ -2268,8 +2329,8 @@ export function HuaweiRolloutTable({
                     className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-purple-800 bg-purple-50 border border-purple-600 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                     title="Load PO Status column"
                   >
-                    <Database className="h-3.5 w-3.5 mr-1.5" />
-                    Load PO Status
+                    <Database className="h-3.5 w-3.5 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Load PO Status</span>
                   </button>
                 ) : (
                   <button
@@ -2280,8 +2341,8 @@ export function HuaweiRolloutTable({
                     className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-purple-800 bg-purple-50 border border-purple-600 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors duration-200 shadow-sm"
                     title="Hide PO Status column"
                   >
-                    <Database className="h-3.5 w-3.5 mr-1.5" />
-                    Hide PO Status
+                    <Database className="h-3.5 w-3.5 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Hide PO Status</span>
                   </button>
                 )}
                 
@@ -2293,10 +2354,10 @@ export function HuaweiRolloutTable({
                     className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-100 rounded-md hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Undo last import and restore previous data"
                   >
-                    <svg className="h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="h-3.5 w-3.5 lg:mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                     </svg>
-                    Undo Import
+                    <span className="hidden lg:inline">Undo Import</span>
                   </button>
                 )}
               </div>
@@ -2304,21 +2365,21 @@ export function HuaweiRolloutTable({
 
             {/* Save/Cancel Buttons */}
             {pendingChanges.size > 0 && (
-              <div className="flex items-center space-x-1 border-l border-gray-300 pl-3">
+              <div className="flex items-center gap-1 sm:border-l sm:border-gray-300 sm:pl-3 flex-wrap">
                 <button
                   onClick={handleBatchSave}
                   disabled={isSaving}
-                  className="px-3 py-1.5 text-xs font-semibold text-green-800 bg-green-50 border border-green-600 rounded hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-200 transition-colors duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  className="px-3 py-1.5 text-xs font-semibold text-green-800 bg-green-50 border border-green-600 rounded hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-200 transition-colors duration-200 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   {isSaving ? (
                     <>
                       <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                      <span>Saving...</span>
+                      <span className="hidden lg:inline">Saving...</span>
                     </>
                   ) : (
                     <>
                       <Check className="w-3 h-3" />
-                      <span>Save ({pendingChanges.size})</span>
+                      <span className="hidden lg:inline">Save ({pendingChanges.size})</span>
                     </>
                   )}
                 </button>
@@ -2326,25 +2387,25 @@ export function HuaweiRolloutTable({
                 <button
                   onClick={handleCancelAll}
                   disabled={isSaving}
-                  className="px-3 py-1.5 text-xs font-semibold text-gray-900 bg-gray-50 border border-gray-500 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-300 transition-colors duration-200 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  className="px-3 py-1.5 text-xs font-semibold text-gray-900 bg-gray-50 border border-gray-500 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-300 transition-colors duration-200 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   <X className="w-3 h-3" />
-                  <span>Cancel</span>
+                  <span className="hidden lg:inline">Cancel</span>
                 </button>
               </div>
             )}
           </div>
 
           {/* Right Section: Search & Controls */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {/* Search */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <input
                 type="text"
                 placeholder="Search all columns"
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors w-80"
+                className="px-3 py-1.5 text-xs border border-gray-300 rounded-md bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors w-full sm:w-64 lg:w-80"
               />
               {(globalFilter || hasActiveFilters) && (
                 <button

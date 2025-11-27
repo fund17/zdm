@@ -163,6 +163,9 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
   const [filterDropdownPosition, setFilterDropdownPosition] = useState<{ top: number; left: number } | null>(null)
   const [filterSearchQuery, setFilterSearchQuery] = useState('')
   const filterDropdownRef = useRef<HTMLDivElement>(null)
+  const [customRangeMode, setCustomRangeMode] = useState(false)
+  const [customRangeStart, setCustomRangeStart] = useState('')
+  const [customRangeEnd, setCustomRangeEnd] = useState('')
 
   // Filter states for the new filters section
   const [selectedActivity, setSelectedActivity] = useState<string | null>(() => {
@@ -1564,26 +1567,8 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
       {/* Enhanced Filter Bar - Professional Design */}
       <div className="flex-none bg-gradient-to-r from-slate-50 via-gray-50 to-slate-50 border-b border-gray-200 shadow-sm">
         <div className="flex items-center justify-between px-4 py-3 space-x-4">
-          {/* Left Section: Date Filter */}
+          {/* Left Section: Action Buttons */}
           <div className="flex items-center space-x-3">
-            {/* Quick Presets removed - now the date range aligns to the left */}
-
-            {/* Custom Date Range */}
-            <div className="flex items-center space-x-2">
-              <input
-                type="date"
-                value={dateFilter.startDate}
-                onChange={(e) => handleDateInputChange('startDate', e.target.value)}
-                className="px-2 py-1.5 text-xs border border-gray-300 rounded bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors"
-              />
-              <span className="text-xs text-gray-500 font-medium">to</span>
-              <input
-                type="date"
-                value={dateFilter.endDate}
-                onChange={(e) => handleDateInputChange('endDate', e.target.value)}
-                className="px-2 py-1.5 text-xs border border-gray-300 rounded bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors"
-              />
-            </div>
 
             {/* Action Buttons: Import, Export, Refresh */}
             {(onImport || onExport || onRefresh) && (
@@ -2209,7 +2194,84 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
                   >
                     This Month
                   </button>
+                  <button
+                    onClick={() => {
+                      setCustomRangeMode(!customRangeMode)
+                      if (!customRangeMode) {
+                        setCustomRangeStart(dateFilter.startDate)
+                        setCustomRangeEnd(dateFilter.endDate)
+                      }
+                    }}
+                    className={`px-2 py-1.5 text-xs font-medium rounded border transition-colors ${
+                      customRangeMode 
+                        ? 'text-white bg-blue-600 border-blue-700' 
+                        : 'text-blue-700 bg-blue-50 border-blue-300 hover:bg-blue-100'
+                    }`}
+                  >
+                    Custom Range
+                  </button>
                 </div>
+                
+                {/* Custom Range Inputs */}
+                {customRangeMode && (
+                  <div className="px-2 mt-2 mb-2 space-y-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-gray-600">Start Date</label>
+                      <input
+                        type="date"
+                        value={customRangeStart}
+                        onChange={(e) => setCustomRangeStart(e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-gray-600">End Date</label>
+                      <input
+                        type="date"
+                        value={customRangeEnd}
+                        onChange={(e) => setCustomRangeEnd(e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (!customRangeStart || !customRangeEnd) {
+                          alert('Please select both start and end dates')
+                          return
+                        }
+                        
+                        // Update date filter
+                        handleDateInputChange('startDate', customRangeStart)
+                        handleDateInputChange('endDate', customRangeEnd)
+                        
+                        // Find all dates in custom range from actual data
+                        const allDates = getUniqueColumnValues(activeFilterColumn)
+                        const start = new Date(customRangeStart)
+                        start.setHours(0, 0, 0, 0)
+                        const end = new Date(customRangeEnd)
+                        end.setHours(23, 59, 59, 999)
+                        
+                        const rangeDates = allDates.filter(dateStr => {
+                          const parsedDate = parseSheetDate(String(dateStr))
+                          if (!parsedDate) return false
+                          parsedDate.setHours(0, 0, 0, 0)
+                          return parsedDate >= start && parsedDate <= end
+                        })
+                        
+                        if (rangeDates.length > 0) {
+                          setColumnFilters(prev => prev.filter(f => f.id !== activeFilterColumn))
+                          setColumnFilters(prev => [...prev, { id: activeFilterColumn, value: rangeDates }])
+                        }
+                        
+                        setCustomRangeMode(false)
+                      }}
+                      className="w-full px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                    >
+                      Apply Range
+                    </button>
+                  </div>
+                )}
+                
                 <div className="border-t border-gray-200 my-2"></div>
               </div>
             )}

@@ -512,9 +512,9 @@ export default function ItcHuaweiDashboard() {
     let bpujl = 0
     let atpCME = 0
     
-    // Detect project type from first row
-    const hasRegularColumns = filteredData.length > 0 && ('Survey' in filteredData[0] || 'MOS' in filteredData[0])
-    const hasCMEColumns = filteredData.length > 0 && ('CME Start' in filteredData[0] || 'ATP CME' in filteredData[0])
+    // Detect project type from allData (structure is same regardless of filters)
+    const hasRegularColumns = allData.length > 0 && ('Survey' in allData[0] || 'MOS' in allData[0])
+    const hasCMEColumns = allData.length > 0 && ('CME Start' in allData[0] || 'ATP CME' in allData[0])
     
     filteredData.forEach(row => {
       // Only count rows that have at least one valid date field in filter range
@@ -777,7 +777,7 @@ export default function ItcHuaweiDashboard() {
       avgPoRemainingPlnPercent,
       sitesWithPODataPLN,
     }
-  }, [filteredData, periodFilter, getFilteredValue, getPORemaining])
+  }, [allData, filteredData, periodFilter, getFilteredValue, getPORemaining])
 
   // Smart Analytics - Bottleneck Detection & Performance Analysis
   const analytics = useMemo(() => {

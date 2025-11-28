@@ -245,6 +245,21 @@ export function DailyPlanTable({ data, onUpdateData, rowIdColumn = 'RowId', onFi
             const value = resolveRowValue(row, config)
             // Handle null/undefined
             if (value === null || value === undefined) return ''
+            
+            // Special handling for date columns - ensure proper date format
+            if (config.type === 'date' && value) {
+              const parsedDate = parseSheetDate(String(value))
+              if (parsedDate) {
+                // Format as DD-MMM-YYYY for export
+                const day = String(parsedDate.getDate()).padStart(2, '0')
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                const month = months[parsedDate.getMonth()]
+                const year = parsedDate.getFullYear()
+                return `${day}-${month}-${year}`
+              }
+            }
+            
             return value
           })
         )

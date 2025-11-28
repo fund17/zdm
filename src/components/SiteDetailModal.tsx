@@ -521,15 +521,52 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
   }
 
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('id-ID', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+  const formatDailyPlanValue = (key: string, value: any): string => {
+    if (!value) return '-'
+    
+    const stringValue = value.toString().trim()
+    if (!stringValue) return '-'
+    
+    // Check if this is a date column (contains 'date' in key name, case insensitive)
+    if (key.toLowerCase().includes('date')) {
+      try {
+        // Handle Excel serial date format (number like 45885)
+        const numValue = parseFloat(stringValue)
+        if (!isNaN(numValue) && numValue > 0 && numValue < 100000) {
+          // Convert Excel serial date to JavaScript Date
+          // Excel uses 1900 date system, JavaScript uses 1970
+          // Formula: (serial - 25569) * 86400 * 1000
+          const excelEpoch = new Date(1900, 0, 1) // January 1, 1900
+          const jsDate = new Date(excelEpoch.getTime() + (numValue - 2) * 24 * 60 * 60 * 1000)
+          
+          if (!isNaN(jsDate.getTime())) {
+            // Format as dd-mmm-yyyy (e.g., 15-Jan-2025)
+            const day = jsDate.getDate().toString().padStart(2, '0')
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                              'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            const month = monthNames[jsDate.getMonth()]
+            const year = jsDate.getFullYear()
+            return `${day}-${month}-${year}`
+          }
+        }
+        
+        // Try parsing as regular date string
+        const date = new Date(stringValue)
+        if (!isNaN(date.getTime())) {
+          // Format as dd-mmm-yyyy (e.g., 15-Jan-2025)
+          const day = date.getDate().toString().padStart(2, '0')
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+          const month = monthNames[date.getMonth()]
+          const year = date.getFullYear()
+          return `${day}-${month}-${year}`
+        }
+      } catch (error) {
+        // If parsing fails, return original value
+      }
+    }
+    
+    return stringValue
   }
 
   if (!isOpen) return null
@@ -932,7 +969,13 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                       <table className="w-full text-xs">
                         <thead className="bg-gray-50 border-b border-gray-200">
                           <tr>
-                            {Object.keys(dailyPlanData[0]).map((key) => (
+                            {Object.keys(dailyPlanData[0])
+                              .filter(key => {
+                                const lowerKey = key.toLowerCase()
+                                // Hidden specific ID columns, but keep Site ID
+                                return lowerKey !== 'id' && lowerKey !== 'row id' && lowerKey !== 'rowid'
+                              })
+                              .map((key) => (
                               <th
                                 key={key}
                                 className="px-3 py-2 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide whitespace-nowrap"
@@ -945,12 +988,18 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                         <tbody className="bg-white divide-y divide-gray-100">
                           {dailyPlanData.map((row, rowIndex) => (
                             <tr key={rowIndex} className="hover:bg-gray-50 transition-colors">
-                              {Object.entries(row).map(([key, value], cellIndex) => (
+                              {Object.entries(row)
+                                .filter(([key]) => {
+                                  const lowerKey = key.toLowerCase()
+                                  // Hidden specific ID columns, but keep Site ID
+                                  return lowerKey !== 'id' && lowerKey !== 'row id' && lowerKey !== 'rowid'
+                                })
+                                .map(([key, value], cellIndex) => (
                                 <td
                                   key={cellIndex}
                                   className="px-3 py-2 text-xs text-gray-900 whitespace-nowrap"
                                 >
-                                  {value?.toString() || '-'}
+                                  {formatDailyPlanValue(key, value)}
                                 </td>
                               ))}
                             </tr>
@@ -1141,8 +1190,8 @@ export function SiteDetailModal({ isOpen, onClose, duid, duName, selectedSheet }
                                     {Number(po['Qty'])?.toLocaleString() || '0'}
                                   </td>
                                   <td className="px-3 py-2 text-xs text-gray-900 whitespace-nowrap">{po['Unit'] || '-'}</td>
-                                  <td className="px-3 py-2 text-xs text-gray-900 whitespace-nowrap">{po['Start Date'] || '-'}</td>
-                                  <td className="px-3 py-2 text-xs text-gray-900 whitespace-nowrap">{po['End Date'] || '-'}</td>
+                                  <td className="px-3 py-2 text-xs text-gray-900 whitespace-nowrap">{formatDailyPlanValue('Start Date', po['Start Date'])}</td>
+                                  <td className="px-3 py-2 text-xs text-gray-900 whitespace-nowrap">{formatDailyPlanValue('End Date', po['End Date'])}</td>
                                   <td className="px-3 py-2 text-xs text-right font-semibold text-gray-900 whitespace-nowrap">
                                     {po['Remaining'] !== undefined && po['Remaining'] !== null ? (
                                       (() => {

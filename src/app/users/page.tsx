@@ -21,7 +21,9 @@ import {
   Eye,
   Edit,
   Save,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 
 type TabType = 'users' | 'permissions'
@@ -61,6 +63,8 @@ export default function UserManagementPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>('all')
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user'>('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const rowsPerPage = 5
   const [availableRoles, setAvailableRoles] = useState<string[]>([])
   const [editingRole, setEditingRole] = useState<string | null>(null)
   const [editingRegion, setEditingRegion] = useState<string | null>(null)
@@ -103,7 +107,6 @@ export default function UserManagementPage() {
         setUsers(data.data)
       }
     } catch (error) {
-
     } finally {
       setLoading(false)
     }
@@ -198,7 +201,14 @@ export default function UserManagementPage() {
     }
 
     setFilteredUsers(filtered)
+    setCurrentPage(1) // Reset to first page when filters change
   }
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredUsers.length / rowsPerPage)
+  const startIndex = (currentPage - 1) * rowsPerPage
+  const endIndex = startIndex + rowsPerPage
+  const paginatedUsers = filteredUsers.slice(startIndex, endIndex)
 
   const updateUserField = async (userId: string, field: string, value: string) => {
     setUpdating(userId)
@@ -349,7 +359,13 @@ export default function UserManagementPage() {
           <>
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <button 
+            onClick={() => {
+              setStatusFilter('all')
+              setRoleFilter('all')
+            }}
+            className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer text-left"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Users</p>
@@ -357,9 +373,15 @@ export default function UserManagementPage() {
               </div>
               <Users className="h-8 w-8 text-blue-500" />
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <button 
+            onClick={() => {
+              setStatusFilter('active')
+              setRoleFilter('all')
+            }}
+            className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer text-left"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Active Users</p>
@@ -367,9 +389,15 @@ export default function UserManagementPage() {
               </div>
               <CheckCircle className="h-8 w-8 text-emerald-500" />
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <button 
+            onClick={() => {
+              setStatusFilter('pending')
+              setRoleFilter('all')
+            }}
+            className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer text-left"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Pending Approval</p>
@@ -377,9 +405,15 @@ export default function UserManagementPage() {
               </div>
               <Clock className="h-8 w-8 text-amber-500" />
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <button 
+            onClick={() => {
+              setStatusFilter('all')
+              setRoleFilter('admin')
+            }}
+            className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer text-left"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Administrators</p>
@@ -387,7 +421,7 @@ export default function UserManagementPage() {
               </div>
               <Shield className="h-8 w-8 text-purple-500" />
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Filters */}
@@ -473,7 +507,7 @@ export default function UserManagementPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredUsers.map((user) => (
+                {paginatedUsers.map((user) => (
                   <tr key={user.ID} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -689,6 +723,73 @@ export default function UserManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {!loading && filteredUsers.length > 0 && (
+        <div className="mt-4 bg-white rounded-lg border border-gray-200 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
+              <span className="font-medium">{Math.min(endIndex, filteredUsers.length)}</span> of{' '}
+              <span className="font-medium">{filteredUsers.length}</span> users
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                  // Show first page, last page, current page, and pages around current
+                  const showPage = 
+                    page === 1 || 
+                    page === totalPages || 
+                    (page >= currentPage - 1 && page <= currentPage + 1)
+                  
+                  // Show ellipsis
+                  const showEllipsisBefore = page === currentPage - 2 && currentPage > 3
+                  const showEllipsisAfter = page === currentPage + 2 && currentPage < totalPages - 2
+                  
+                  if (showEllipsisBefore || showEllipsisAfter) {
+                    return <span key={page} className="px-2 text-gray-500">...</span>
+                  }
+                  
+                  if (!showPage) return null
+                  
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`min-w-[36px] px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        currentPage === page
+                          ? 'bg-purple-600 text-white'
+                          : 'border border-gray-300 hover:bg-gray-50 text-gray-700'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )
+                })}
+              </div>
+              
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Next page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )}
 

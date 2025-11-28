@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs'
 
 export async function POST(request: NextRequest) {
   try {
-    const { token, password, name, region } = await request.json()
+    const { token, password, name } = await request.json()
 
     // Validate required fields
     if (!token || !password || !name) {
@@ -68,8 +68,8 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Create user in Google Sheets
-    await createUser(email, name, hashedPassword, region || '')
+    // Create user in Google Sheets (region will be empty, to be set by admin)
+    await createUser(email, name, hashedPassword, '')
 
     // Send welcome email (non-blocking)
     sendWelcomeEmail(email, name).catch(() => {})

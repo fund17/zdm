@@ -2,7 +2,7 @@
 
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle, MapPin } from 'lucide-react'
+import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 
 function SetPasswordForm() {
@@ -10,7 +10,6 @@ function SetPasswordForm() {
   const searchParams = useSearchParams()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [region, setRegion] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -56,7 +55,7 @@ function SetPasswordForm() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ token, password, name, region }),
+        body: JSON.stringify({ token, password, name }),
       })
 
       const data = await response.json()
@@ -138,27 +137,6 @@ function SetPasswordForm() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Region Field (Optional) */}
-            <div className="space-y-2">
-              <label htmlFor="region" className="block text-sm font-bold text-slate-700">
-                Region <span className="text-slate-400 font-normal">(Optional)</span>
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <MapPin className="h-5 w-5 text-slate-400" />
-                </div>
-                <input
-                  id="region"
-                  type="text"
-                  value={region}
-                  onChange={(e) => setRegion(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
-                  placeholder="e.g., Bali Nusra, Jakarta"
-                  disabled={loading || success}
-                />
-              </div>
-            </div>
-
             {/* Password Field */}
             <div className="space-y-2">
               <label htmlFor="password" className="block text-sm font-bold text-slate-700">

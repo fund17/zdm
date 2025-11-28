@@ -57,6 +57,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
   const [isHovered, setIsHovered] = useState(false)
   const [permissions, setPermissions] = useState<UserPermissions | null>(null)
   const [loadingPermissions, setLoadingPermissions] = useState(true)
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0)
 
   // Fetch user permissions
   useEffect(() => {
@@ -80,6 +81,34 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
       setLoadingPermissions(false)
     }
   }, [user])
+
+  // Fetch pending approval count for User Management badge
+  useEffect(() => {
+    const fetchPendingCount = async () => {
+      try {
+        const response = await fetch('/api/users')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.data) {
+            // Count users with IsVerified='yes' and IsActive='no'
+            const pending = data.data.filter((user: any) => 
+              user.IsVerified === 'yes' && user.IsActive === 'no'
+            ).length
+            setPendingApprovalCount(pending)
+          }
+        }
+      } catch (error) {
+        // Silent fail
+      }
+    }
+
+    if (user && permissions?.userManagement !== 'no') {
+      fetchPendingCount()
+      // Refresh count every 30 seconds
+      const interval = setInterval(fetchPendingCount, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [user, permissions])
 
   // Determine if sidebar should show text (expanded state)
   const isExpanded = !collapsed || isHovered
@@ -152,7 +181,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
     menuItems.push({
       icon: <Shield className="h-4 w-4" />,
       label: 'User Management',
-      href: '/users'
+      href: '/users',
+      badge: pendingApprovalCount > 0 ? pendingApprovalCount.toString() : undefined
     })
   }
 
@@ -266,13 +296,27 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, user }) => {
                     {item.icon}
                     
                     {isExpanded && (
-                      <span className="font-medium text-sm flex-1">
-                        {item.label}
-                      </span>
+                      <>
+                        <span className="font-medium text-sm flex-1">
+                          {item.label}
+                        </span>
+                        {item.badge && (
+                          <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                            {item.badge}
+                          </span>
+                        )}
+                      </>
+                    )}
+
+                    {/* Badge for collapsed state */}
+                    {!isExpanded && item.badge && (
+                      <div className="absolute -top-1 -right-1 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold border-2 border-white">
+                        {item.badge}
+                      </div>
                     )}
 
                     {/* Hover Effect */}
-                    {!isActive && isExpanded && (
+                    {!isActive && isExpanded && !item.badge && (
                       <ChevronRight className="h-3.5 w-3.5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200" />
                     )}
                   </Link>

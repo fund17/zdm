@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     // Set cookie for session management
     response.cookies.set('user_session', JSON.stringify(userData), {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Allow HTTP for now (change to true when using HTTPS)
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 1 week
       path: '/'
